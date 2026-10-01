@@ -61,6 +61,7 @@ val SystemPackages = module("system-packages", "系统里还剩什么：组件�
             "com.sohu.inputmethod.sogou.tv" to "搜狗输入法，见「输入法」",
         )
         read("看某个包以什么身份运行", "dumpsys package com.android.newsettings 2>/dev/null | grep -m1 sharedUser", Host.Adb) {
+            varies = true
             captured("2026-10-01", "    sharedUser=SharedUserSetting{3506e1b android.uid.system/1000}")
             note = "`android.uid.system/1000`：和系统框架共用 uid 1000。这类组件权限比 shell（2000）还高，shell 改不动它们内部的东西。"
         }

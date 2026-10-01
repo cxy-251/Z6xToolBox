@@ -64,8 +64,8 @@ val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Pro
             note = "问系统：响应 HOME 的是哪个界面。只剩 Projectivy 一个。`tail -1` 只取最后一行（前面是匹配优先级之类的细节）。"
         }
         read("无障碍服务", "settings get secure enabled_accessibility_services", Host.Adb) {
-            captured("2026-10-01", "com.xgimi.duertts/.MonitorService")
-            note = "当时用 ADB 开启过 Projectivy 的服务，但 2026-10-01 查看时列表里只剩极米语音服务，什么时候被关掉的不清楚。官方桌面已卸载，Home 键照样回到 Projectivy，所以没有再开。"
+            captured("2026-10-01", "com.xgimi.duertts/com.xgimi.duertts.MonitorService")
+            note = "（重启前显示为简写 `com.xgimi.duertts/.MonitorService`，是同一个服务。）当时用 ADB 开启过 Projectivy 的服务，但 2026-10-01 查看时列表里只剩极米语音服务，什么时候被关掉的不清楚。官方桌面已卸载，Home 键照样回到 Projectivy，所以没有再开。"
         }
         change("按一下 Home 再看焦点", "input keyevent 3; sleep 1; dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", Host.Adb) {
             note = "模拟按 Home 键，等 1 秒再查焦点窗口，应该是 com.spocky.projengmenu。会切换屏幕画面。见「屏幕上现在是谁」。"

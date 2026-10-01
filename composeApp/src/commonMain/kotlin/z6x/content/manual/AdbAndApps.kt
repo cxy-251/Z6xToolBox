@@ -76,6 +76,7 @@ val AdbBasics = module("adb-basics", "ADB 基础：连接、安装、传文件�
     lesson("说明") {
         text("""
             • 有个意外发现：系统设置里的 ADB 开关 `settings get global adb_enabled` 读出来是 **0**（关），但 ADB 一直能用。因为 adbd 是绕过设置、直接用 `setprop ctl.start adbd` 拉起来的，设置里的开关根本不知道它在跑。
+            • **重启之后它变成了 1**，adbd 也是开机自动起来的。看起来系统开机时把两者同步了，但谁先谁后、为什么这台机器开机就启动 adbd，没有查清。
             • 旧版的 `adb logcat`、`adb bugreport` 移到了「日志与崩溃」。
         """)
     }

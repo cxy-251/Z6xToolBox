@@ -93,6 +93,14 @@ val SshKeyLogin = module("ssh-key-login", "SSH 免密登录 SimpleSSHD") {
         text("之后换成 ECDSA 密钥重新登记，一次成功。")
     }
 
+    consequences("重启以后") {
+        text("""
+            • 公钥登记**重启后依然有效**：authorized_keys 存在 SimpleSSHD 的私有目录里（2026-10-01 重启后验证）。
+            • 但 SimpleSSHD 的服务**不会自动启动**：重启后要在电视上打开它点 Start，`ssh z6x` 才能连上。没点 Start 时报 `Connection refused`。
+            • SSH 在这个项目里是 ADB 的备用通道。ADB 重启后会自动运行，日常用 ADB 就够了。
+        """)
+    }
+
     lesson("经验") {
         text("""
             • **先看对方的软件版本，再选方案。** `ssh -v` 第一行就能看到服务端版本。老设备、嵌入式设备上的 SSH 服务端往往很旧。

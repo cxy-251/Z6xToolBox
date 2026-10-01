@@ -21,6 +21,7 @@ val NetworkCmds = module("network-cmds", "网络：地址、路由、端口、�
             note = "主表里**没有默认网关**。安卓按网络分了多张路由表，用「策略路由」决定查哪张。"
         }
         read("策略路由规则", "ip rule show | head -8", Host.Adb) {
+            varies = true
             captured("2026-10-01", """
                 0:	from all lookup local
                 9000:	from all lookup main

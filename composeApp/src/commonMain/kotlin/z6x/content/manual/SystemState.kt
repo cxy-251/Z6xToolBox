@@ -32,13 +32,14 @@ val DumpsysSettings = module("dumpsys-settings", "系统服务与设置：dumpsy
 
     steps("settings：系统设置") {
         read("读设置", "settings get global adb_enabled; settings get system screen_off_timeout", Host.Adb) {
+            varies = true
             captured("2026-10-01", """
                 0
                 2147483647
             """)
             note = """
                 设置分三张表：`global`（全局）、`system`（系统偏好）、`secure`（安全相关）。
-                adb_enabled 是 0（ADB 是绕过设置开的，见「ADB 基础」）；screen_off_timeout 2147483647 毫秒约等于永不熄屏。
+                adb_enabled 重启前是 0、重启后变成 1（见「ADB 基础」）；screen_off_timeout 2147483647 毫秒约等于永不熄屏。
             """
         }
         change("写设置", "settings put global adb_enabled 1", Host.Adb) {
@@ -127,7 +128,7 @@ val DumpsysSettings = module("dumpsys-settings", "系统服务与设置：dumpsy
         }
         change("旧版：查看与开启系统级全局 ADB 开关", "settings get global adb_enabled\nsettings put global adb_enabled 1", Host.Adb) {
             verdict = Verdict.Unverified
-            note = "读出来是 0，但 ADB 照样可用（绕过设置开的）。写成 1 会不会有影响没有测试。"
+            note = "重启前读出来是 0，但 ADB 照样可用（绕过设置开的）；重启后系统自己变成了 1。手动写它会有什么影响没有测试。"
         }
         claim("wm density reset：重置为原厂默认 240 DPI。", Verdict.Confirmed, "当前密度 240。")
     }
@@ -196,6 +197,7 @@ val ProcessMemory = module("process-memory", "进程、内存与信号") {
             note = "常用：15 TERM（请求退出，默认）、9 KILL（强制结束）、3 QUIT（Java 进程收到后会输出一份线程堆栈转储，排查卡死用）。"
         }
         read("能不能给某个进程发信号（不真的发）", "kill -0 \$(pidof system_server) 2>&1; echo exit=\$?", Host.Adb) {
+            varies = true
             expectsError = true
             captured("2026-10-01", """
                 /system/bin/sh: kill: 3216: Operation not permitted
