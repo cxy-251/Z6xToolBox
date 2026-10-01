@@ -69,7 +69,7 @@ val AppInstallOrder = module("app-install-order", "App 安装顺序与兼容问�
         text("""
             1. **TV Bro 浏览器**：有虚拟鼠标指针，解决复制粘贴和下载安装包。正常。
             2. **SimpleSSHD**：在电视上开 SSH 服务，拿到命令行。正常。
-            3. **v2rayNG**：配代理。能装上，一连接就闪退。**原因待查**（见下面"核对"）。
+            3. **v2rayNG**：配代理。能装上，一连接就闪退。没有深究，直接换方案。
             4. **Clash Meta**：替代 v2rayNG。正常，局域网地址要设成直连（DIRECT），否则访问内网会走代理。
             5. **Aurora Store**：想用它装 Google Play 上的应用。启动后闪退。原因待查。
             6. **只有 64 位库的 App**：安装器直接报 `INSTALL_FAILED_NO_MATCHING_ABIS`。原因明确：系统只有 32 位运行库。
@@ -125,7 +125,7 @@ val AppInstallOrder = module("app-install-order", "App 安装顺序与兼容问�
 
     lesson("核对旧记录时发现的问题") {
         text("""
-            • 旧版说 v2rayNG 闪退是因为"极米删除了 VpnDialogs（VPN 授权弹窗）"。实测 `com.android.vpndialogs` **装着且是启用状态**，这个解释不成立。真正原因还没查，需要重装 v2rayNG 后用 `logcat -b crash` 抓崩溃日志。
+            • 旧版说 v2rayNG 闪退是因为"极米删除了 VpnDialogs（VPN 授权弹窗）"。实测 `com.android.vpndialogs` **装着且是启用状态**，这个解释不成立。已经换用 Clash Meta，v2rayNG 不再使用，真正原因**不再追查**。
             • 旧版说 Aurora 闪退是因为"缺 GMS + 240 DPI 布局溢出"。Aurora Store 本身就是为没有 Google 服务的设备设计的，这个解释也站不住，原因待查。
             • 32 位限制、架构检查方法、现装 App 列表都已核实。
         """)
