@@ -113,7 +113,7 @@ object Content {
             listOf(
                 Category("规格", "📐", "交给实现者的两份规格：Go 常驻服务、Rust 命令集", listOf(HubSpec, ToolsSpec)),
                 Category(
-                    "agy 的 109 个小项目", "🗂", "逐篇审核：纳入哪个项目、第几期，或为什么不做",
+                    "109 个小项目", "🗂", "逐篇审核：纳入哪个项目、第几期，或为什么不做",
                     listOf(ReviewSummary, ReviewFiles, ReviewMedia, ReviewNetwork, ReviewControl, ReviewSystem),
                 ),
                 Category(

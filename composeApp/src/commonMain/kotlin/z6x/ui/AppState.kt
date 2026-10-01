@@ -3,7 +3,6 @@ package z6x.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.focus.FocusRequester
 import z6x.framework.Category
 import z6x.framework.Module
 import z6x.framework.Scope
@@ -29,11 +28,8 @@ class AppState(val scopes: List<Scope>) {
         private set
     var current by mutableStateOf(scopes.first().categories.firstOrNull()?.modules?.firstOrNull())
         private set
-    var query by mutableStateOf("")
     var showDevice by mutableStateOf(false)
     var toast by mutableStateOf("")
-
-    val searchFocus = FocusRequester()
 
     fun selectScope(s: Scope) {
         scope = s
@@ -46,16 +42,6 @@ class AppState(val scopes: List<Scope>) {
         scope = hit.scope
         current = hit.module
         showDevice = false
-    }
-
-    /** 搜索标题、关键词、概述和命令，大小写不敏感。 */
-    fun search(): List<Located> {
-        val q = query.trim()
-        if (q.isEmpty()) return emptyList()
-        return index.values.filter { (_, _, m) ->
-            m.title.contains(q, true) || m.keywords.contains(q, true) || m.overview.contains(q, true) ||
-                m.steps.any { it.command.contains(q, true) || it.title.contains(q, true) }
-        }
     }
 
     val moduleCount get() = index.size

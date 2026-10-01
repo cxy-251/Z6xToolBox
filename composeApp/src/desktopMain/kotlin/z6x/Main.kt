@@ -1,11 +1,6 @@
 package z6x
 
 import androidx.compose.runtime.remember
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
@@ -76,12 +71,6 @@ private fun gui() = application {
         onCloseRequest = ::exitApplication,
         title = "Z6xToolBox · 极米 Z6X Pro 折腾手册",
         state = rememberWindowState(width = 1280.dp, height = 800.dp, position = WindowPosition.Aligned(androidx.compose.ui.Alignment.Center)),
-        // Ctrl+F 聚焦搜索框
-        onPreviewKeyEvent = {
-            if (it.type == KeyEventType.KeyDown && it.isCtrlPressed && it.key == Key.F) {
-                state.searchFocus.requestFocus(); true
-            } else false
-        },
     ) {
         App(state, DadbShell(), ::copyToClipboard)
     }

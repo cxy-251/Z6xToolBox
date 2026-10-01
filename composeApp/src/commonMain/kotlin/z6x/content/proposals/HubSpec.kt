@@ -12,7 +12,7 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
     keywords = "Go · 单进程 · 配置开关模块 · HTTP API · 验收"
     overview = """
         z6x-hub 是一个 Go 写的常驻服务：一个静态二进制、一个进程、一个配置文件，按配置开关各个功能模块。
-        方向来自 agy 的 Go 第 60 篇「Z6X Hub」，模块从 Go 提案里筛选（审核见「审核总表」）。本页是给实现者看的规格。
+        整体架构来自提案「把 Go 服务合成一个程序」，各模块从 Go 提案中筛选（审核结论见「提案总表」）。本页是供实现者使用的规格。
     """
     proposal()
 
@@ -79,21 +79,21 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
     story("第一期模块（必须实现）") {
         text("""
             1. core：配置加载、模块注册、`/api/health`、`/api/modules`（列出模块和状态）、日志轮转、Bearer 鉴权、一个首页 `/` 列出已启用模块的入口。
-            2. files（来源 Go-01、Go-09、Rust-22）：WebDAV（golang.org/x/net/webdav）挂在独立端口；HTTP 下载支持 Range；上传接口 `POST /api/files/upload?path=` 流式落盘（先写 .tmp 再改名）。只允许访问配置的 roots 及其子目录，拒绝 `..` 越界。
-            3. paste（来源 Go-11、局域网传文字）：网页上贴文字 → 存内存（不落盘，最多 100 条）；按钮「打到电视」= 当前输入框 `input text`（只限 ASCII，中文给出明确提示）；「在电视上打开」= `am start -a VIEW -d <URL>`。
-            4. control（来源 Go-06、Go-15、Go-31、Go-34）：HTTP 接口 `POST /api/control/key`（键名或键值）、`/api/control/text`、`/api/control/app`（包名）、`/api/control/macro`（预设的按键序列）；一个手机网页遥控器（方向键、确认、返回、主页、音量）。按键先用 `input keyevent`；若延迟不可接受，第二期改为调用 z6x-tools 的 `key` 子命令。
-            5. wol（来源 Go-17、Go-46）：`POST /api/wol/wake?name=` 发魔术包到子网广播地址；配置里的设备列表定时 ping（普通身份 ICMP 可用），返回在线状态。
-            6. metrics（来源 Go-10、Go-28）：`/api/metrics` 返回 JSON（CPU 使用率、MemAvailable、两个温度区、/data 剩余、wlan0 收发字节），`/metrics` 返回 Prometheus 文本格式。读 /proc 和 /sys，采样间隔 ≥ 5 秒。
-            7. speed（来源 Go-14、Go-49）：网页测速：下载（内存生成数据）、上传（丢弃）、延迟（往返时间）三项，测投影仪和手机 / Deck 之间的局域网速度。
+            2. files（来源：「局域网文件共享（WebDAV）」「Deck 存档与截图自动备份」「Rust 版文件下载服务」）：WebDAV（golang.org/x/net/webdav）挂在独立端口；HTTP 下载支持 Range；上传接口 `POST /api/files/upload?path=` 流式落盘（先写 .tmp 再改名）。只允许访问配置的 roots 及其子目录，拒绝 `..` 越界。
+            3. paste（来源：「手机把文字和链接发给电视」、局域网传文字）：网页上贴文字 → 存内存（不落盘，最多 100 条）；按钮「打到电视」= 当前输入框 `input text`（只限 ASCII，中文给出明确提示）；「在电视上打开」= `am start -a VIEW -d <URL>`。
+            4. control（来源：「智能家居控制入口」「手机当遥控器和触控板」「统一控制接口（JSON-RPC）」「Webhook 触发动作」）：HTTP 接口 `POST /api/control/key`（键名或键值）、`/api/control/text`、`/api/control/app`（包名）、`/api/control/macro`（预设的按键序列）；一个手机网页遥控器（方向键、确认、返回、主页、音量）。按键先用 `input keyevent`；若延迟不可接受，第二期改为调用 z6x-tools 的 `key` 子命令。
+            5. wol（来源：「网络唤醒」「跨网段网络唤醒」）：`POST /api/wol/wake?name=` 发魔术包到子网广播地址；配置里的设备列表定时 ping（普通身份 ICMP 可用），返回在线状态。
+            6. metrics（来源：「系统状态面板」「Prometheus 监控接口」）：`/api/metrics` 返回 JSON（CPU 使用率、MemAvailable、两个温度区、/data 剩余、wlan0 收发字节），`/metrics` 返回 Prometheus 文本格式。读 /proc 和 /sys，采样间隔 ≥ 5 秒。
+            7. speed（来源：「局域网测速」「iperf3 测速」）：网页测速：下载（内存生成数据）、上传（丢弃）、延迟（往返时间）三项，测投影仪和手机 / Deck 之间的局域网速度。
         """)
     }
 
     story("第二期模块（第一期验收后再做）") {
         text("""
-            • notify（Go-18）：`POST /api/notify` → `cmd notification post`。**先验证**通知在电视上能不能显示出来（电视的系统界面可能不显示通知）；显示不了就放弃这个模块。
-            • lanscan（Go-53）：SSDP M-SEARCH 扫描局域网设备，列出名称、型号、IP。注意 UDP 1900 已被系统占用，只发不绑或用 SO_REUSEADDR。
-            • webshell（Go-20）：网页终端（/dev/ptmx 可用）。**等于把 shell 权限开放给网页**：必须鉴权、默认关闭、只监听用户指定的地址，页面上明确提示风险。
-            • dlna（Go-16）：DLNA 渲染端。**前提**是先装一个播放器并设为视频默认打开方式，否则每次投屏都会弹选择框。
+            • notify（「大屏通知」）：`POST /api/notify` → `cmd notification post`。**先验证**通知在电视上能不能显示出来（电视的系统界面可能不显示通知）；显示不了就放弃这个模块。
+            • lanscan（「局域网设备扫描」）：SSDP M-SEARCH 扫描局域网设备，列出名称、型号、IP。注意 UDP 1900 已被系统占用，只发不绑或用 SO_REUSEADDR。
+            • webshell（「网页终端」）：网页终端（/dev/ptmx 可用）。**等于把 shell 权限开放给网页**：必须鉴权、默认关闭、只监听用户指定的地址，页面上明确提示风险。
+            • dlna（「DLNA 投屏接收」）：DLNA 渲染端。**前提**是先装一个播放器并设为视频默认打开方式，否则每次投屏都会弹选择框。
         """)
     }
 

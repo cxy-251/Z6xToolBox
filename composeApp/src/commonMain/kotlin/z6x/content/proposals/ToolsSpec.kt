@@ -17,7 +17,7 @@ val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集）") {
 
     why("为什么这样分工") {
         text("""
-            • agy 原方案把 Rust 也做成一个常驻底座（Rust 第 49 篇 z6x_core），和 Go hub 并列两个常驻进程。审核后改成**命令集**：Rust 提案里能在这台机器上做的，几乎都是「跑一次给出结果」的工具（查端口、查温度、算哈希、注入按键），不需要常驻。
+            • 原方案把 Rust 也做成一个常驻底座（提案「Rust 底座」），与 Go hub 并列为两个常驻进程。审核后改成**命令集**：Rust 提案里能在这台机器上做的，几乎都是「跑一次给出结果」的工具（查端口、查温度、算哈希、注入按键），不需要常驻。
             • 需要常驻的只有按键重映射（监听遥控器），用 `z6x keymap --daemon`。
             • hub 需要底层能力时调用 `z6x` 子命令，并解析它的 JSON 输出。
         """)
@@ -40,21 +40,21 @@ val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集）") {
 
     story("第一期子命令") {
         text("""
-            1. `z6x sys`（Rust-14、Rust-29）：一次性输出 CPU 使用率（隔 500ms 读两次 /proc/stat）、MemTotal/MemAvailable、所有 thermal_zone 的 type 和温度、/data 剩余空间、运行时长。`--watch 2` 每 2 秒刷新一次。
+            1. `z6x sys`（「系统指标」「温度监控」）：一次性输出 CPU 使用率（隔 500ms 读两次 /proc/stat）、MemTotal/MemAvailable、所有 thermal_zone 的 type 和温度、/data 剩余空间、运行时长。`--watch 2` 每 2 秒刷新一次。
             2. `z6x ports`（本项目「案例：这个端口是谁开的」）：读 /proc/net/tcp、tcp6、udp、udp6，列出监听端口 → uid → 包名（调用 `pm list packages -U`；/data/system/packages.list 对 shell 不可读，已实测）。
-            3. `z6x key`（Rust-18、Rust-41）：注入按键。默认通过 /dev/uinput 创建一个虚拟键盘设备（不依赖遥控器节点号）。/dev/uinput 可写已实测，**但系统是否接受这个虚拟键盘的按键还没验证**，实现时先做这一步，不行就退回直接写遥控器节点（/dev/input/event13 也可写）；`z6x key home`、`z6x key volup --repeat 5 --interval 50ms`；`z6x key --bench` 测单次注入耗时。键名表包括方向、确认、返回、主页、菜单、音量、静音、电源、媒体键。
-            4. `z6x keymap --daemon`（Rust-2）：监听遥控器节点（默认按设备名 "XGIMI RC" 查找，不写死 event13），识别长按 / 双击，执行配置里的动作（发按键序列或运行命令）。**不独占设备**（不调用 EVIOCGRAB），原有按键功能不受影响。遥控器重连后节点变化要能自动重新绑定。
-            5. `z6x hash`（Rust-4、Go-57）：对目录求重复文件：先按大小分组，再比头尾 64KB，最后全文件 xxh3；输出重复组和可节省空间。**只报告不删除**，删除由用户自己决定。
-            6. `z6x watch`（Rust-31）：inotify 监听目录，输出 CLOSE_WRITE / MOVED_TO 事件（每行一个 JSON），可选 `--exec` 对每个事件执行命令。注意 max_user_watches 只有 8192。
-            7. `z6x ping`（Rust-34）：对目标连续 ICMP ping（普通身份的 ICMP 套接字，已验证可用），输出最小/平均/最大延迟、抖动、丢包率。
+            3. `z6x key`（「快速按键注入」「虚拟 USB 键盘」）：注入按键。默认通过 /dev/uinput 创建一个虚拟键盘设备（不依赖遥控器节点号）。/dev/uinput 可写已实测，**但系统是否接受这个虚拟键盘的按键还没验证**，实现时先做这一步，不行就退回直接写遥控器节点（/dev/input/event13 也可写）；`z6x key home`、`z6x key volup --repeat 5 --interval 50ms`；`z6x key --bench` 测单次注入耗时。键名表包括方向、确认、返回、主页、菜单、音量、静音、电源、媒体键。
+            4. `z6x keymap --daemon`（「遥控器按键重映射」）：监听遥控器节点（默认按设备名 "XGIMI RC" 查找，不写死 event13），识别长按 / 双击，执行配置里的动作（发按键序列或运行命令）。**不独占设备**（不调用 EVIOCGRAB），原有按键功能不受影响。遥控器重连后节点变化要能自动重新绑定。
+            5. `z6x hash`（「文件哈希与查重」「重复文件查找」）：对目录求重复文件：先按大小分组，再比头尾 64KB，最后全文件 xxh3；输出重复组和可节省空间。**只报告不删除**，删除由用户自己决定。
+            6. `z6x watch`（「目录变化监听」）：inotify 监听目录，输出 CLOSE_WRITE / MOVED_TO 事件（每行一个 JSON），可选 `--exec` 对每个事件执行命令。注意 max_user_watches 只有 8192。
+            7. `z6x ping`（「网络延迟雷达」）：对目标连续 ICMP ping（普通身份的 ICMP 套接字，已验证可用），输出最小/平均/最大延迟、抖动、丢包率。
         """)
     }
 
     story("第二期子命令") {
         text("""
-            • `z6x iobench`（Rust-15、Rust-36）：对 U 盘上的测试文件做顺序 / 随机读写测速，测完删除测试文件。FAT32 / exFAT 可能不支持 O_DIRECT，要自动退回普通读写并在结果里注明。
-            • `z6x pack`（Rust-11、Rust-38）：zstd 打包 / 解包目录（tar + zstd），用于备份存档、日志。
-            • `z6x run`（Rust-19、Rust-1）：极简进程守护——启动一个命令，崩溃后按退避间隔重启，记录退出原因。用来守护 hub。
+            • `z6x iobench`（「U 盘健康检测」「存储读写测速」）：对 U 盘上的测试文件做顺序 / 随机读写测速，测完删除测试文件。FAT32 / exFAT 可能不支持 O_DIRECT，要自动退回普通读写并在结果里注明。
+            • `z6x pack`（「快速压缩归档」「LZ4 解压」）：zstd 打包 / 解包目录（tar + zstd），用于备份存档、日志。
+            • `z6x run`（「进程守护」「进程看门狗」）：极简进程守护——启动一个命令，崩溃后按退避间隔重启，记录退出原因。用来守护 hub。
         """)
     }
 

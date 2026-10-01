@@ -17,13 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,23 +109,10 @@ private fun Tab(text: String, active: Boolean, onClick: () -> Unit) {
 private fun Sidebar(state: AppState, modifier: Modifier) {
     Column(modifier.background(Palette.Bg1)) {
         Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = { state.query = it },
-                placeholder = { Text("🔍 搜索模块或命令（Ctrl+F）", fontSize = 13.sp) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().focusRequester(state.searchFocus),
-            )
-            val hint = if (state.query.isBlank()) state.scope.tagline else "找到 ${state.search().size} 个模块"
-            Text(hint, fontSize = 12.sp, color = if (state.query.isBlank()) Palette.TextMuted else Palette.Accent)
+            Text(state.scope.tagline, fontSize = 12.sp, color = Palette.TextMuted)
         }
         LazyColumn(Modifier.padding(start = 8.dp, end = 10.dp)) {
-            if (state.query.isNotBlank()) {
-                items(state.search()) { hit ->
-                    NavItem(hit.module, hit.breadcrumb, selected = hit.module == state.current && !state.showDevice) { state.open(hit.module.id) }
-                }
-            } else {
-                for (c in state.scope.categories) {
+            for (c in state.scope.categories) {
                     item {
                         Text(
                             "${c.icon} ${c.name}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.TextStrong,
@@ -137,7 +122,6 @@ private fun Sidebar(state: AppState, modifier: Modifier) {
                     items(c.modules) { m ->
                         NavItem(m, m.keywords, selected = m == state.current && !state.showDevice) { state.open(m.id) }
                     }
-                }
             }
         }
     }

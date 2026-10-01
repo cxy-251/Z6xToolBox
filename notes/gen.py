@@ -5,6 +5,7 @@ import os, re, sys
 sys.path.insert(0, sys.argv[1])
 from proposals import GO, RS, GROUPS
 from proposals_tech import T
+from proposals_stack import S
 
 root = os.path.abspath(os.path.join(sys.argv[1], '..'))
 # 旧代码已从工作区删除，原文从 git 标签 avalonia-baseline 里读
@@ -28,8 +29,9 @@ def entry(kind, n):
     name, use, how, here, dest, wrong = (GO if kind == 'G' else RS)[n]
     tag = ('Go' if kind == 'G' else 'Rust') + f'-{n:02d}'
     src = (OLDG if kind == 'G' else OLDR)[n]
-    out = f'    story({q(f"{tag} · {name}")}) {{\n        facts(\n'
-    for k, v in (('用途', use), ('做法', how), ('在这台投影仪上', here), ('去向', f'**{dest}**')):
+    stack, refs, direction = S[kind, n]
+    out = f'    story({q(f"{name} · {tag.split(chr(45))[0]}")}) {{\n        facts(\n'
+    for k, v in (('用途', use), ('技术栈', stack), ('做法', how), ('在这台投影仪上', here), ('参考项目', refs), ('发展方向', f'**{dest}**。{direction}')):
         out += f'            {q(k)} to {q(v)},\n'
     out += '        )\n'
     how_, care = T[kind, n]
@@ -48,7 +50,7 @@ for gid, title, desc, items in GROUPS:
     mods.append(f'''val {name} = module("{gid}", "提案：{title}") {{
     keywords = "{desc}"
     overview = """
-        agy 推荐的小项目中属于这一类的 {len(items)} 个。每个小节：用途、做法、在这台投影仪上行不行、去向。agy 原方案里说错的具体事实，用旧记录卡片标出。
+        这一类共 {len(items)} 个提案。每个提案依次说明：用途、技术栈、做法、在这台投影仪上是否可行、参考项目、发展方向，以及原理和注意事项。原方案中与实测不符的说法，用核对卡片标出。
     """
     proposal()
 
@@ -60,13 +62,13 @@ for gid, title, desc, items in GROUPS:
 rows = []
 for kind, d in (('Go', GO), ('Rust', RS)):
     for n in sorted(d):
-        rows.append(f'            {q(f"{kind}-{n:02d} {d[n][0]}")} to {q(d[n][4])},')
+        rows.append(f'            {q(f"{d[n][0]} · {kind}")} to {q(d[n][4])},')
 
 summary = f'''val ReviewSummary = module("review-summary", "提案总表：109 个小项目的去向") {{
     keywords = "Go 60 个 · Rust 49 个 · 第一期 / 第二期 / 第三期 / 不纳入 / 不可行"
     overview = """
-        agy 推荐过 109 个可以在投影仪上跑的小项目（Go 60 个、Rust 49 个）。审核原则：只做这台投影仪上**实测可行**、日常**用得上**、且**不重复**的；Go 的并入 z6x-hub（常驻服务），Rust 的并入 z6x-tools（命令集）。
-        每个项目的用途、做法和判断依据在五个分类页里。
+        共收集了 109 个可在投影仪上运行的小项目提案（Go 60 个、Rust 49 个）。审核原则：只采纳在这台投影仪上**实测可行**、日常**确有用途**、且**不重复**的项目；Go 项目并入 z6x-hub（常驻服务），Rust 项目并入 z6x-tools（命令集）。
+        各项目的用途、技术栈、原理和判断依据见五个分类页。
     """
     proposal()
 

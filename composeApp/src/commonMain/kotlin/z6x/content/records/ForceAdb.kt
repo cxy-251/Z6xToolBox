@@ -101,8 +101,8 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
             verdict = Verdict.Unverified
             note = "这个属性存在，当前值是 `false`。ADB 不是靠它开的（按你的记录，是在 SSH 里执行命令拉起的）。设成 1 会发生什么没有测试；它可能和极米远程调试应用 com.xgimi.remote 有关。"
         }
-        claim("调试接口：网络 ADB 端口 5555（默认开放且无需授权指纹）——第 5 篇；需要在 SSH 里强开——第 8 篇", Verdict.Disproved,
-            "两篇互相矛盾。准确说法：端口和免授权是**预设**的，adbd 默认**不运行**，要手动拉起。")
+        claim("调试接口：网络 ADB 端口 5555（默认开放且无需授权指纹）（硬件摸底记录）；需要在 SSH 里强开（强开 ADB 记录）", Verdict.Disproved,
+            "两处记录互相矛盾。准确说法：端口和免授权是**预设**的，adbd 默认**不运行**，要手动拉起。")
     }
 
     related("find-real-model")
