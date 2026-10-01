@@ -21,3 +21,8 @@ clash.yaml
 *.vless
 *.apk
 *.apk1
+
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+local.properties

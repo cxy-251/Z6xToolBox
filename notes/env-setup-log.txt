@@ -1,0 +1,60 @@
+Z6xToolBox 开发环境搭建实录（Steam Deck，SteamOS，2026-10-01）
+用途：知识库「本项目的技术栈」专区的原始素材。这里每条命令都在本机实际执行过。
+
+== 0. 前置检查 ==
+uname -m                       # x86_64，决定下载哪个架构的 JDK
+df -h ~                        # /home 只剩约 6G，JDK+Gradle+依赖缓存约 0.8G 起步
+java -version                  # 未安装（SteamOS 不自带 Java）
+# SteamOS 系统分区只读，不用 pacman 装，一律放到 ~/Applications（和 dotnet 一样）
+
+== 1. 查询最新稳定版本（不靠记忆，直接问仓库） ==
+# Kotlin（Maven Central 元数据，sort -V 按版本号排序，只取纯数字的稳定版）
+curl -s https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/maven-metadata.xml \
+  | grep -oE "<version>[0-9.]+</version>" | sed 's/<[^>]*>//g' | sort -V | tail -2
+# Compose Multiplatform（Gradle 插件门户）
+curl -s https://plugins.gradle.org/m2/org/jetbrains/compose/org.jetbrains.compose.gradle.plugin/maven-metadata.xml \
+  | grep -oE "<version>[0-9.]+</version>" | sed 's/<[^>]*>//g' | sort -V | tail -2
+# Gradle
+curl -s https://services.gradle.org/versions/current | grep -oE '"version" : "[^"]+"'
+# JDK 21 LTS 下载地址（Adoptium API）
+curl -s "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jdk&os=linux" \
+  | grep -oE '"(link|release_name)": ?"[^"]+' | head -2
+坑：metadata.xml 里的 <latest> 可能是 Beta/alpha（如 2.5.0-Beta1），要自己过滤稳定版。
+坑：Compose 的 material3 版本号独立（1.9.0），不跟 Compose 主版本（1.12.1）走。
+结果：Kotlin 2.4.20 / Compose MP 1.12.1 / material3 1.9.0 / Gradle 9.8.0 / JDK 21.0.12.1 / dadb 2.0.0
+
+== 2. 安装 JDK 21（Temurin） ==
+cd ~/Applications
+curl -sL -o /tmp/jdk21.tar.gz "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz"
+tar xzf /tmp/jdk21.tar.gz && rm /tmp/jdk21.tar.gz
+ln -sfn jdk-21.0.12.1+1 jdk          # 固定入口 ~/Applications/jdk，以后升级只改链接
+~/Applications/jdk/bin/java -version # openjdk version "21.0.12.1" 2026-08-18 LTS
+占用：346M
+使用时：export JAVA_HOME=~/Applications/jdk PATH=~/Applications/jdk/bin:$PATH
+
+== 3. Gradle：只为生成 wrapper 临时下载一次 ==
+curl -sL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.8.0-bin.zip
+unzip -q /tmp/gradle.zip -d /tmp
+/tmp/gradle-9.8.0/bin/gradle wrapper --gradle-version 9.8.0   # 在项目根目录执行
+# 生成 gradlew、gradle/wrapper/gradle-wrapper.{jar,properties}，这些要提交进 git
+# 之后一律用 ./gradlew，它会把 Gradle 自动下载到 ~/.gradle/wrapper/dists
+rm -rf /tmp/gradle-9.8.0 /tmp/gradle.zip
+坑：删掉临时 Gradle 后，./gradlew 报
+    NoSuchFileException: /tmp/gradle-9.8.0/lib/gradle-runtime-api-info-9.8.0.jar
+  原因：临时 Gradle 启动的后台守护进程（Daemon）还活着，被 wrapper 复用了。
+  解决：./gradlew --stop（或结束 GradleDaemon 进程）后重跑。
+坑：pkill -f GradleDaemon 写在同一行命令里，会匹配到这条命令所在的 shell 自己，把自己杀掉（退出码 144）。
+  用 ./gradlew --stop 更稳。
+
+== 4. 首次构建 ==
+./gradlew :composeApp:compileKotlinDesktop   # 首次 6 分钟，主要在下载依赖到 ~/.gradle/caches
+./gradlew :composeApp:run --args="--probe"   # 命令行验证：dadb 直连投影仪读 getprop
+./gradlew :composeApp:run                    # 打开窗口
+占用：~/.gradle 约 431M（首次构建后）
+
+== 5. 不需要的东西 ==
+- Android Studio：不需要，全部命令行 + Gradle。
+- Android SDK：暂不装，APK 交给 GitHub Actions 构建。
+- adb 可执行文件：应用内用 dadb（纯 Kotlin ADB 客户端），复用 ~/.android/adbkey。
+- 版本匹配：JDK 只是编译工具，与投影仪 Android 12 无关；兼容性由 Android 的 minSdk 决定。
+  Kotlin 编译出的 dex 不分 32/64 位，不会遇到 INSTALL_FAILED_NO_MATCHING_ABIS。
