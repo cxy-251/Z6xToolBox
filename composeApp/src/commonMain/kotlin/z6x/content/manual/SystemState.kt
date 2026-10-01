@@ -1,6 +1,7 @@
 package z6x.content.manual
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val DumpsysSettings = module("dumpsys-settings", "系统服务与设置：dumpsys、settings、wm、cmd") {
@@ -119,6 +120,18 @@ val DumpsysSettings = module("dumpsys-settings", "系统服务与设置：dumpsy
         }
     }
 
+    audit {
+        change("旧版：wm overscan 报错验证", "wm overscan 0,0,0,0", Host.Adb) {
+            verdict = Verdict.Confirmed
+            note = "旧记录说 Android 12 已废弃 overscan。实测 `wm help` 里确实没有这个子命令，所以没有实际执行。"
+        }
+        change("旧版：查看与开启系统级全局 ADB 开关", "settings get global adb_enabled\nsettings put global adb_enabled 1", Host.Adb) {
+            verdict = Verdict.Unverified
+            note = "读出来是 0，但 ADB 照样可用（绕过设置开的）。写成 1 会不会有影响没有测试。"
+        }
+        claim("wm density reset：重置为原厂默认 240 DPI。", Verdict.Confirmed, "当前密度 240。")
+    }
+
     related("adb-basics", "process-memory", "focus-window", "system-packages")
 }
 
@@ -208,12 +221,21 @@ val ProcessMemory = module("process-memory", "进程、内存与信号") {
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版 `top -s cpu` 报错（`not integer: cpu`），toybox 的 top 默认就按 CPU 排序，不用加。
-            • 旧版 `kill -3` 给应用进程触发转储，shell 没有这个权限（见上面 kill -0 的实验）。例子里的 `com.xgimi.dueros` 也不存在。
-            • 旧版 `smaps_rollup` 以 system_server 为例，shell 读不了，改成自己的进程。
-        """)
+    audit {
+        read("旧版：一次性抓取 CPU 占用最高的 10 个进程", "top -b -n 1 -m 10 -s cpu", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "实测报错 `top: not integer: cpu`：toybox 的 `-s` 要填列号。去掉 `-s cpu` 即可，默认就按 CPU 排序。"
+        }
+        read("旧版：获取 system_server 的物理内存消耗", "cat /proc/\$(pidof system_server)/smaps_rollup | head -n 8", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "实测 Permission denied：shell 只能看自己进程的 smaps_rollup。"
+        }
+        change("旧版：向卡顿的目标进程发送 SIGQUIT", "kill -3 \$(pidof com.xgimi.dueros) 2>/dev/null", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "com.xgimi.dueros **固件里没有**（相近的是 com.xgimi.duertts）；而且 shell 没有权限给其他应用的进程发信号（kill -0 实验）。"
+        }
+        claim("清理 PageCache、dentries 和 inodes：echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || echo \"Permission denied (Requires Root)\"", Verdict.Confirmed,
+            "旧记录自己就注明了需要 root，实测确实 Permission denied。")
     }
 
     related("go-server", "proc-metrics", "dumpsys-settings")
@@ -338,12 +360,34 @@ val StoragePartitions = module("storage-partitions", "存储与分区") {
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版有两篇讲 A/B 槽位、`bootctl`、`update_engine_client`，这台机器**都没有**，不是 A/B 设备。
-            • 旧版 `du -sh … | sort -hr` 在 toybox 下报错，改成 `du -sk | sort -rn`。
-            • 极米私有分区、PATH 里的 xgimidatabase 旧版说对了；补充了 xbin 目录其实不存在。
-        """)
+    audit {
+        read("旧版：分析 /data 目录下各文件夹体积占用", "du -sh /data/* 2>/dev/null | sort -hr | head -n 5", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "实测 `sort: Unknown option 'hr'`：toybox 的 sort 不支持 -h。而且 shell 读不了 /data 下的大部分目录。"
+        }
+        read("旧版：查看当前激活的系统插槽（Slot A 或 Slot B）", "bootctl get-current-slot 2>/dev/null || getprop ro.boot.slot_suffix", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "没有 bootctl，slot_suffix 是空的：**不是 A/B 分区设备**。"
+        }
+        read("旧版：查询当前分区槽位及是否成功引导", "getprop ro.boot.slot_suffix && bootctl is-slot-marked-successful 0 2>/dev/null", Host.Adb) {
+            verdict = Verdict.Disproved
+        }
+        read("旧版：查看 update_engine 守护进程的当前执行阶段", "update_engine_client --status", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "系统里没有这个工具（它是 A/B 升级用的）。"
+        }
+        read("旧版：读取最近一次刷机或升级安装日志末尾", "tail -n 15 /cache/recovery/last_log 2>/dev/null || cat /metadata/ota/last_status 2>/dev/null || echo 'No recovery log'", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "/cache/recovery 没有权限读，/metadata/ota 不存在。"
+        }
+        danger("旧版：尝试重新挂载只读分区为读写", "mount -o remount,rw /vendor 2>&1 || adb remount", Host.Adb) {
+            verdict = Verdict.Unverified
+            note = "旧记录的结论是会失败（dm-verity 保护 + 需要 root）。**没有执行**：万一成功会改动系统分区。从权限上看（shell 非 root、ro.debuggable=0）必然失败。"
+        }
+        claim("dm-verity 块设备映射：/system、/vendor 挂载在 dm-* 上，由 dm-verity 校验保护，adb remount 报错根因即在于此。", Verdict.Unverified,
+            "挂载在 dm-0、dm-1 上**成立**；有没有启用 verity，没查到能确认的属性。")
+        claim("极米私有分区挂载在 /mnt/vendor/xgimiconfig（光机型号配置目录）、/mnt/vendor/xgimidatabase；系统 PATH 包含 /mnt/vendor/xgimidatabase/xbin。", Verdict.Confirmed,
+            "都成立；补充：还有 xgimisps 分区，而 PATH 里的 xbin 目录实际不存在。")
     }
 
     related("native-exec", "ssh-probe", "find-real-model")

@@ -1,6 +1,7 @@
 package z6x.content.records
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val DeckHdmi = module("deck-hdmi", "Deck 接投影仪黑屏") {
@@ -42,12 +43,34 @@ val DeckHdmi = module("deck-hdmi", "Deck 接投影仪黑屏") {
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版的旋转参数写的是 `normal`，kscreen-doctor 里没有这个值，应为 `none`。
-            • 旧版命令写的接口名是 `HDMI-A-1`，在 Deck 上不存在。接口名要先用 `kscreen-doctor -o` 查，不能照抄网上的例子。
-            • 旧版写的"最低对焦距离 0.8 米""EDID 握手超时"无法核实，已删除。黑屏原因写成推测。
-        """)
+    audit {
+        claim(
+            "Steam Deck 此前曾连接过 2K/144Hz 外部显示器，KDE 桌面服务（KWin）在本地持久化缓存了该输出端口的配置时序。……Z6X Pro 的 HDMI 接口最大仅支持 1080p@60Hz（或 4K@60Hz 降采样），无法识别 144Hz 高刷时序，导致 EDID 握手超时、投影仪直接提示「无信号」并黑屏。",
+            Verdict.Unverified,
+            "「改成 1080p@60 就亮了」是亲身经历。KDE 沿用旧配置、EDID 握手超时这套原因没法复现验证，页面里写成推测。",
+        )
+        claim(
+            "对焦距离限制：Z6X Pro 激光/TOF 最低有效对焦距离为 0.8 米，若距离过近会导致对焦算法拉风箱且画面模糊。",
+            Verdict.Unverified,
+            "命令行查不到对焦参数，也没有找到官方说明。",
+        )
+        claim(
+            "避免 4K 缩放：虽然投影仪支持接收 4K@60Hz 信号，但由于物理光机是 1080p，4K 降采样会导致字体边缘发虚，日常当作副屏务必保持 1080p 点对点输出。",
+            Verdict.Unverified,
+            "系统分辨率 1920x1080 已实测（`wm size`）。能否接收 4K 信号、字体发虚程度没有测试。",
+        )
+        read("旧版：查看显示接口，预期 HDMI-A-1 已连接", "kscreen-doctor -o", Host.Deck) {
+            verdict = Verdict.Disproved
+            note = "旧版写的预期输出是 `Output: 2 HDMI-A-1 enabled connected priority 2 ... 1920x1080@60`。实测 Deck 的外接口叫 **DP-1**（Type-C 输出的是 DP 信号），没有 HDMI-A-1。"
+        }
+        change("旧版：强制外接 HDMI 输出 1080p@60Hz", "kscreen-doctor output.HDMI-A-1.mode.1920x1080@60", Host.Deck) {
+            verdict = Verdict.Disproved
+            note = "接口名不存在，命令无效。正确写法见上面的 `output.DP-1.mode.1920x1080@60`。"
+        }
+        change("旧版：旋转外接屏", "kscreen-doctor output.HDMI-A-1.rotation.normal", Host.Deck) {
+            verdict = Verdict.Disproved
+            note = "接口名不对；旋转参数也没有 `normal`。`kscreen-doctor --help` 列出的是 `none, left, right, inverted`。"
+        }
     }
 
     related("usb-apk1")
@@ -84,10 +107,12 @@ val UsbApk1 = module("usb-apk1", "U 盘装 App：改名 .apk1 绕过拦截") {
             note = "`${'$'}{f%.apk1}` 去掉结尾的 .apk1。"
         }
         change("Windows CMD 批量改名", "ren *.apk *.apk1", Host.Windows) {
-            note = "改回：`ren *.apk1 *.apk`。没有在 Windows 上实测。"
+            verdict = Verdict.Unverified
+            note = "改回：`ren *.apk1 *.apk`。没有 Windows 电脑，没有实测。"
         }
         change("Windows PowerShell 批量改名", "Get-ChildItem *.apk | Rename-Item -NewName { \$_.Name + '1' }", Host.Windows) {
-            note = "`${'$'}_` 代表管道传进来的每个文件。没有在 Windows 上实测。"
+            verdict = Verdict.Unverified
+            note = "`${'$'}_` 代表管道传进来的每个文件。没有 Windows 电脑，没有实测。"
         }
         change("拔盘前把缓存写入 U 盘", "sync", Host.Deck) {
             note = "直接拔盘可能丢掉还在缓存里的数据。"
@@ -105,8 +130,22 @@ val UsbApk1 = module("usb-apk1", "U 盘装 App：改名 .apk1 绕过拦截") {
         """)
     }
 
-    lesson("核对说明") {
-        text("文件管理器拦截 .apk 这一现象是当时的操作经历，没有重新演示。Deck 端的命令都是通用 Linux 命令。")
+    audit {
+        claim(
+            "极米系统自带的文件管理器（GMUI 资源管理器）设置了安全白名单限制：直接点击 .apk 文件时，文件管理器会拦截安装意图，弹出提示「禁止安装未知来源应用」或直接无响应。改成 .apk1 后，选择系统「软件包安装程序」，安装器读取文件头（PK 压缩包结构并包含 AndroidManifest.xml），正常进入安装界面。",
+            Verdict.Unverified,
+            "这是当时的操作经历，现在有 ADB 了没有重新演示。「白名单」「安装器读文件头」是对现象的解释，没有查证。",
+        )
+        claim(
+            "U 盘格式要求：建议格式化为 FAT32 或 exFAT，避免 NTFS 权限问题导致投影仪无法识别。",
+            Verdict.Unverified,
+            "没有拿 NTFS U 盘测试过。FAT32 / exFAT 兼容性最好是通用经验。",
+        )
+        claim(
+            "安装后清理：安装完成后可在电视上直接删除 .apk1 文件释放内部空间，或通过文件管理器清理安装包缓存。",
+            Verdict.Unverified,
+            "常识性操作，没有专门测试。",
+        )
     }
 
     related("app-install-order", "lan-share")

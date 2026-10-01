@@ -40,9 +40,10 @@ object Tools {
             if (m.overview.isBlank()) p("缺少 overview")
             if (m.status in setOf(Status.Verified, Status.Partial) && m.verifiedOn.isBlank()) p("标了核实但没写日期")
             m.related.filter { it !in ids }.forEach { p("相关模块不存在：$it") }
+            for (c in m.claims) if (c.finding.isBlank()) p("旧记录「${c.original.take(20)}…」没写实测结果或无法验证的原因")
 
             val texts = m.sections.flatMap { s -> s.items.filterIsInstance<Item.Text>().map { it.markup } } +
-                m.overview + m.steps.flatMap { listOf(it.note, it.outcome) }
+                m.overview + m.steps.flatMap { listOf(it.note, it.outcome) } + m.claims.flatMap { listOf(it.original, it.finding) }
             for (t in texts) for (line in t.lines()) {
                 if (line.split("**").size % 2 == 0) p("加粗标记 ** 不成对：$line")
                 if (line.count { it == '`' } % 2 != 0) p("代码标记 ` 不成对：$line")
@@ -77,16 +78,23 @@ object Tools {
         val modules = all(scopes).filter { wanted.isEmpty() || it.id in wanted }
         var failed = 0
         var changed = 0
+        // SSH（SimpleSSHD）可能没在运行：先探测一次，不通就跳过全部 SSH 步骤，免得每条都等超时
+        val sshUp = modules.any { m -> m.steps.any { it.host == Host.Ssh } } &&
+            runCatching { process(listOf("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "z6x", "true")).first == 0 }.getOrDefault(false)
+        if (!sshUp && modules.any { m -> m.steps.any { it.host == Host.Ssh } }) {
+            println("! SSH（z6x）连不上，跳过全部 SSH 步骤。在电视上打开 SimpleSSHD 点 Start 后重试。")
+        }
 
         for (m in modules) {
             println("━━ ${m.id}  ${m.title}")
             for (s in m.steps) {
-                val skip = skipReason(s)
+                val skip = skipReason(s) ?: if (s.host == Host.Ssh && !sshUp) "SSH 不可用" else null
                 if (skip != null) { if (verbose) println("  · 跳过「${s.title}」：$skip"); continue }
 
                 val (code, out) = runCatching { execute(s) }.getOrElse { -1 to "执行失败：${it.message}" }
                 val bad = (code != 0 || errorText.containsMatchIn(out)) && !s.expectsError
-                val diff = s.output.isNotEmpty() && !s.varies && normalize(out) != normalize(s.output)
+                // 旧记录里的输出本来就可能和实测不同（verdict 已说明），不比对
+                val diff = s.output.isNotEmpty() && !s.varies && s.verdict == null && normalize(out) != normalize(s.output)
                 when {
                     bad -> { failed++; println("  ✗ 「${s.title}」退出码 $code") }
                     diff -> { changed++; println("  △ 「${s.title}」输出与 ${s.capturedOn} 的实测记录不同") }

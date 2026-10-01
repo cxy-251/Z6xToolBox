@@ -1,6 +1,7 @@
 package z6x.content.manual
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val AdbBasics = module("adb-basics", "ADB 基础：连接、安装、传文件、按键") {
@@ -72,7 +73,7 @@ val AdbBasics = module("adb-basics", "ADB 基础：连接、安装、传文件�
         }
     }
 
-    lesson("核对说明") {
+    lesson("说明") {
         text("""
             • 有个意外发现：系统设置里的 ADB 开关 `settings get global adb_enabled` 读出来是 **0**（关），但 ADB 一直能用。因为 adbd 是绕过设置、直接用 `setprop ctl.start adbd` 拉起来的，设置里的开关根本不知道它在跑。
             • 旧版的 `adb logcat`、`adb bugreport` 移到了「日志与崩溃」。
@@ -165,12 +166,50 @@ val PmAm = module("pm-am", "应用管理：pm、am、appops") {
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版例子里的包名 `com.v2ray.ang`、`com.github.catvod`、`com.xgimi.doubtservice` 在这台机器上**都不存在**，换成了实际存在的包或用「包名」占位。
-            • 旧版工厂模式的入口写成 `.MainActivity`，实际是 `.ui.MainFactoryMenuActivity`。
-            • 旧版「极米专有应用图谱」那篇举的 `com.xgimi.advert`、`tracker`、`appstore`、`downloader` **全都不存在**。真正的广告、上报、应用市场是 adservice、datareporter、newappmarket，见「停用清单」。
-        """)
+    audit("旧记录核对：包名的说明") {
+        text("下面有的包名找不到。**极米预装包**在系统分区里，没有 root 删不干净，`pm list packages -u` 里也没有就说明这个固件本来没有它；**第三方应用**卸载后会彻底消失，找不到不代表旧记录写错，只是现在没装。")
+    }
+
+    audit("旧记录核对：pm / am / appops 的例子") {
+        change("旧版：启动工厂模式", "am start -n com.xgimi.minitvfactory/.MainActivity", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "入口名不对，实际是 `.ui.MainFactoryMenuActivity`。"
+        }
+        change("旧版：授予 / 撤销通知权限", "pm grant com.v2ray.ang android.permission.POST_NOTIFICATIONS\npm revoke com.v2ray.ang android.permission.POST_NOTIFICATIONS", Host.Adb) {
+            verdict = Verdict.Unverified
+            note = "com.v2ray.ang 是 v2rayNG 的包名，**已卸载**，现在没法测。命令写法本身是标准的。"
+        }
+        change("旧版：禁止某应用后台驻留", "appops set com.xgimi.doubtservice RUN_IN_BACKGROUND ignore\nappops get com.xgimi.doubtservice", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "com.xgimi.doubtservice **固件里没有**（`-u` 里也查不到）。appops 的写法本身是对的，见上面。"
+        }
+        change("旧版：授权悬浮窗 / 全量预编译", "appops set com.github.catvod SYSTEM_ALERT_WINDOW allow\ncmd package compile -m speed -f com.github.catvod", Host.Adb) {
+            verdict = Verdict.Unverified
+            note = "com.github.catvod 是第三方应用，**现在没装**（可能装过又卸了），没法测。"
+        }
+    }
+
+    audit("旧记录核对：旧版「极米专有应用图谱」") {
+        change("旧版：停用极米开机广告与数据埋点", "pm disable-user --user 0 com.xgimi.advert\npm disable-user --user 0 com.xgimi.tracker", Host.Adb) {
+            verdict = Verdict.Disproved
+            captured("（旧记录）", "Package com.xgimi.advert new state: disabled-user   # 成功禁用，开机不再拉取广告")
+            note = "这两个包**固件里没有**。真正的广告和上报是 com.xgimi.adservice、com.xgimi.datareporter（见「停用清单」）。"
+        }
+        change("旧版：停用自带应用市场与静默下载服务", "pm disable-user --user 0 com.xgimi.appstore\npm disable-user --user 0 com.xgimi.downloader", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "这两个包**固件里没有**。应用市场是 com.xgimi.newappmarket。"
+        }
+        claim("""
+            绝对不可停用的关键硬件守护组件（高危红线）：
+            • com.xgimi.deviceservice：核心设备服务。负责蓝牙遥控器底层按键映射、语音键透传、电动对焦马达控制。绝对不可禁用。
+            • com.xgimi.remoteservice：极米遥控器蓝牙协议栈。禁用后蓝牙遥控器将断连，且无法重新配对。
+            • com.xgimi.keystone：智能梯形校正与避障算法服务。禁用后开机无法完成几何畸变校准，画面会倾斜变形。
+            • com.xgimi.minitvfactory：工厂模式与底层 HDMI 输入信号源切换中枢。禁用后切换 HDMI 输入会黑屏崩溃。
+        """, Verdict.Disproved,
+            "前三个包**固件里都没有**；只有 minitvfactory 存在，但「HDMI 信号源切换中枢」没有依据（信号源是 com.xgimi.tvinput）。**不要用这份清单判断哪些能停**，真正不该动的组件见「系统里还剩什么」。")
+        claim("pm disable-user / pm enable：SSH（UID 10068）调用会抛出 java.lang.SecurityException: Neither user 10068 nor current process has android.permission.CHANGE_COMPONENT_ENABLED_STATE。", Verdict.Disproved,
+            "确实会被拒绝，但报错原文是 `Attempt to change component state; pid=…, uid=10068, package=…`（见「SSH 能查不能改」）。")
+        claim("梳理极米 Z6X Pro 系统预装 57 个 com.xgimi.* 应用组件。", Verdict.Confirmed, "55 个已装 + 2 个对当前用户卸载 = 57。")
     }
 
     related("debloat-method", "debloat-list", "system-packages", "adb-basics")
@@ -251,12 +290,37 @@ val PropsInit = module("props-init", "系统属性与 init 服务") {
         }
     }
 
-    lesson("核对说明") {
-        text("""
-            • 旧版在强开 ADB 的命令里加了 `setprop service.adb.tcp.port 5555`，这个属性本来就是 5555，不需要再设。
-            • `xgimi.remoteDebug.on` 的值是 false，ADB 不是靠它开的。
-            • IceSea 存在且以 root 运行，这一点旧版说对了。
-        """)
+    audit {
+        read("旧版：查询正在运行与已退出的系统核心服务", "getprop | grep '\\[init.svc\\.' | head -n 10", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+            captured("（旧记录）", """
+                [init.svc.IceSea]: [running]   # 极米光机硬件控制中枢（运行中）
+                [init.svc.adbd]: [running]     # ADB 守护进程（运行中）
+                [init.svc.audioserver]: [running] # 音频处理服务（运行中）
+                [init.svc.bootanim]: [stopped]    # 开机动画服务（已停止退出）
+            """)
+            note = "四个状态实测都一致。"
+        }
+        read("旧版：查看 IceSea 进程", "ps -ef | grep -i icesea", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+            captured("（旧记录）", "root          4227     1 0 19:33:34 ?     00:00:18 IceSea   # UID 0 root 运行，PPID 1，切勿强杀")
+            note = "root、父进程 1、甚至 PID 4227 都和实测一致（同一次开机）。"
+        }
+        claim("""
+            IceSea 是 PPID=1（init）直接派生的 root 级别专有守护进程，负责：
+            • 光机激光光源与 RGB 色轮物理点亮与亮度控制。
+            • 机身电动步进马达对焦微调与 TOF 测距联动。
+            • 内置散热风扇多级 PWM 温控调速。
+            • 自动梯形校正陀螺仪姿态算法驱动。
+        """, Verdict.Unverified, "root、父进程 1 **成立**。它具体负责什么，没有 root 看不了它打开的设备文件，无法验证。")
+        claim("setprop ctl.*：SSH 无权触发（抛出 Permission denied 或被 SELinux 直接拦截）；ADB（UID 2000）具备操作受限 init 服务（如 adbd）的权限。", Verdict.Disproved,
+            "SSH 里执行 `setprop ctl.start adbd` 返回成功，ADB 当初就是这么开的；SELinux 是 Permissive，不会拦截。")
+        change("旧版：强开 ADB", "setprop service.adb.tcp.port 5555 && setprop ctl.start adbd", Host.Ssh) {
+            verdict = Verdict.Unverified
+            note = "前半句多余（本来就是 5555）。见「在 SSH 里强开网络 ADB」。"
+        }
     }
 
     related("force-adb", "find-real-model", "selinux-cmds")

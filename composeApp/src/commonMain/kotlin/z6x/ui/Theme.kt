@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.FontFamily
 import z6x.framework.Risk
 import z6x.framework.SectionKind
 import z6x.framework.Status
+import z6x.framework.Verdict
 
 /** 与 DeckToolBox 同一套 GitHub Dark 配色。object 是单例，相当于 C# 的 static class。 */
 object Palette {
@@ -55,6 +56,14 @@ val SectionKind.color: Color
         SectionKind.Steps -> Palette.TextStrong
         SectionKind.Verify -> Palette.Green
         SectionKind.Lesson -> Palette.Purple
+        SectionKind.Audit -> Palette.Amber
+    }
+
+val Verdict.color: Color
+    get() = when (this) {
+        Verdict.Confirmed -> Palette.Green
+        Verdict.Unverified -> Palette.Amber
+        Verdict.Disproved -> Palette.Red
     }
 
 @Composable

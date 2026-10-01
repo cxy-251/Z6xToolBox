@@ -35,6 +35,13 @@ enum class Status(val label: String) {
     Proposal("💡 提案"),
 }
 
+/** 旧记录（agy 写的）里的说法或命令，经实机核对后的结论。 */
+enum class Verdict(val label: String) {
+    Confirmed("✓ 实测成立"),
+    Unverified("? 未验证"),
+    Disproved("✗ 实测不成立"),
+}
+
 /**
  * 一条可复制的操作指令。
  * data class 自动生成 equals / hashCode / toString / copy，对应 C# 的 record。
@@ -58,6 +65,8 @@ data class Step(
     val manual: Boolean = false,
     /** 输出每次都会变（内存、磁盘占用、温度），试跑时不和实测记录对比。 */
     val varies: Boolean = false,
+    /** 来自旧记录的命令：未验证，或在这台机器上跑不通。null 表示正常命令。 */
+    val verdict: Verdict? = null,
 )
 
 /** 段落里的一项：要么是一段文字，要么是一条指令，要么是一张键值表。 */
@@ -65,6 +74,8 @@ sealed interface Item {
     data class Text(val markup: String) : Item
     data class Cmd(val step: Step) : Item
     data class Facts(val rows: List<Pair<String, String>>) : Item
+    /** 旧记录里的一个说法：原文照录，附核对结论和实测结果（或无法验证的原因）。 */
+    data class Claim(val original: String, val verdict: Verdict, val finding: String) : Item
 }
 
 /** 段落类型决定标题图标与配色。 */
@@ -75,6 +86,7 @@ enum class SectionKind(val icon: String) {
     Steps("💻"),      // 操作步骤
     Verify("🔍"),     // 验证
     Lesson("💡"),     // 经验教训 / 核实案例
+    Audit("📜"),      // 旧记录核对：原文 + 结论
 }
 
 data class Section(val kind: SectionKind, val title: String, val items: List<Item>)
@@ -92,6 +104,9 @@ class Module(
     /** 相关模块的 id，显示在页面末尾。 */
     val related: List<String>,
 ) {
+    /** 页面里的全部旧记录说法。 */
+    val claims: List<Item.Claim> get() = sections.flatMap { s -> s.items.filterIsInstance<Item.Claim>() }
+
     /** 按出现顺序取出全部指令，供搜索、检查和试跑使用。 */
     val steps: List<Step> get() = sections.flatMap { s -> s.items.filterIsInstance<Item.Cmd>().map { it.step } }
 }

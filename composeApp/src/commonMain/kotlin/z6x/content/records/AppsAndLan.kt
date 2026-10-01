@@ -1,6 +1,7 @@
 package z6x.content.records
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val LanShare = module("lan-share", "局域网传文字：解决电视上没法复制粘贴") {
@@ -59,8 +60,22 @@ val LanShare = module("lan-share", "局域网传文字：解决电视上没法�
         """)
     }
 
-    lesson("核对说明") {
-        text("Deck 端命令已核对；TV Bro 里复制粘贴的操作是当时的经历。")
+    audit {
+        claim(
+            "电视端安装的 TV Bro 浏览器按遥控器菜单键可开启「虚拟鼠标指针」模式；在 TV Bro 中打开局域网网页，用指针模式长按选中文本点击复制，该长文本便直接进入了电视系统的全局剪贴板；切换到目标应用（如 Clash），在输入框中长按确定键即可直接粘贴完成。",
+            Verdict.Unverified,
+            "这是当时的操作经历，没有重新演示。TV Bro（com.phlox.tvwebbrowser）确认已安装，也是系统默认浏览器。",
+        )
+        claim(
+            "Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...   # 局域网服务已启动",
+            Verdict.Unverified,
+            "这是 `python3 -m http.server` 的标准启动提示。这次没有开共享服务（会把目录暴露给局域网），没有重新运行。",
+        )
+        claim(
+            "inet 192.168.0.21/24 ...   # 记录此 IP 供电视端访问",
+            Verdict.Confirmed,
+            "Deck 的 wlan0 地址确实是 192.168.0.21（见上面的实测输出）。",
+        )
     }
 
     related("usb-apk1", "app-install-order")
@@ -131,12 +146,37 @@ val AppInstallOrder = module("app-install-order", "App 安装顺序与兼容问�
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版说 v2rayNG 闪退是因为"极米删除了 VpnDialogs（VPN 授权弹窗）"。实测 `com.android.vpndialogs` **装着且是启用状态**，这个解释不成立。已经换用 Clash Meta，v2rayNG 不再使用，真正原因**不再追查**。
-            • 旧版说 Aurora 闪退是因为"缺 GMS + 240 DPI 布局溢出"。Aurora Store 本身就是为没有 Google 服务的设备设计的，这个解释也站不住，原因待查。
-            • 32 位限制、架构检查方法、现装 App 列表都已核实。
-        """)
+    audit {
+        claim(
+            "v2rayNG 闪退原因：极米系统在精简系统组件时，删除了 Android 原生的 VpnDialogs（VPN 权限授权确认弹窗）应用。v2rayNG 尝试调用系统 VpnService.prepare() 弹出授权窗口时，系统找不到该 Activity 抛出异常崩溃。",
+            Verdict.Disproved,
+            "`com.android.vpndialogs` **装着且是启用状态**；Clash Meta 正以系统 VPN 模式运行（见「代理：Clash Meta」）。真正原因不再追查（已改用 Clash Meta）。",
+        )
+        claim(
+            "Aurora Store 闪退原因：系统完全缺少 GMS（Google 移动服务）核心框架，且 Z6X Pro 的 240 DPI 密度导致手机/平板版布局计算溢出崩溃。",
+            Verdict.Unverified,
+            "没有抓崩溃日志。Aurora Store 本身是为没有 Google 服务的设备设计的，「缺 GMS」这个解释存疑；「240 DPI 布局溢出」没有依据。Aurora 已卸载。",
+        )
+        claim(
+            "测试安装纯 64 位 APK：系统安装器直接报错 INSTALL_FAILED_NO_MATCHING_ABIS。原因：极米虽然使用了 64 位 Linux 内核（armv8l），但系统运行库全部裁剪为 32 位（armeabi-v7a）。",
+            Verdict.Confirmed,
+            "`ro.product.cpu.abilist64` 为空，`abi` 是 armeabi-v7a，内核是 64 位。报错本身是当时的经历。",
+        )
+        claim(
+            "SimpleSSHD：安装成功，监听 2222 端口，Steam Deck 可通过终端直接远程登录。",
+            Verdict.Confirmed,
+            "2222 端口属于 uid 10068（SimpleSSHD），`ssh z6x` 可以登录。",
+        )
+        claim(
+            "ClashMetaforAndroid：安装成功，正常运行。分流规则中需将局域网段设为 DIRECT 直连，避免内网访问失败。",
+            Verdict.Confirmed,
+            "Clash Meta 正在运行；它设置的代理排除名单里有 192.168.*。",
+        )
+        claim(
+            "Projectivy Launcher 与 SmartTube：安装成功，运行流畅无异常。",
+            Verdict.Confirmed,
+            "两者都已安装，Projectivy 是当前桌面，SmartTube 正在使用。",
+        )
     }
 
     related("usb-apk1", "ssh-probe", "lan-share")

@@ -1,6 +1,7 @@
 package z6x.content.proposals
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val DropbearShell = module("dropbear-shell", "以 shell 身份跑 SSH 服务（Dropbear）") {
@@ -49,11 +50,20 @@ val DropbearShell = module("dropbear-shell", "以 shell 身份跑 SSH 服务（D
             "缺什么" to "**dropbear 静态二进制**：设备上和 shared 目录里都没有，需要找一个 arm/arm64 静态编译版",
             "端口" to "2222 被 SimpleSSHD 占用，用 2223 等",
             "重启" to "重启后要重新从 ADB 启动",
-            "SimpleSSHD 内存" to "实测两个进程约 109MB + 35MB，旧版写 60MB 不准",
+            "SimpleSSHD 内存" to "实测两个进程约 109MB + 35MB",
         )
         text("""
             **结论：可行，价值中等。** 现在 `adb push` + `adb shell` 已经能做同样的事；它的好处是只用一个 `ssh`/`scp` 就能管理，适合以后频繁部署 Go 服务时再做。
         """)
+    }
+
+    audit {
+        claim("SimpleSSHD 应用运行在 Android 沙盒权限下（用户身份为 u0_a68），物理内存占用高达 60MB，且无法自由读写和执行 /data/local/tmp 目录下的开发二进制。", Verdict.Disproved,
+            "u0_a68、访问不了 /data/local/tmp **成立**；内存实测约 109MB + 35MB，不是 60MB。")
+        claim("部署原生静态 Dropbear 后，SSH 守护进程直接以 shell（UID 2000）身份常驻后台，内存占用降至 2MB ~ 3MB；单文件约 1.8MB。", Verdict.Unverified, "没有部署，无法验证。")
+        claim("Dropbear 是专为嵌入式 Linux 设计的超轻量 SSH 服务，支持单文件运行、ED25519/RSA 公钥认证，资源消耗仅为 OpenSSH 的五分之一；OpenSSH 移植体积超 20MB。", Verdict.Unverified,
+            "ED25519 要看版本：SimpleSSHD 自带的 dropbear 2019.78 就不支持（踩过坑）。体积和资源对比没有出处。")
+        claim("非 Root 用户不可监听标准 TCP 22 端口，故绑定 :2222。", Verdict.Confirmed, "1024 以下不能绑定；但 2222 已被 SimpleSSHD 占用，要换别的端口。")
     }
 
     related("ssh-key-login", "native-exec", "go-server")
@@ -107,7 +117,15 @@ val EnvProfile = module("env-profile", "Shell 环境自动加载（env.sh）") {
             "ps 排序" to "`ps -A -o PID,RSS,NAME -k -RSS` 实测可用",
             "风险" to "只是一个文本文件，删掉即撤销",
         )
-        text("**结论：可行，成本很低，建议做。** 旧版的 GOGC=50 之类的设置没有说明理由，去掉了。")
+        text("**结论：可行，成本很低，建议做。**")
+    }
+
+    audit {
+        claim("Android 原生系统的 sh（基于 mksh）在每次建立连接后，仅提供极简的默认环境变量（PATH=/system/bin）。", Verdict.Disproved,
+            "mksh **成立**；但默认 PATH 不止 /system/bin，有 /product/bin、/apex/…、/system/bin、/vendor/bin 等九项（见「存储与分区」）。")
+        claim("定制安全环境变量：预设 TMPDIR=/data/local/tmp 与 GOGC=50，保护系统稳定。", Verdict.Unverified, "GOGC=50 会让 Go 程序更频繁地回收内存，「保护系统稳定」没有依据，所以方案里去掉了。")
+        claim("`adb shell` 命令默认以非登录（non-login）交互模式启动，不加载任何配置文件。", Verdict.Confirmed, "每次进 adb shell 都要手动 export PATH 才能用 BusyBox 命令。")
+        claim("脚本必须确保为 Unix (LF) 换行符，若在 Windows 下编辑引入 CRLF 会导致 mksh 报错 syntax error: unexpected word。", Verdict.Unverified, "通用经验，没有专门测试。")
     }
 
     related("busybox", "native-exec")
@@ -151,10 +169,18 @@ val StraceDebug = module("strace-debug", "用 strace 排查程序为什么挂") 
     verify("可行性审核（2026-10-01）") {
         facts(
             "缺什么" to "设备上**没有** strace，需要找静态编译版（arm 或 arm64 都行）",
-            "yama 限制" to "旧版说内核开了 yama，实测 `/proc/sys/kernel/yama/ptrace_scope` **不存在**，没有 yama",
+            "yama 限制" to "`/proc/sys/kernel/yama/ptrace_scope` **不存在**，没有 yama",
             "SELinux" to "Permissive，不拦 ptrace",
         )
         text("**结论：可行，排错时非常有用。** 等以后写 Go 服务真遇到问题时再部署即可。")
+    }
+
+    audit {
+        claim("报错 ptrace: Operation not permitted。原因：Android 内核开启了 yama 安全限制。当尝试通过 strace -p <PID> 挂载一个已经运行的后台进程时容易被拦截。", Verdict.Disproved,
+            "这台的内核没有 yama（`/proc/sys/kernel/yama/ptrace_scope` 不存在）。strace 没有部署，附加别的进程会不会被拒没有测试。")
+        claim("非 Root 状态下，UID 2000 的 strace 只能挂载并追踪由自身启动的子进程，无法跨用户追踪 Android 系统服务（system_server）。", Verdict.Unverified,
+            "没有部署 strace。同样的权限边界在 `kill -0` 实验里看到过：shell 碰不到其他用户的进程。")
+        claim("技术栈：musl-gcc 静态交叉编译的 ARM64 strace 二进制（单文件约 1.5MB）。", Verdict.Unverified, "设备上和 shared 目录里都没有 strace。")
     }
 
     related("native-exec", "go-server")
@@ -199,6 +225,12 @@ val PacketCapture = module("packet-capture", "在投影仪上抓包（tcpdump）
             • 在服务**自己的代码里**记日志：收到请求就打印。
             • 用 `nc` 或 `curl -v` 从 Deck 测试连通性。
         """)
+    }
+
+    audit {
+        claim("报错 socket: Operation not permitted。原因：Android 内核严格限制普通 UID 创建 AF_PACKET 原始套接字。若内核 SELinux 策略阻止了 shell 域使用 raw socket，可通过测试端口监听（nc -l）结合外部 PC 发送端单向抓包作为补充验证手段。", Verdict.Confirmed,
+            "报错原文一致。但原因不是 SELinux（这台是 Permissive），是 shell 没有 CAP_NET_RAW 能力。")
+        claim("技术栈：musl 静态链接编译的 ARM64 tcpdump + libpcap（单文件约 2.2MB）。", Verdict.Disproved, "不需要自己部署：系统自带 `/system/bin/tcpdump`。只是没权限用。")
     }
 
     related("port-owner", "native-exec")
@@ -253,7 +285,6 @@ val OomWatchdog = module("oom-watchdog", "服务保活：看门狗与 oom 分") 
         }
         facts(
             "被内存回收杀掉" to "从 ADB 启动的进程继承 adbd 的 **-1000**，永不被杀。不需要调 oom 分",
-            "旧版的说法" to "\"shell 不能设 -1000\"\"只能进程自己改\"都与实测不符",
             "程序自己崩溃" to "看门狗有用：崩溃后 10 秒内重启",
             "看门狗自己" to "同样从 ADB 启动，也是 -1000，不会被内存回收杀掉",
             "重启投影仪" to "所有进程都没了，看门狗自己也没了。没有 root 就不能开机自启，**这才是真正的问题**",
@@ -262,6 +293,16 @@ val OomWatchdog = module("oom-watchdog", "服务保活：看门狗与 oom 分") 
             **结论：看门狗可选（只管崩溃重启）；oom 调整不需要。**
             重启后的恢复目前只能手动：从 SSH 拉起 adbd（如果重启后 adbd 没自动运行），再用 ADB 启动服务。**待观察：** 下次投影仪重启后，adbd 会不会自己起来、`ssh z6x` 还能不能登录。
         """)
+    }
+
+    audit {
+        claim("非 Root shell 虽不能设为 -1000，但可将其调整为比普通后台 App 更低的保护级别。", Verdict.Disproved,
+            "ADB 启动的进程**本来就是 -1000**（继承 adbd），调高后也能再调回 -1000。")
+        claim("写入 /proc/<PID>/oom_score_adj 报错 Permission denied。原因：Android 内核仅允许进程自身调整自身的 score 分值，或由其父进程降级。", Verdict.Disproved,
+            "shell 给自己启动的 sleep 进程改 oom 分成功了（调高、调回都行）。")
+        claim("看门狗使用纯 Shell 运行，物理内存常驻仅 800KB，处于系统查杀优先级的最底层，只要内存不低于 50MB 绝不会被触发查杀。", Verdict.Unverified,
+            "看门狗没有部署。它从 ADB 启动的话是 -1000，确实不会被杀；800KB、50MB 这两个数字没有依据。")
+        claim("普通 Android 前台 App 分值为 0，后台缓存 App 为 900+；-1000 代表完全免疫 OOM 查杀。", Verdict.Confirmed, "`dumpsys meminfo --oom` 的分组和 SSH（App 身份）里看到的 0 都符合。")
     }
 
     related("go-server", "force-adb", "native-exec")

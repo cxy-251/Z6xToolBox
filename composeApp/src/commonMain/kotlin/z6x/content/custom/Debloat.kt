@@ -2,6 +2,7 @@ package z6x.content.custom
 
 import z6x.framework.Host
 import z6x.framework.SectionBuilder
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val DebloatMethod = module("debloat-method", "精简预装应用：停用还是卸载") {
@@ -50,7 +51,7 @@ val DebloatMethod = module("debloat-method", "精简预装应用：停用还是�
 
     steps("停用、卸载与恢复") {
         change("停用", "pm disable-user --user 0 com.xgimi.doubanfm", Host.Adb) {
-            outcome = "输出 `Package com.xgimi.doubanfm new state: disabled-user`，正在运行的进程会被结束。"
+            outcome = "输出 `Package com.xgimi.doubanfm new state: disabled-user`。普通应用的进程会被结束；但带 **PERSISTENT** 标记的系统组件，实测停用后进程**还在运行**（见「停用清单」）。"
         }
         change("恢复停用的", "pm enable com.xgimi.doubanfm", Host.Adb) {
             outcome = "输出 `… new state: enabled`。"
@@ -155,9 +156,30 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             "com.xgimi.user" to "极米账号与会员；含芒果、优酷账号绑定服务（MgBindService、YoukuBindService，已核实存在）",
             "com.xgimi.soundermodeservice" to "音箱模式（推测）",
         ))
-        read("看看它们还在不在运行", "ps -A | grep -E 'hilink|iotserver|vcontrol|mateservice'", Host.Adb) {
-            expectsError = true
-            note = "停用前这里能看到它们的常驻进程（旧记录说 hilink 占用 CPU 较多，未复核）。停用后什么都不输出。"
+        read("看看它们还在不在运行", "ps -A -o PID,USER,STIME,TIME,NAME | grep -E 'hilink|iotserver|vcontrol|mateservice|soundermode'", Host.Adb) {
+            varies = true
+            captured("2026-10-01", """
+                 3594 system       19:33:30 00:00:01 com.xgimi.soundermodeservice
+                 3801 system       19:33:31 00:00:00 com.xgimi.mateservice
+                24688 system       01:14:09 00:33:29 com.xgimi.xgimihilink
+            """)
+            note = """
+                **停用了，但有三个还在运行。** STIME 是启动时间，TIME 是累计 CPU 时间。
+                soundermode 和 mateservice 从开机（9-30 19:33）一直跑到现在；hilink 在 10-01 凌晨 01:14 又被重新拉起，已经用了 33 分钟 CPU。原因见下一条。
+            """
+        }
+        read("找出所有「已停用却还在运行」的包", "for p in \$(pm list packages -d | sed s/package://); do if pid=\$(pidof \$p); then echo \"\$p \$pid \$(dumpsys package \$p | grep -m1 -o PERSISTENT)\"; fi; done", Host.Adb) {
+            varies = true
+            captured("2026-10-01", """
+                com.xgimi.xgimihilink 24688 PERSISTENT
+                com.xgimi.mateservice 3801 PERSISTENT
+                com.xgimi.soundermodeservice 3594 PERSISTENT
+            """)
+            note = """
+                逐个检查停用的包有没有进程（`pidof`），有的话再看它有没有 PERSISTENT 标记。29 个里只有这 3 个，**全都是 PERSISTENT**：系统级常驻组件（以 system 身份运行，系统会保持它们一直在线）。
+                停用发生在这次开机之后（脚本写于 10-01 12:14，`dumpsys package` 里 lastDisabledCaller 是 shell），所以它们是开机时启动、停用后没被结束。
+                **待验证：** 投影仪下次重启后，它们还会不会启动。
+            """
         }
         text("这一组以后如果要用极米手机 App 遥控、蓝牙音箱模式或智能家居联动，需要恢复对应的包。")
     }
@@ -169,12 +191,30 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版分了 8 篇，每篇停用三五个包，格式重复，这里合并成一份清单。
-            • 旧版写的"释放约 320MB 内存""hilink 累计占用 CPU 近 20 分钟"无法复核（这些包早已停用），已删除。
-            • 旧版说部分组件"以 system 身份运行、带 persistent 标记，重启后才生效"，未核实，已删除。实际上 disable-user 会立即结束进程。
-        """)
+    audit("旧记录核对（旧版分 8 篇，这里合并为一份清单）") {
+        claim("停用 adservice / datareporter / bugreportsender：消除开机全屏推送并减少后台无用唤醒。", Verdict.Unverified,
+            "三个包确认已停用。「消除开机推送」「减少唤醒」的效果没有前后对比测试。")
+        claim("停用内置豆瓣 FM、动态画中画壁纸与氛围组件，释放约 320MB 运行时常驻内存。", Verdict.Unverified,
+            "这些包早已停用，无法复测停用前的内存。")
+        read("旧版：查看 IoT 服务运行态进程", "ps -ef | grep -E 'hilink|iotserver|vcontrol'", Host.Adb) {
+            verdict = Verdict.Confirmed
+            captured("（旧记录）", """
+                system  4270  2665 6 19:33:35 ? 00:19:35 com.xgimi.xgimihilink        # 华为协议常驻扫描
+                system  4804  2665 0 19:33:43 ? 00:00:28 com.xgimi.xgimiiotserver       # 极米 IoT 守护
+                system  6244  2665 1 19:33:57 ? 00:01:55 com.xgimi.vcontrol:miot       # 米家联动进程
+            """)
+            note = "旧记录说 hilink「后台累计消耗 CPU 调度时间近 20 分钟」。实测 hilink 虽已停用但**仍在运行**，10-01 晚上累计 33 分钟（它在凌晨 01:14 重启过），说明它确实一直在消耗 CPU。iotserver、vcontrol 现在没有进程。"
+        }
+        claim("底层生命周期特性：上述组件以 system (UID 1000) 权限运行，且部分带有 persistent 标记，停用后在下次开机重启时生效，系统将不再派发并启动其服务树。", Verdict.Confirmed,
+            "前半句**成立**：hilink 等是 system 身份、带 PERSISTENT 标记，停用后进程仍在运行（见上面两条命令）。「下次开机就不再启动」**待下次重启验证**。")
+        claim("com.xgimi.home：GMUI 官方桌面，负责主屏渲染、顶部轮播海报与爱奇艺/芒果影视推荐流。com.xgimi.screensaver：闲置时展示壁纸与商推海报，停用后由 Projectivy 自带屏保引擎接管。skinmanager / skinconfig / skin.*：桌面主题样式的分发、配置和内置壁纸包。", Verdict.Unverified,
+            "用途和包名、应用名吻合，没有逐个验证细节。")
+        claim("com.xgimi.upgrade：周期性联网向官方服务器轮询新固件包、静默后台下载并弹出强制升级提示。升级可能覆写 system 分区并重置 pm disable 状态。com.xgimi.ota.accessories：常驻后台轮询检测蓝牙遥控器、3D 眼镜等硬件的新固件，产生不必要的网络请求与唤醒锁。", Verdict.Unverified,
+            "没有抓过升级流量，也没有经历过升级。「升级可能恢复停用状态」是合理推测，停用 OTA 是出于谨慎。")
+        claim("com.xgimi.iot：极米 IoT 物联中枢，负责与极米生态硬件及华为 HiLink 互联。smartconnect：局域网跨设备协同与发现握手。mobilebridgeservice：手机无屏助手 App 专用桥接通道。smartaccessories：极米转盘、专用环境光感支架等外设控制。mateservice：极米官方无线麦克风及外置低音炮伴生服务。soundermodeservice：关屏独立蓝牙音箱模式。", Verdict.Unverified,
+            "用途是从包名推断的，没有逐个验证。")
+        claim("com.xgimi.user：极米会员与第三方账号绑定。常驻后台执行 YoukuBindService 与 MgBindService 优酷芒果账号轮询。", Verdict.Confirmed,
+            "这两个服务在包里确实存在（`dumpsys package com.xgimi.user`）。「常驻轮询」没有验证（包已停用）。")
     }
 
     related("debloat-method", "debloat-scripts", "projectivy-launcher")

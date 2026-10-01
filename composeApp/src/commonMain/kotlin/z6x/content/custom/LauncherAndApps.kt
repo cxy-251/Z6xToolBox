@@ -1,6 +1,7 @@
 package z6x.content.custom
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Projectivy Launcher") {
@@ -90,6 +91,31 @@ val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Pro
         """)
     }
 
+    audit {
+        claim("UI 无法开启根因：Projectivy 尝试调起 android.settings.ACCESSIBILITY_SETTINGS，极米系统无此活动组件，点击直接被静默忽略。", Verdict.Confirmed,
+            "`resolve-activity` 查这个动作：No activity found。")
+        claim("多服务共存机制：极米系统默认启用了 com.xgimi.duertts 语音服务，命令行写入时必须用冒号 : 连接多个服务，避免顶掉系统必要监听。", Verdict.Confirmed,
+            "当前的无障碍列表就是 `com.xgimi.duertts/.MonitorService`。")
+        claim("命令行强制注入并开启 Projectivy 无障碍服务后：无障碍服务强制激活成功，遥控器 Home 键捕获就绪。", Verdict.Unverified,
+            "当时确实用 ADB 开启过；2026-10-01 查看时列表里已没有 Projectivy，什么时候被关掉的不清楚。")
+        change("旧版：停用官方桌面（开机直达第三方桌面）", "pm disable-user --user 0 com.xgimi.home", Host.Adb) {
+            verdict = Verdict.Unverified
+            note = "后来改成了对当前用户卸载（`pm uninstall -k --user 0`），停用这种做法现在没有再测。"
+        }
+        read("旧版：推送安装并查询主活动入口", "cmd package resolve-activity --brief com.spocky.projengmenu", Host.Adb) {
+            verdict = Verdict.Disproved
+            captured("（旧记录）", """
+                Success
+                com.spocky.projengmenu/.ui.home.MainActivity
+            """)
+            note = "不带 `-a` 动作参数时查不出入口；要写成 `-a android.intent.action.MAIN`（见上面「现在谁是桌面」）。入口名 `.ui.home.MainActivity` 本身是对的。"
+        }
+        claim("发送 Home 键后：mCurrentFocus=Window{... com.spocky.projengmenu/com.spocky.projengmenu.ui.home.MainActivity}", Verdict.Confirmed,
+            "Projectivy 是唯一的 HOME，`resolve-activity` 和输入窗口列表里都能看到它。")
+        claim("桌面仅是系统 Intent 调用器，各应用的用户登录 Token、Session 保存在各自的 /data/data/<package>/ 隔离沙盒内，更换启动器不会清除任何应用私有数据。", Verdict.Confirmed,
+            "这是安卓的基本机制：每个应用的数据在自己的私有目录里，桌面碰不到。")
+    }
+
     related("debloat-method", "debloat-scripts", "system-packages")
 }
 
@@ -135,6 +161,22 @@ val AppStorePivot = module("app-store-pivot", "找个应用商店：Aurora、Apt
             • 一个方案试两次都不顺，就退回最朴素、最可控的做法（自己下载、自己装），不在工具上继续耗时间。
             • 这几步是当时的经历，涉及的 App 已卸载，没有重新演示。
         """)
+    }
+
+    audit {
+        claim("Aurora Store 闪退根因（经日志审计定位）：GMS 库缺失，Aurora Store 依赖 Google Play Services 分发协议，极米底层完全阉割了 GMS 核心，通信时抛出空指针或 API 异常；DPI 布局冲突：极米投影仪默认为 240 DPI，部分依赖手机竖屏特性的页面渲染时在 Android TV 宽屏上触发窗口测量崩溃。", Verdict.Unverified,
+            "没有看到当时的日志。Aurora Store 本身是给没有 Google 服务的设备用的，「依赖 GMS」这一点存疑；240 DPI 已实测，但和闪退的关系没有依据。")
+        claim("Aptoide TV：专为 Android TV 盒子和投影仪定制的大屏应用商店，所有卡片均经过遥控器导航优化，无需 Google 框架。F-Droid：开源安全市场，收录纯净无广告开源工具，完全与 GMS 解耦，适合安装网络与系统工具。", Verdict.Unverified,
+            "对两个商店的一般介绍，没有在这台机器上专门验证。")
+        read("旧版：Aptoide TV 组件入口查询", "cmd package resolve-activity --brief cm.aptoidetv.pt", Host.Adb) {
+            verdict = Verdict.Unverified
+            captured("（旧记录）", "cm.aptoidetv.pt/.activity.MainActivity")
+            note = "Aptoide TV 已卸载，无法复查。"
+        }
+        claim("实测从 Aptoide TV 下载安装 YouTube Music，启动即闪退。抓取 PID 8637 日志显示 `GooglePlayServices not available due to error 9` 与 `requires the Google Play Store, but it is missing`，因缺失 GMS 握手失败直接退出。", Verdict.Unverified,
+            "当时的经历和日志，YouTube Music 已卸载，无法复查。这台机器确实没有 Google Play 服务。")
+        claim("卸载 cm.aptoidetv.pt、com.aurora.store、com.google.android.apps.youtube.music 后，保留 7 个第三方应用：Activity Launcher、Projectivy、SmartTube、TV Bro、CX 文件浏览器、SimpleSSHD、Clash Meta。", Verdict.Confirmed,
+            "`pm list packages -3` 正好是这 7 个。")
     }
 
     related("app-install-order", "lan-share")
@@ -210,11 +252,24 @@ val ClashProxy = module("clash-proxy", "代理：Clash Meta 以 VPN 模式运行
         """)
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版说"极米删了 VpnDialogs，点启动 VPN（TUN 模式）必定崩溃"，所以只能用端口代理。实测 vpndialogs 存在，Clash 正以 VPN 模式运行，这个结论**完全错误**，已改写。
-            • 截图里看到 SimpleSSHD 列出的 IP 有一个 172.19.0.1，顺着它查到 tun0，才发现 VPN 其实在运行。**留意不寻常的细节**往往能推翻错误的假设。
-        """)
+    lesson("经验") {
+        text("截图里看到 SimpleSSHD 列出的 IP 有一个 172.19.0.1，顺着它查到 tun0，才发现 VPN 其实在运行。**留意不寻常的细节**往往能推翻错误的假设。")
+    }
+
+    audit {
+        claim("极米系统删减了 VpnDialogs.apk，导致应用内点击「启动 VPN (TUN 模式)」必定崩溃。", Verdict.Disproved,
+            "`com.android.vpndialogs` 存在且启用；Clash Meta 正以 VPN 模式运行（tun0、vpn_management 都能看到）。")
+        claim("方案 1（第三方应用内独立代理）：如 SmartTube 或 TV Bro 内置网络设置直接填入代理地址 127.0.0.1 端口 7890，完全不调用系统 VPN 接口。方案 2：命令行注入系统级 HTTP 代理 settings put global http_proxy 127.0.0.1:7890。", Verdict.Unverified,
+            "两个办法本身可行（7890 端口在监听），但这台机器上 VPN 一直在用，没有改用这两种方式测试。")
+        read("旧版：查看 Clash Meta 后台进程与监听端口", "ps -ef | grep -i metacubex && netstat -tlpn | grep 7890", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+            captured("（旧记录）", """
+                u0_a69  7124  2665 3 19:34:05 ? 00:08:19 com.github.metacubex.clash.meta:background
+                tcp6       0      0 [::]:7890               [::]:*                  LISTEN      -
+            """)
+            note = "实测一致：`:background` 进程 uid 是 u0_a69（10069），7890 在监听。"
+        }
     }
 
     related("app-install-order", "lan-share")

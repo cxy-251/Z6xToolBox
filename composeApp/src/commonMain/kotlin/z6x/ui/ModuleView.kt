@@ -22,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +34,7 @@ import z6x.framework.Module
 import z6x.framework.Section
 import z6x.framework.Status
 import z6x.framework.Step
+import z6x.framework.Verdict
 
 private val Rounded = RoundedCornerShape(8.dp)
 
@@ -88,6 +91,15 @@ private fun Header(module: Module, breadcrumb: String) {
         Text(module.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Palette.TextStrong)
         if (module.keywords.isNotEmpty()) Text(module.keywords, fontSize = 12.sp, color = Palette.Accent, fontFamily = MonoFont)
         if (module.overview.isNotEmpty()) Markup(module.overview, Palette.TextMuted, Modifier.padding(top = 4.dp))
+        val claims = module.claims
+        if (claims.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("旧记录 ${claims.size} 条：", fontSize = 12.sp, color = Palette.TextMuted)
+                // groupBy + eachCount：按结论分组计数，相当于 C# 的 GroupBy(...).ToDictionary(g => g.Key, g => g.Count())
+                val counts = claims.groupingBy { it.verdict }.eachCount()
+                for (v in Verdict.entries) counts[v]?.let { Chip("${v.label} $it", v.color) }
+            }
+        }
         if (module.status == Status.Unverified) {
             Text(
                 "这一页沿用旧版内容，还没有在实机上核对，命令和输出可能有误。",
@@ -114,6 +126,7 @@ private fun SectionCard(section: Section, stepContent: @Composable (Step) -> Uni
                 is Item.Text -> Markup(item.markup)
                 is Item.Cmd -> stepContent(item.step)
                 is Item.Facts -> FactsTable(item.rows)
+                is Item.Claim -> ClaimCard(item)
             }
         }
     }
@@ -144,7 +157,8 @@ private fun StepCard(step: Step, number: Int, onCopy: (String) -> Unit) {
             Text(step.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextStrong)
             Chip(step.risk.label, step.risk.color)
             Chip(step.host.label, if (step.host == Host.Deck) Palette.TextMuted else Palette.Purple)
-            if (step.expectsError) Chip("演示报错", Palette.Red)
+            step.verdict?.let { Chip("旧记录 · ${it.label}", it.color) }
+            if (step.expectsError && step.verdict == null) Chip("演示报错", Palette.Red)
         }
 
         if (step.command.isNotEmpty()) {
@@ -177,10 +191,41 @@ private fun StepCard(step: Step, number: Int, onCopy: (String) -> Unit) {
 
         if (step.output.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().background(Palette.Bg2, Rounded).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val label = if (step.capturedOn.isNotEmpty()) "实测输出 · ${step.capturedOn}" else "实测输出"
+                val label = when {
+                    step.verdict == Verdict.Confirmed -> "旧记录中的输出（与实测一致）"
+                    step.verdict == Verdict.Disproved -> "旧记录中的输出（与实测不符）"
+                    step.verdict == Verdict.Unverified -> "旧记录中的输出（未经实测）"
+                    step.capturedOn.isNotEmpty() -> "实测输出 · ${step.capturedOn}"
+                    else -> "实测输出"
+                }
                 Text(label, fontSize = 11.sp, color = Palette.TextMuted)
                 SelectionContainer {
                     Text(step.output, fontFamily = MonoFont, fontSize = 12.sp, color = Palette.TextBody, lineHeight = 18.sp)
+                }
+            }
+        }
+    }
+}
+
+/** 旧记录里的一个说法：原文 + 结论 + 实测结果。 */
+@Composable
+private fun ClaimCard(claim: Item.Claim) {
+    val bar = claim.verdict.color
+    Row(
+        Modifier.fillMaxWidth().background(Palette.Bg2, Rounded)
+            // drawBehind 在内容下面直接画：左侧一条 4dp 宽的彩色竖线，颜色表示结论
+            .drawBehind { drawRect(bar, size = Size(4.dp.toPx(), size.height)) },
+    ) {
+        Column(Modifier.padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("旧记录", fontSize = 11.sp, color = Palette.TextMuted)
+                Chip(claim.verdict.label, claim.verdict.color)
+            }
+            Markup(claim.original, Palette.TextMuted)
+            if (claim.finding.isNotEmpty()) {
+                Row {
+                    Text("实测", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = claim.verdict.color, modifier = Modifier.padding(end = 10.dp, top = 2.dp))
+                    Markup(claim.finding)
                 }
             }
         }

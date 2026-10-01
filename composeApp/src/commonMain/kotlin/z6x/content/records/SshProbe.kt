@@ -1,6 +1,7 @@
 package z6x.content.records
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val SshProbe = module("ssh-probe", "SSH 连上后摸清硬件") {
@@ -95,13 +96,25 @@ val SshProbe = module("ssh-probe", "SSH 连上后摸清硬件") {
         )
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版写的芯片（联发科 MT9669、4 核 A73）和内核（5.4.180）是错的，已按实测改正。
-            • 旧版"总包数 183"不对：加上已卸载的也只有 113 个。"极米内置包 57 个"是对的（现在装着 55 个，加已卸载的 2 个）。
-            • 旧版把"网络 ADB 默认开放"写进了这一篇，与事实不符，见「在 SSH 里强开网络 ADB」。
-            • 本页命令都在 2026-10-01 通过 SSH（uid 10068）实际跑过。
-        """)
+    audit("旧记录核对（本页命令都在 2026-10-01 通过 SSH 实际跑过）") {
+        claim("芯片平台：联发科 MT9669（开发代号 huanglong），4 核 Cortex-A73 处理器", Verdict.Disproved,
+            "海思 Hi3751V660，8 核 Cortex-A55（`ro.product.product.name` = tv_hi3751v660，`/proc/cpuinfo` CPU part 0xd05 ×8）。huanglong 是海思平台代号。")
+        claim("架构分离：Linux 5.4.180 内核为 64 位（armv8l），用户空间系统库裁剪为 32 位（armeabi-v7a）", Verdict.Disproved,
+            "64 位内核 + 32 位用户空间**成立**；但内核版本是 **5.10.43**，不是 5.4.180。")
+        claim("系统版本：Android 12，API 级别 31", Verdict.Confirmed, "`12` / `31`。")
+        claim("物理内存：总内存 3.5 GB（3630528 kB），空闲可用约 1.8 GB", Verdict.Confirmed,
+            "MemTotal 3630528 kB 一致；可用量随使用变化，实测 1.4~1.6 GB。")
+        claim("存储空间：/data 分区总容量 50 GB，系统预装后剩余 48 GB", Verdict.Confirmed, "50G，当前剩余 46G（已用 3.5G）。")
+        claim("光机分辨率：0.33 英寸 DMD 芯片，物理点对点 1920x1080@60Hz，屏幕密度 240 DPI", Verdict.Unverified,
+            "1920x1080、240 dpi 已实测；DMD 芯片尺寸命令行查不到。")
+        claim("调试接口：网络 ADB 端口 5555（默认开放且无需授权指纹，uid=2000）", Verdict.Disproved,
+            "端口 5555 和免授权是**预设**好的，但 adbd 默认**不运行**，要从 SSH 手动拉起。见「在 SSH 里强开网络 ADB」。")
+        claim("getprop ro.product.model 输出 `Z6X Pro`；ro.build.display.id 输出 `GMUI_...`", Verdict.Disproved,
+            "ro.product.model 是 `XGIMI TV`；display.id 是 `tv_hi3751v660 HuanglongV200R006C00SPC009B020`。型号在 `xgimi.bt.name` 里。")
+        claim("总包数: 183；极米内置包数: 57", Verdict.Disproved,
+            "总包数 111（加上对当前用户卸载的也只有 113）。极米预装 57 **成立**：现在 55 个，加卸载的 home、stream.video 共 57。")
+        claim("为什么查询命令能执行：/proc/meminfo、getprop、df 对所有普通应用开放只读权限；为什么修改与删除执行不了：调用系统特权服务时会校验 UID 是否为 0 或 2000，普通 UID 10068 会被拦截。", Verdict.Confirmed,
+            "查询全部可用；修改被拒见「SSH 能查不能改」的实验。")
     }
 
     related("ssh-permission-wall", "find-real-model", "ssh-key-login")
@@ -174,9 +187,25 @@ val SshPermissionWall = module("ssh-permission-wall", "SSH 能查不能改：撞
             note = "和实验 2 一样，先检查了包在不在，测不到权限。"
         }
         text("""
-            卸载没有"对已卸载的再卸一次"这种无害的做法：对真实应用测试，万一放行就真的卸掉了。所以**这条不做实验**。
-            旧版记录里那段带行号的 NullPointerException 堆栈无法核实，已删除。能确定的是：停用都被拒，卸载更不可能放行。
+            卸载没有"对已卸载的再卸一次"这种无害的做法：对真实应用测试，万一放行就真的卸掉了。所以**这条不做实验**。能确定的是：停用都被拒，卸载更不可能放行。
         """)
+    }
+
+    audit {
+        danger("旧版：在 SSH 中执行卸载自带应用命令", "pm uninstall -k --user 0 com.xgimi.minitvfactory", Host.Ssh) {
+            verdict = Verdict.Unverified
+            captured("（旧记录）", """
+                Exception occurred while dumping:
+                java.lang.NullPointerException: Attempt to invoke virtual method 'int java.lang.String.length()' on a null object reference
+                  at com.android.server.appop.AppOpsService.checkPackage(AppOpsService.java:3212)
+                  at com.android.server.pm.PackageInstallerService.uninstall(PackageInstallerService.java:1011)
+            """)
+            note = "上面是旧记录写的输出，**没有复现**：对真实应用测试有被真的卸掉的风险。另外，实验 2 实测 pm 出错时开头是 `Exception occurred while executing '命令名':`，而旧记录写的是 `while dumping`（那是 dumpsys 出错时的说法），这段输出很可能不是原样记录。"
+        }
+        claim("报错根因: SimpleSSHD 运行在普通沙箱（UID 10068），不是 root 也不是 shell；Android 12 校验调用方包名为空，直接抛出空指针异常崩溃", Verdict.Unverified,
+            "uid 10068 **成立**；「包名为空导致空指针」没有复现，无法确认。")
+        claim("am start 报错：java.lang.SecurityException: Permission Denial: start at ... from pid=... uid=10068 not allowed；根因：am 脚本内部指定调用者身份为 com.android.shell (UID 2000)，系统校验 SimpleSSHD 的真实 UID 10068 与声明的 2000 不一致，强制拒绝", Verdict.Confirmed,
+            "原因**成立**。实际报错原文是 `Permission Denial: package=com.android.shell does not belong to uid=10068`，旧记录的措辞不是原样。")
     }
 
     verify("结论") {

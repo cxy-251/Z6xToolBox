@@ -1,6 +1,7 @@
 package z6x.content.records
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
@@ -88,13 +89,19 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
         """)
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版写的另一种办法 `setprop xgimi.remoteDebug.on 1` 没有依据：这个属性在实机上的值是 `false`，ADB 并不是靠它开的，已删除。
-            • 旧版第 5 篇说 ADB "默认开放无需授权"，第 8 篇又说要强开，两者矛盾。准确说法是：端口和免授权是**预设好的**，但 adbd 默认**不运行**，要手动拉起。
-            • 旧版没提 SELinux。不知道 Permissive 这个前提，就解释不了为什么普通 App 能启动系统服务。
-            • 属性值、身份、Permissive 放行都在 2026-10-01 实验核对过。唯一没重现的是"adbd 没运行时执行 setprop 把它拉起来"那一刻：现在 adbd 已在运行，为此去关掉它会断开 ADB，不值得。
-        """)
+    audit("旧记录核对（2026-10-01）") {
+        claim("排查系统底层属性时，发现极米系统已经将底层网络 ADB 的配置预埋好了：service.adb.tcp.port 属性值预设为 5555；ro.adb.secure 属性值为 0（免除了弹出 RSA 密钥授权对话框的步骤）；只需在 SimpleSSHD shell 中向系统发送属性指令启动 adbd 守护进程，即可直接对外开放 5555 调试端口。", Verdict.Confirmed,
+            "两个属性值都对；App 身份确实能设置这类属性（debug 属性实验）。旧记录**没提** SELinux 是 Permissive，这才是能成功的前提。唯一没重现的是「adbd 没运行时把它拉起来」那一刻：现在 adbd 在运行，为此关掉它会断开 ADB，不值得。")
+        change("旧版：触发系统启动 adbd 的另一种写法", "setprop service.adb.tcp.port 5555 && setprop ctl.start adbd", Host.Ssh) {
+            verdict = Verdict.Unverified
+            note = "前半句多余：service.adb.tcp.port 本来就是 5555。效果和 `setprop ctl.start adbd` 相同。"
+        }
+        change("旧版：极米特定私有属性", "setprop xgimi.remoteDebug.on 1", Host.Ssh) {
+            verdict = Verdict.Unverified
+            note = "这个属性存在，当前值是 `false`。ADB 不是靠它开的（按你的记录，是在 SSH 里执行命令拉起的）。设成 1 会发生什么没有测试；它可能和极米远程调试应用 com.xgimi.remote 有关。"
+        }
+        claim("调试接口：网络 ADB 端口 5555（默认开放且无需授权指纹）——第 5 篇；需要在 SSH 里强开——第 8 篇", Verdict.Disproved,
+            "两篇互相矛盾。准确说法：端口和免授权是**预设**的，adbd 默认**不运行**，要手动拉起。")
     }
 
     related("find-real-model")

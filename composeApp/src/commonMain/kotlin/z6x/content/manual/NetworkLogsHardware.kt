@@ -1,6 +1,7 @@
 package z6x.content.manual
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val NetworkCmds = module("network-cmds", "网络：地址、路由、端口、代理、证书") {
@@ -116,12 +117,31 @@ val NetworkCmds = module("network-cmds", "网络：地址、路由、端口、�
         }
     }
 
-    lesson("核对说明") {
-        text("""
-            • 旧版的 `netstat -tlpn || ss -tlpn` 能用，但 `-p` 在 shell 下没有进程信息。
-            • 旧版说 iptables「查看内核防火墙」，实测需要 root。
-            • 旧版的投影仪 8080 端口确实在监听（uid 1000，系统组件）。
-        """)
+    audit {
+        read("旧版：查看正在监听的 TCP 端口（排查 5555 与 2222）", "netstat -tlpn 2>/dev/null || ss -tlpn", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+            note = "能用，5555、2222 都在；但 `-p` 在 shell 下进程列全是 `-`。"
+        }
+        read("旧版：查看投屏包名与 8080 端口", "pm list packages | grep wirelessscreen && netstat -tlpn | grep 8080", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+            note = "8080 确实在监听，属于 uid 1000（系统组件，具体是不是投屏应用无法细分）。"
+        }
+        read("旧版：查看当前 Wi-Fi 频段、信道与物理协商速率", "dumpsys wifi | grep -iE 'mWifiInfo|Link speed|Frequency' | head -n 4", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+            note = "能用，但输出里有 Wi-Fi 名称和 MAC 地址，上面换成了只取几个字段的写法。"
+        }
+        read("旧版：查看当前系统默认活动网络与 VPN 接口（tun0）", "dumpsys connectivity | grep -E 'Active network|tun0' | head -n 3", Host.Adb) {
+            verdict = Verdict.Confirmed
+            varies = true
+        }
+        change("旧版：使用 tcpdump 抓取电视网络数据包", "tcpdump -i any -s 0 -w /sdcard/capture.pcap -c 1000 && adb pull /sdcard/capture.pcap ./", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "shell 没有抓包权限（socket: Operation not permitted）。"
+        }
+        claim("iptables -L -n -v：查看 Linux 内核防火墙规则过滤链。", Verdict.Disproved, "需要 root：`can't initialize iptables table 'filter': Permission denied (you must be root)`。")
     }
 
     related("clash-proxy", "port-owner", "packet-capture")
@@ -191,11 +211,25 @@ val LogsCrash = module("logs-crash", "日志与崩溃") {
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版有三条命令用 `dmesg` 查 HDMI、OOM、SELinux 拒绝记录，shell 下都是 Operation not permitted。改用 `logcat -b kernel`。
-            • 旧版说 `debuggerd -b` 能打印卡死进程的堆栈，实测需要 root。
-        """)
+    audit {
+        read("旧版：查看 HDMI 物理热插拔与 EDID 协商日志", "dmesg | grep -iE 'hdmi|edid|drm|hpd' | tail -n 5", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "dmesg 在 shell 下 Operation not permitted。改用 `logcat -b kernel`（见上）。"
+        }
+        read("旧版：排查系统是否发生过内存耗尽杀进程", "dmesg | grep -iE 'oom-killer|killed process' | tail -n 5", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "同上。"
+        }
+        read("旧版：打印卡死进程的线程底层堆栈", "debuggerd -b 1130", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "需要 root（`debuggerd: root is required`）。1130 是旧记录里的进程号，在这台机器上没有对应的意义。"
+        }
+        read("旧版：清空历史缓冲区并精准捕获崩溃与异常堆栈", "adb logcat -c && adb logcat -v time *:E | grep -iE 'AndroidRuntime|FATAL|Exception'", Host.Deck) {
+            verdict = Verdict.Unverified
+            manual = true
+            note = "命令写法没问题。要等有应用崩溃才能看到效果，没有专门演示。"
+        }
+        claim("查看系统生成的底层 Native 崩溃转储日志列表：ls -lt /data/tombstones/ | head -n 5", Verdict.Confirmed, "目录可读，是空的。")
     }
 
     related("selinux-cmds", "adb-basics", "process-memory")
@@ -242,11 +276,14 @@ val SelinuxCmds = module("selinux-cmds", "SELinux：模式与安全标签") {
         }
     }
 
-    lesson("核对说明") {
-        text("""
-            • 旧版说「shell 不能修改系统属性」「setenforce 失败因为 SELinux」。实际上 Permissive 下 SELinux 什么都不拦，setenforce 失败是因为需要 root。
-            • 旧版用 dmesg 找 avc 记录，shell 不能用 dmesg，改为 logcat 的 kernel 缓冲区。
-        """)
+    audit {
+        read("旧版：从内核缓冲区或事件日志检索拦截事件", "dmesg | grep -i 'avc: denied' | tail -n 5 || logcat -b events -d | grep avc", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "前半句 dmesg 没权限；后半句的 events 缓冲区里也没有 avc 记录。用 `logcat -b kernel`。"
+        }
+        claim("查询当前 SELinux 状态与尝试设为 Permissive：getenforce && setenforce 0。setenforce 失败的根因是 SELinux 策略拦截。", Verdict.Disproved,
+            "这台**本来就是 Permissive**。setenforce 失败是因为需要 root，不是 SELinux 拦截。")
+        claim("ADB shell 运行于 u:r:shell:s0 域，禁止修改系统底层属性。", Verdict.Disproved, "shell 域成立；Permissive 下 SELinux 不拦任何操作。")
     }
 
     related("force-adb", "props-init", "logs-crash")
@@ -351,7 +388,7 @@ val HardwareCmds = module("hardware-cmds", "硬件：温度、CPU、显示、解
         read("所有输入设备", "dumpsys input | grep -E '^    [0-9]+: |Path:' | head -30", Host.Adb) {
             varies = true
             note = """
-                2026-10-01 有 15 个节点（event0~event14），包括：遥控器 **XGIMI RC Consumer Control（event13）** 和 XGIMI RC Keyboard（event12）、机身按键 XGIMI KEYPAD（event11）、HW_HILINK、罗技 USB 接收器、三个音频插孔检测。
+                2026-10-01 有 15 个节点（event0~event14），包括：遥控器 **XGIMI RC Consumer Control（event13）** 和 XGIMI RC Keyboard（event12）、机身按键 XGIMI KEYPAD（event11）、虚拟加速度传感器 Virtual AccSensor（event10，不在 dumpsys input 列表里，用 `getevent -i` 才能看到）、HW_HILINK、罗技 USB 接收器、三个音频插孔检测。
             """
         }
         read("遥控器的设备信息", "timeout 3 getevent -i /dev/input/event13 | head -6", Host.Adb) {
@@ -416,12 +453,57 @@ val HardwareCmds = module("hardware-cmds", "硬件：温度、CPU、显示、解
         }
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版「遥控器在 event13」「15 个输入设备」**说对了**。旧版另一处用 event2 做例子，event2 其实是虚拟键盘 qwerty。
-            • 旧版查 Widevine 的 `dumpsys media.drm`、查混音器的 `tinymix`，在这台机器上都不存在。
-            • 旧版说光机温度能直接读，实际温度区只有 cpu_thermal 和 vou_thermal。
-        """)
+    audit {
+        claim("遥控器：XGIMI RC Consumer Control，实时监听遥控器导航事件流（以 event13 为例）；全机 15 个输入设备节点。", Verdict.Confirmed,
+            "event13 是遥控器；event0~event14 正好 15 个。")
+        read("旧版：枚举所有输入事件设备节点与驱动名称", "getevent -S", Host.Adb) {
+            verdict = Verdict.Disproved
+            manual = true
+            captured("（旧记录）", """
+                add device 1: /dev/input/event14
+                  name: "XGIMI RC Consumer Control"           # 蓝牙遥控器主按键
+                add device 4: /dev/input/event11              # 机身实体电源/快捷按键
+                add device 5: /dev/input/event10              # 虚拟重力加速度计（用于跌落保护与倾斜校准）
+                add device 10: /dev/input/event0              # MT9669 (黄龙) SoC 内核键盘驱动
+            """)
+            note = """
+                逐项对照实测：遥控器在 **event13**，不是 event14（event14 是 HW_HILINK）；event11 是 XGIMI KEYPAD **成立**；event10 是 **Virtual AccSensor 成立**（用途「跌落保护与倾斜校准」未验证）；event0 是 HL keyboard，「MT9669」本身就是错的芯片。
+                另外 `getevent -S` 是打印开关状态的参数，不是列设备，列设备用 `getevent -i` 或 `dumpsys input`。
+            """
+        }
+        read("旧版：实时捕获指定事件节点的物理扫描码与按键名", "getevent -l /dev/input/event2", Host.Adb) {
+            verdict = Verdict.Disproved
+            manual = true
+            note = "event2 是虚拟键盘 qwerty，按遥控器不会有输出。遥控器用 event13。"
+        }
+        read("旧版：查询 Widevine DRM 等级与厂商安全库", "dumpsys media.drm | grep -iE 'security level|vendor|description|crypto'", Host.Adb) {
+            verdict = Verdict.Disproved
+            captured("（旧记录）", """
+                Security Level: L1   # L1 级别：硬件级安全芯片解密，允许 4K 流媒体播放
+                Description: Widevine CDM
+            """)
+            note = "实测 `Can't find service: media.drm`，没法这样查。Widevine 等级是不是 L1 未知。"
+        }
+        claim("mHdrCapabilities: HdrCapabilities{mSupportedHdrTypes=[2, 3]}   # 2: HDR10, 3: HLG 模式支持；supportedModes: [{id=1, width=1920, height=1080, fps=60.0}]", Verdict.Confirmed,
+            "HDR 类型 [2, 3] 一致（另有 mMaxLuminance=1000）。supportedModes 实际有多个（含 1280x720 等），不止一个。")
+        read("旧版：列出底层混音控制项", "tinymix | head -n 8", Host.Adb) {
+            verdict = Verdict.Disproved
+            note = "系统里没有 tinymix。"
+        }
+        claim("""
+            cat /proc/asound/cards：
+             0 [MT8516 ]: MT8516 - MT8516   # 0号声卡：联发科 MT9669 SoC 内置主音频编解码芯片
+             1 [Dummy ]: Dummy - Dummy ALSA Card   # 1号声卡：虚拟环回测试音频卡
+        """, Verdict.Disproved, "实际只有一张声卡 `AUDIO-AIAO`，没有 MT8516、没有 Dummy。")
+        claim("Devices: speaker   # 当前主输出设备为内置扬声器（哈曼卡顿调音单元）；STREAM_MUSIC Index: 11 (range: 0-15)", Verdict.Disproved,
+            "输出设备 speaker **成立**（「哈曼卡顿」未验证）；音量范围实测是 0~100，当前 16，不是 0~15。")
+        claim("""
+            lsusb：
+            Bus 001 Device 002: ID 0e8d:0616 MediaTek Inc.   # 联发科内置无线/蓝牙复合芯片
+            Bus 002 Device 003: ID 0951:1666 Kingston Technology   # 金士顿外接 USB 闪存盘
+        """, Verdict.Disproved, "实际是 **0e8d:7663**（联发科，「无线/蓝牙复合芯片」这个判断倒是可能成立）；没有接金士顿 U 盘。")
+        claim("mCurrentFunctions: none   # 当前未接宿主控制模式", Verdict.Disproved, "`dumpsys usb` 里查不到 mCurrentFunctions，没有输出。")
+        claim("通过 /sys/class/thermal/ 读取光机温度。", Verdict.Disproved, "温度区只有 cpu_thermal 和 vou_thermal。")
     }
 
     related("proc-metrics", "screen-cast", "focus-window")
@@ -520,12 +602,16 @@ val BackgroundCmds = module("background-cmds", "后台、唤醒、时间与其�
         }
     }
 
-    lesson("核对说明") {
-        text("""
-            • 旧版说投影仪「没有 RTC 纽扣电池」，实测连 RTC 设备都没有，结论成立。
-            • 旧版 inotify 用的是 `toybox inotifyd`，系统里直接有 `inotifyd` 命令。
-            • 设置系统时间那条没有测试。
-        """)
+    audit {
+        claim("极米 Z6X Pro 内部未配备 RTC 硬件时钟电池，完全依赖断电前保存的时间戳与开机网络 NTP。断网关机拔掉电源后，重新上电系统时间会回退至 Linux 内核编译基准时间（1970 年或出厂固件打包时间）。时间错乱会导致 HTTPS/SSL 握手证书直接校验失败。", Verdict.Confirmed,
+            "没有 /dev/rtc*，结论成立。「回退到 1970 年」和证书报错没有实际断电测试。")
+        claim("date -s：修改系统时间需要 CAP_SYS_TIME 能力。SSH（UID 10068）调用报 date: settimeofday: Operation not permitted；ADB（UID 2000）同样受限，但可通过 settings put global 触发系统的自动同步逻辑。", Verdict.Unverified,
+            "没有测试改时间（会影响证书校验和定时任务）。shell 的能力集是空的，所以 ADB 也不能改，这一点和旧记录一致。")
+        change("旧版：实时监听 /data/local/tmp 目录下的写入与创建事件", "toybox inotifyd - /data/local/tmp 2>/dev/null", Host.Adb) {
+            verdict = Verdict.Confirmed
+            manual = true
+            note = "toybox 里有 inotifyd，系统也直接提供了 `inotifyd` 命令，两种写法都行。"
+        }
     }
 
     related("dumpsys-settings", "process-memory", "busybox")

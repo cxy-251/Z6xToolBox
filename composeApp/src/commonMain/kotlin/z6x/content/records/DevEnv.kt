@@ -1,6 +1,7 @@
 package z6x.content.records
 
 import z6x.framework.Host
+import z6x.framework.Verdict
 import z6x.framework.module
 
 val NativeExec = module("native-exec", "不 root 也能跑自己的程序") {
@@ -52,12 +53,21 @@ val NativeExec = module("native-exec", "不 root 也能跑自己的程序") {
         """)
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版的挂载输出（设备名 by-name/userdata、带 discard）和实机不符，已换成实测。
-            • 旧版说 shell 的 SELinux 规则"禁止修改系统属性"。这台机器是 Permissive，SELinux 实际上什么都不拦，见「在 SSH 里强开网络 ADB」。
-            • 旧版给的 Termux / PRoot 开销数字（30%-60%、150-300MB）没有出处，已删除。
-        """)
+    audit {
+        read("旧版：查看 /data 分区挂载参数与 tmp 目录权限", "mount | grep ' /data '\nls -ld /data/local/tmp", Host.Adb) {
+            verdict = Verdict.Disproved
+            captured("（旧记录）", """
+                /dev/block/platform/bootdevice/by-name/userdata on /data type ext4 (rw,seclabel,nosuid,nodev,noatime,discard,noauto_da_alloc,data=ordered)
+                drwxrwx--x 4 shell shell 4096 ... /data/local/tmp
+            """)
+            note = "结论（没有 noexec、shell 有 rwx）**成立**，但输出是编的：实机设备名是 `/dev/block/mmcblk0p53`，挂载参数里没有 discard，有 journal_checksum 和 resgid=1065。"
+        }
+        claim("SELinux 规则：ADB shell 运行于 u:r:shell:s0 域，允许访问 /proc、/sys、网络 socket 绑定与连接，但禁止修改系统底层属性（如 setprop 核心配置）或读取应用私有加密数据。", Verdict.Disproved,
+            "shell 域 **成立**；但这台机器是 Permissive，SELinux 什么都不拦。shell 读不了应用私有数据是因为文件权限（DAC），不是 SELinux。")
+        claim("端口监听边界：Linux 标准内核限制非 root 用户不可绑定 < 1024 特权端口。开发的原生服务需绑定 1024 以上非特权端口（如 8080, 8088, 9090）。", Verdict.Confirmed,
+            "`ip_unprivileged_port_start` = 1024。")
+        claim("轻量原生架构（采用方案）：物理内存占用小于 10MB。Termux 套件方案：约占 200MB 存储，但部分包缺乏电视版 ARM64 支持。Debian / PRoot 容器方案：系统调用开销大（I/O 速度下降 30%-60%），常驻内存 150MB-300MB。", Verdict.Unverified,
+            "Go 服务实测 2~4MB **成立**。Termux、PRoot 的数字没有出处，也没有在这台机器上装过。")
     }
 
     related("busybox", "go-server", "force-adb")
@@ -116,8 +126,13 @@ val Busybox = module("busybox", "BusyBox：补齐 396 个 Linux 命令") {
         text("完整列表：`ls /data/local/tmp/bin`。和系统自带的同名命令（toybox）功能可能有差别，用哪个取决于 PATH 的先后顺序。")
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("旧版说这是 ARM64（64 位）BusyBox，`file` 一查是 32 位的。功能不受影响，但描述要准确。396 个命令、1.1MB 大小都对。")
+    audit {
+        claim("部署 1.1MB 静态编译 ARM64 BusyBox 二进制", Verdict.Disproved,
+            "大小 1148524 字节（1.1MB）**成立**；但 `file` 显示是 **32 位** ARM（EABI5），不是 ARM64。")
+        claim("生成 396 个独立 Linux 命令软链接；PATH 加入 /data/local/tmp/bin 后 which wget / vi / nc 都能找到。", Verdict.Confirmed,
+            "396 个，wget、vi、nc 都在。")
+        claim("Android 原生仅附带功能极简的 Toybox，缺少 wget、vi、tar、nc、awk 等大量日常运维与开发工具。", Verdict.Disproved,
+            "部分成立。系统里直接能用 tar、nc（toybox 提供）和 awk（/system/bin/awk，独立程序）；vi 在 toybox 里有但没有命令入口，要写 `toybox vi`；wget 确实没有。")
     }
 
     related("native-exec", "go-server", "port-owner")
@@ -195,13 +210,18 @@ val GoServer = module("go-server", "Go 服务：交叉编译、部署、常驻")
         """)
     }
 
-    lesson("核对说明") {
-        text("""
-            • 原始源码没有保留（agy 的目录是空的）。`dev/go-server/main.go` 是按服务的实际输出**重写的等价版本**：编译出来大小相同（5439648 字节），但哈希不同，不是同一个文件。
-            • 旧版"4.2MB 内存"是对的（当时的测量），现在测是 2MB 左右。
-            • 旧版"比 Python/Node 节省 90%"这类对比没有实测，已删除。
-            • 旧版说"空闲时 CPU 占用接近 0"，没有测，但对一个没有请求的 HTTP 服务来说是合理的。
-        """)
+    lesson("说明") {
+        text("原始源码没有保留（agy 的目录是空的）。`dev/go-server/main.go` 是按服务的实际输出**重写的等价版本**：编译出来大小相同（5439648 字节），但哈希不同，不是同一个文件。")
+    }
+
+    audit {
+        claim("CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags=\"-s -w\" -o z6x_go_server main.go → 生成约 5.2MB 纯静态无动态依赖的 ELF 64-bit LSB executable, ARM aarch64", Verdict.Confirmed,
+            "用同样的命令编译，5439648 字节（5.2MiB），file 结果一致。")
+        claim("VmRSS: 4288 kB（物理内存仅 4.2MB）；GoVersion: go1.27.1；Threads: 5", Verdict.Confirmed,
+            "当天早些时候测是 4288 kB，晚上 1980 kB（会浮动）；版本和线程数一致。")
+        claim("相比容器或解释型语言环境（Python/Node 通常需要 50MB-150MB），开销降低 90% 以上。", Verdict.Unverified, "没有在投影仪上跑过 Python/Node 做对比。")
+        claim("CPU 占用趋近 0%：无解释器空转与 JIT 预热，空闲状态不占用投影仪计算资源。", Verdict.Unverified,
+            "没有专门测；`top` 里它的 CPU 是 0.0（2026-10-01 抓到的一次）。")
     }
 
     related("native-exec", "proc-metrics", "oom-watchdog")
@@ -252,11 +272,21 @@ val ProcMetrics = module("proc-metrics", "不用 root 读系统指标") {
         """)
     }
 
-    lesson("核对旧记录时发现的问题") {
-        text("""
-            • 旧版的 MemTotal 写 3670016 kB，实机是 3630528 kB。
-            • 旧版说 thermal_zone 能读到"光机温度"，实际两个温度区是 cpu_thermal 和 vou_thermal，没有标明是光机的。
-        """)
+    audit {
+        read("旧版：读取 CPU 使用率、物理内存与光机温度", "cat /proc/stat | head -n 1\ncat /proc/meminfo | grep -E 'MemTotal|MemFree|MemAvailable'\ncat /sys/class/thermal/thermal_zone*/temp", Host.Adb) {
+            verdict = Verdict.Disproved
+            captured("（旧记录）", """
+                cpu  41295 18234 38291 792182 1204 0 892 0 0 0
+                MemTotal:        3670016 kB
+                MemFree:          296180 kB
+                MemAvailable:    1524300 kB
+                45000
+                47000
+            """)
+            note = "命令能用，但输出是编的：MemTotal 实际是 **3630528** kB（固定值，不会变）。温度区是 cpu_thermal 和 vou_thermal，没有标明是光机。"
+        }
+        claim("MemAvailable（实测约 1.5GB）才是内核真实可立即回收分配给微服务的内存容量；仅观察 MemFree 会误以为内存耗尽。", Verdict.Confirmed, "实测 MemAvailable 约 1.5GB，MemFree 不到 0.3GB。")
+        claim("温度监控：通过 /sys/class/thermal/ 实时掌握光机和 CPU 温度。", Verdict.Disproved, "能读到的是 cpu_thermal 和 vou_thermal，没有光机温度。")
     }
 
     related("go-server", "ssh-probe")

@@ -45,6 +45,7 @@ class ModuleBuilder(private val id: String, private val title: String) {
     fun steps(title: String = "操作步骤", block: SectionBuilder.() -> Unit) = section(SectionKind.Steps, title, block)
     fun verify(title: String = "如何验证", block: SectionBuilder.() -> Unit) = section(SectionKind.Verify, title, block)
     fun lesson(title: String = "经验", block: SectionBuilder.() -> Unit) = section(SectionKind.Lesson, title, block)
+    fun audit(title: String = "旧记录核对", block: SectionBuilder.() -> Unit) = section(SectionKind.Audit, title, block)
 
     // vararg 相当于 C# 的 params
     fun related(vararg ids: String) { related += ids }
@@ -62,6 +63,14 @@ class SectionBuilder {
 
     /** 一段文字。支持 **加粗**、`代码`；行首 "• " / "- " 按列表缩进。多行字符串会自动去掉公共缩进。 */
     fun text(markup: String) { items += Item.Text(markup.trimIndent()) }
+
+    /**
+     * 旧记录里的一个说法。original 原文照录（可以是一段话或一条命令的说明），
+     * finding 写实测结果；未验证时写为什么没法验证。
+     */
+    fun claim(original: String, verdict: Verdict, finding: String) {
+        items += Item.Claim(original.trimIndent(), verdict, finding.trimIndent())
+    }
 
     /** 键值表，例如 facts("芯片" to "Hi3751V660", "内核" to "5.10.43")。 */
     fun facts(vararg rows: Pair<String, String>) { items += Item.Facts(rows.toList()) }
@@ -84,6 +93,8 @@ class StepBuilder {
     var expectsError = false
     var manual = false
     var varies = false
+    /** 来自旧记录的命令：Verdict.Unverified 未验证，Verdict.Disproved 在这台机器上跑不通。 */
+    var verdict: Verdict? = null
 
     /** 记录实测输出：captured("2026-10-01", "...")。 */
     fun captured(date: String, text: String) {
@@ -93,5 +104,6 @@ class StepBuilder {
     }
 
     internal fun build(title: String, command: String, risk: Risk, host: Host) =
-        Step(title, command, risk, host, note.trimIndent(), outcome.trimIndent(), output, capturedOn, expectsError, manual, varies)
+        Step(title, command, risk, host, note.trimIndent(), outcome.trimIndent(), output, capturedOn,
+            expectsError || verdict == Verdict.Disproved, manual, varies, verdict)
 }
