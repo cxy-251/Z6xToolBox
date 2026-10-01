@@ -92,7 +92,7 @@ object Tools {
                 if (skip != null) { if (verbose) println("  · 跳过「${s.title}」：$skip"); continue }
 
                 val (code, out) = runCatching { execute(s) }.getOrElse { -1 to "执行失败：${it.message}" }
-                val bad = (code != 0 || errorText.containsMatchIn(out)) && !s.expectsError
+                val bad = (code != 0 || (!s.logOutput && errorText.containsMatchIn(out))) && !s.expectsError
                 // 旧记录里的输出本来就可能和实测不同（verdict 已说明），不比对
                 val diff = s.output.isNotEmpty() && !s.varies && s.verdict == null && normalize(out) != normalize(s.output)
                 when {

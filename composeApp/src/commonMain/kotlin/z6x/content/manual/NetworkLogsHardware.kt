@@ -166,8 +166,21 @@ val LogsCrash = module("logs-crash", "日志与崩溃") {
             """)
             note = "日志分为若干环形缓冲区，写满后覆盖最旧的记录：main 为应用日志，system 为系统日志，crash 为崩溃，kernel 为内核日志。"
         }
-        read("仅查看崩溃", "logcat -b crash -d", Host.Adb) {
-            note = "`-d` 表示输出后即退出（不加则持续等待新日志）。无输出说明最近没有应用崩溃。"
+        read("仅查看崩溃", "logcat -b crash -d | grep -E 'FATAL|Process:|Caused by'", Host.Adb) {
+            varies = true
+            logOutput = true
+            captured("2026-10-01", """
+                10-01 22:47:34.263  4050  4050 E AndroidRuntime: FATAL EXCEPTION: main
+                10-01 22:47:34.263  4050  4050 E AndroidRuntime: Process: com.xgimi.xrmservice, PID: 4050
+                10-01 22:47:34.263  4050  4050 E AndroidRuntime: Caused by: java.lang.NullPointerException: Attempt to invoke interface method 'int com.xgimi.aidl.IGimiSound.setCommonCmd(java.lang.String)' on a null object reference
+                10-01 22:49:13.983 23245 23245 E AndroidRuntime: FATAL EXCEPTION: main
+                10-01 22:49:13.983 23245 23245 E AndroidRuntime: Process: com.xgimi.xrmservice, PID: 23245
+                10-01 22:49:13.983 23245 23245 E AndroidRuntime: Caused by: java.lang.NullPointerException: Attempt to invoke interface method 'int com.xgimi.aidl.IGimiSound.setCommonCmd(java.lang.String)' on a null object reference
+            """)
+            note = """
+                `-d` 表示输出后即退出（不加则持续等待新日志）；grep 只保留崩溃的标题、进程和根本原因。无输出说明最近没有应用崩溃。
+                **2026-10-02 查到两次真实崩溃**，见「停用清单」中的「xrmservice 在开关屏时崩溃」：两次都是 xrmservice 接收开关屏广播时，调用的声音接口 IGimiSound 为 null。
+            """
         }
         read("实时查看错误级别及以上的日志", "adb logcat -v time '*:E' | grep -iE 'AndroidRuntime|FATAL|Exception'", Host.Deck) {
             manual = true
@@ -188,6 +201,7 @@ val LogsCrash = module("logs-crash", "日志与崩溃") {
             captured("2026-10-01", "dmesg: klogctl: Operation not permitted")
         }
         read("改用 logcat 的 kernel 缓冲区", "logcat -b kernel -d | tail -3", Host.Adb) {
+            logOutput = true
             varies = true
             note = """
                 **调整方案：** 读取内核日志的系统调用被拒绝，但 logd 会将内核日志复制一份到 kernel 缓冲区，shell 可以读取。
@@ -195,6 +209,7 @@ val LogsCrash = module("logs-crash", "日志与崩溃") {
             """
         }
         read("查找 HDMI 和内存回收相关的记录", "logcat -b kernel -d | grep -iE 'hdmi|hpd|edid|lowmemorykiller|oom' | tail -5", Host.Adb) {
+            logOutput = true
             varies = true
             note = "旧版直接用 dmesg 查询 HDMI 热插拔和 OOM，在本机上需改为此写法。"
         }
@@ -266,6 +281,7 @@ val SelinuxCmds = module("selinux-cmds", "SELinux：模式与安全标签") {
             note = "即使处于 Permissive 模式，切换模式本身也需要 root。本机原本就是 0（Permissive），无需切换。"
         }
         read("查找违规记录", "logcat -b kernel -d | grep 'avc:' | tail -5", Host.Adb) {
+            logOutput = true
             varies = true
             note = """
                 违规记录的格式为：`avc: denied { 操作 } for … scontext=主体 tcontext=客体 permissive=1`。`permissive=1` 表示只记录、未拦截。

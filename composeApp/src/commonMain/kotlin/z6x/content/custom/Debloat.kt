@@ -104,7 +104,7 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
     }
     story("冗余内容") {
         group(listOf(
-            "com.xgimi.doubanfm" to "豆瓣 FM",
+            "com.xgimi.doubanfm" to "豆瓣 FM。**不只是电台**：包内还有音效模式（SoundModeService）、Wi-Fi 音箱、蓝牙模式、氛围灯等组件，见下方「xrmservice 在开关屏时崩溃」",
             "com.xgimi.agilewall" to "动态壁纸 / 灵动墙（推测）",
             "com.xgimi.atmosphere" to "氛围模式（推测）",
             "com.xgimi.instruction30" to "电子说明书",
@@ -185,6 +185,32 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             **无法停止的三个组件的处理方案（未实施）：** 对当前用户卸载（`pm uninstall -k --user 0`）或许能阻止其启动，但它们是 system 身份的常驻组件，卸载后的影响尚无把握（官方桌面也是这样处理的，未出现问题）。hilink 持续占用 CPU，值得今后尝试：先只对它测试，并准备好用 `cmd package install-existing` 恢复。
         """)
         text("今后如需使用极米手机 App 遥控、蓝牙音箱模式或智能家居联动，需要恢复本组中对应的包。")
+    }
+
+    story("xrmservice 在开关屏时崩溃（2026-10-02 发现，原因待验证）") {
+        text("""
+            重新检查崩溃日志时发现：资源管理组件 com.xgimi.xrmservice 在「关机」（屏幕关闭）和开机（屏幕开启）时各崩溃了一次，原因都是它调用的声音接口 **IGimiSound 为 null**。系统随后自动重启了该进程，用户层面没有察觉到异常。
+        """)
+        read("崩溃记录", "logcat -b crash -d | grep -E 'Process:|Caused by' | cut -c 50-", Host.Adb) {
+            varies = true
+            logOutput = true
+            note = "完整输出见「日志与崩溃」中的「仅查看崩溃」。两次崩溃的时间（22:47:34、22:49:13）正是「核查：「关屏」与「关机」的实际行为」中选择关机和按下开机键的时刻。"
+        }
+        read("被停用的豆瓣 FM 包中与声音相关的组件", "dumpsys package com.xgimi.doubanfm | grep -E 'Action: \"com.xgimi.(music.soundmode|doubanfm.service.SoundModeService|WifiLoudSpeaker|bt.mode|doubanfm.light)' | sort -u", Host.Adb) {
+            captured("2026-10-02", """
+                          Action: "com.xgimi.WifiLoudSpeakerBoot"
+                          Action: "com.xgimi.WifiLoudSpeakerRunning"
+                          Action: "com.xgimi.bt.mode"
+                          Action: "com.xgimi.doubanfm.light.atmosphere"
+                          Action: "com.xgimi.doubanfm.service.SoundModeService"
+                          Action: "com.xgimi.music.soundmode"
+            """)
+            note = "dumpsys 中的 Action 是组件对外登记的意图名称。该包除电台外，还提供音效模式服务、Wi-Fi 音箱、蓝牙模式和氛围灯。"
+        }
+        text("""
+            **推测（未验证）：** IGimiSound 可能由豆瓣 FM 包中的 SoundModeService 提供，停用该包后，xrmservice 获取不到这个接口，于是在开关屏时崩溃。
+            验证方法：用 `pm enable com.xgimi.doubanfm` 临时恢复，执行一次关屏、开屏，再查崩溃日志是否还有新的记录；不论结果如何，都可以用 `pm disable-user --user 0 com.xgimi.doubanfm` 恢复停用。此实验会修改系统状态，尚未进行。
+        """)
     }
 
     verify {

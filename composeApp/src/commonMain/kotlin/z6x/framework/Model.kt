@@ -67,6 +67,8 @@ data class Step(
     val varies: Boolean = false,
     /** 来自旧记录的命令：未验证，或在本机上无法运行。null 表示正常命令。 */
     val verdict: Verdict? = null,
+    /** 输出本身是日志（logcat 等），其中出现 Exception 之类的字样不代表命令失败。 */
+    val logOutput: Boolean = false,
 )
 
 /** 段落里的一项：要么是一段文字，要么是一条指令，要么是一张键值表。 */

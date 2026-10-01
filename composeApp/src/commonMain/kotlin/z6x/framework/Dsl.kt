@@ -93,6 +93,8 @@ class StepBuilder {
     var expectsError = false
     var manual = false
     var varies = false
+    /** 输出本身是日志：试跑时不把其中的 Exception 等字样当作失败。 */
+    var logOutput = false
     /** 来自旧记录的命令：Verdict.Unverified 未验证，Verdict.Disproved 在本机上无法运行。 */
     var verdict: Verdict? = null
 
@@ -105,5 +107,5 @@ class StepBuilder {
 
     internal fun build(title: String, command: String, risk: Risk, host: Host) =
         Step(title, command, risk, host, note.trimIndent(), outcome.trimIndent(), output, capturedOn,
-            expectsError || verdict == Verdict.Disproved, manual, varies, verdict)
+            expectsError || verdict == Verdict.Disproved, manual, varies, verdict, logOutput)
 }
