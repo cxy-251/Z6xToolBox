@@ -54,7 +54,12 @@ import z6x.content.records.LanShare
 import z6x.content.records.SshPermissionWall
 import z6x.content.records.SshProbe
 import z6x.content.records.UsbApk1
+import z6x.content.stack.ComposeInProject
+import z6x.content.stack.GitInProject
+import z6x.content.stack.GradleBasics
 import z6x.content.stack.InstallJdk
+import z6x.content.stack.KotlinInProject
+import z6x.content.stack.ProjectLayout
 import z6x.framework.Category
 import z6x.framework.Scope
 
@@ -118,7 +123,9 @@ object Content {
             "stack", "🛠", "本项目技术栈",
             "这个工具箱本身用到的 JDK、Gradle、Kotlin、Compose 和 Git：是什么、怎么装、怎么用。",
             listOf(
-                Category("环境搭建", "📦", "在 Steam Deck 上准备开发环境", listOf(InstallJdk)),
+                Category("环境搭建", "📦", "在 Steam Deck 上准备开发环境", listOf(InstallJdk, GradleBasics)),
+                Category("读懂代码", "📘", "这个项目里用到的 Kotlin 和 Compose 写法", listOf(KotlinInProject, ComposeInProject)),
+                Category("项目日常", "🧭", "目录结构、运行与检查、Git", listOf(ProjectLayout, GitInProject)),
             ),
         ),
     )
