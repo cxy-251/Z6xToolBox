@@ -18,7 +18,10 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
             4. 输入长文本：遥控器按不过来 → **换个通道**，局域网网页 + 浏览器复制粘贴。（局域网传文字）
             5. 配代理：v2rayNG 闪退 → **不纠缠，直接换 Clash Meta**，目标是能用代理，不是修好某个 App。旧记录的闪退解释已证伪，原因不再追查。（App 安装顺序与兼容）
             6. 64 位 App 装不上 → 弄清系统只有 32 位运行库 → **下载前先用 unzip -l 查架构**。（App 安装顺序与兼容）
-            7. Deck 接投影仪黑屏 → 改成 1080p@60 就好 → 照抄的接口名 HDMI-A-1 在 Deck 上根本不存在 → **先 kscreen-doctor -o 查清名字**。（Deck 接投影仪黑屏）
+            7. 换桌面：Projectivy 里开无障碍的按钮没反应 → `resolve-activity` 查到系统根本没有无障碍设置页 → **绕过界面用 ADB 命令开启** → 后来更进一步，**把官方桌面卸载**，Projectivy 成了唯一桌面，连无障碍服务都不需要了。（换掉官方桌面）
+            8. 应用商店：Aurora 闪退 → Aptoide 能用但很多 App 缺 Google 服务 → **放弃商店**，自己下载 + ADB 安装。（找个应用商店）
+            9. 输入法：换 LeanKeyboard 后遥控器变卡 → **退回搜狗**。（输入法）
+            10. Deck 接投影仪黑屏 → 改成 1080p@60 就好 → 照抄的接口名 HDMI-A-1 在 Deck 上根本不存在 → **先 kscreen-doctor -o 查清名字**。（Deck 接投影仪黑屏）
         """)
     }
 
@@ -29,6 +32,9 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
             3. 测卸载权限：同样测不出，又找不到无害的做法 → **不测了，如实写"无法安全验证"**，不编结果。（SSH 能查不能改）
             4. 证明 SELinux 放行：去日志里找记录，没有，全量搜索还超时 → **换成做一个能直接看到结果的实验**：App 身份写一个 debug 属性，写进去了就是证据。（强开网络 ADB）
             5. 实验留下了痕迹：setprop 不能删属性，清空后名字还在 → 被自动试跑发现，记录下来，重启自然消失。（强开网络 ADB）
+            6. 代理：旧记录说 VPN 模式必崩，只能用端口代理 → 截图里看到一个不寻常的 IP 172.19.0.1 → 顺藤摸瓜查到 tun0 → **Clash 其实一直以 VPN 模式在跑**，旧结论被推翻。（代理：Clash Meta）
+            7. 查端口归属：`netstat -p` 在 shell 下看不到进程 → **改读 /proc/net/tcp 里的 uid** → 设备上的 awk 没有 strtonum → **把换算搬到 Deck 上**。（案例：这个端口是谁开的）
+            8. 一键脚本：恢复脚本里官方桌面入口名写错，但 `|| true` 把错误吞了，一直没发现 → 用 `dumpsys package` 查出正确入口，并在脚本结尾**加结果核对**。（一键精简与恢复脚本）
         """)
     }
 
@@ -65,5 +71,6 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
     related(
         "find-adb-entry", "force-adb", "ssh-permission-wall", "usb-apk1", "lan-share",
         "app-install-order", "deck-hdmi", "find-real-model", "ssh-key-login", "tv-screencap", "install-jdk",
+        "projectivy-launcher", "app-store-pivot", "input-method", "clash-proxy", "port-owner", "debloat-scripts",
     )
 }

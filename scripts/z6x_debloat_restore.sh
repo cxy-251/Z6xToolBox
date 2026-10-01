@@ -59,7 +59,8 @@ $ADB shell settings put secure enabled_accessibility_services \
 $ADB shell settings put secure accessibility_enabled 1
 
 echo "=== 4. 唤醒官方主桌面 ==="
-$ADB shell am start -n com.xgimi.home/.MainActivity || true
+# 官方桌面的入口是 HomeActivity（2026-10-01 用 dumpsys package com.xgimi.home 核对），原脚本写的 .MainActivity 不存在
+$ADB shell am start -n com.xgimi.home/com.xgimi.module.cellview.home.ui.HomeActivity || true
 $ADB shell input keyevent 3
 
 echo "=== 恢复操作完成，当前前台焦点: ==="

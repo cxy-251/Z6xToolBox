@@ -1,0 +1,195 @@
+package z6x.content.custom
+
+import z6x.framework.Host
+import z6x.framework.module
+
+val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Projectivy Launcher") {
+    keywords = "HOME · com.xgimi.home · 无障碍服务 · resolve-activity"
+    overview = """
+        官方桌面满屏影视推荐和广告。装上开源的 Projectivy Launcher 后，把官方桌面和影视推荐对当前用户卸载，按 Home 键就只会回到 Projectivy。
+    """
+    verified("2026-10-01")
+
+    why {
+        text("""
+            按 Home 键时，系统找所有声明了 **HOME** 类别的界面。只有一个就直接打开它；有多个时要选默认桌面，或者由某个 App 用无障碍服务拦截 Home 键。
+            所以最干净的办法是让 Projectivy 成为**唯一**的桌面：把官方桌面 `com.xgimi.home` 卸载（对当前用户）。
+        """)
+    }
+
+    story("经过：先走了无障碍这条路") {
+        text("""
+            1. 装好 Projectivy（4.71）后，官方桌面还在，按 Home 仍回到官方桌面。
+            2. Projectivy 提供了"用无障碍服务接管 Home 键"的功能，但点它的开启按钮**没有任何反应**。
+        """)
+        read("为什么按钮没反应", "cmd package resolve-activity --brief -a android.settings.ACCESSIBILITY_SETTINGS", Host.Adb) {
+            captured("2026-10-01", "No activity found")
+            note = "按钮要打开系统的无障碍设置页，而极米的设置里没有这个页面，请求发出去没人接，于是什么也不发生。"
+        }
+        text("""
+            3. 界面开不了，就**绕过界面**，用 ADB 命令直接写系统设置，开启 Projectivy 的无障碍服务：
+        """)
+        change("命令行开启无障碍服务（当时的做法）", """
+            settings put secure enabled_accessibility_services com.xgimi.duertts/com.xgimi.duertts.MonitorService:com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService
+            settings put secure accessibility_enabled 1
+        """, Host.Adb) {
+            note = """
+                多个服务用冒号 `:` 隔开。原来已有的极米语音服务 duertts 要保留，否则会被覆盖掉。
+                **现在不需要这一步了**，原因见下。
+            """
+        }
+        text("""
+            4. **更彻底的办法：** 把官方桌面对当前用户卸载。Projectivy 成了唯一的桌面，Home 键自然回到它，无障碍服务也就不需要了。影视推荐 `com.xgimi.stream.video` 也一起卸载。
+        """)
+        danger("卸载官方桌面和影视推荐", """
+            pm uninstall -k --user 0 com.xgimi.home
+            pm uninstall -k --user 0 com.xgimi.stream.video
+        """, Host.Adb) {
+            note = "恢复：`cmd package install-existing com.xgimi.home`（stream.video 同理）。原理见「精简预装应用：停用还是卸载」。"
+        }
+    }
+
+    verify("现在的状态") {
+        read("现在谁是桌面", "cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tail -1", Host.Adb) {
+            captured("2026-10-01", "com.spocky.projengmenu/.ui.home.MainActivity")
+            note = "问系统：响应 HOME 的是哪个界面。只剩 Projectivy 一个。`tail -1` 只取最后一行（前面是匹配优先级之类的细节）。"
+        }
+        read("无障碍服务", "settings get secure enabled_accessibility_services", Host.Adb) {
+            captured("2026-10-01", "com.xgimi.duertts/.MonitorService")
+            note = "当时用 ADB 开启过 Projectivy 的服务，但 2026-10-01 查看时列表里只剩极米语音服务，什么时候被关掉的不清楚。官方桌面已卸载，Home 键照样回到 Projectivy，所以没有再开。"
+        }
+        read("Projectivy 版本", "dumpsys package com.spocky.projengmenu 2>/dev/null | grep -m1 versionName", Host.Adb) {
+            captured("2026-10-01", "    versionName=4.71")
+        }
+    }
+
+    consequences {
+        text("""
+            • 换桌面不影响其他 App 的数据和登录状态，各 App 的数据在各自的私有目录里，桌面只负责显示图标、启动应用。
+            • 官方桌面里自带的「儿童模式」也随之不可用（它是官方桌面的一部分）。
+            • 官方的信号源切换、画面设置等入口要从 Projectivy 里找对应的 App（如 com.android.newsettings），或者用遥控器的设置键。
+        """)
+    }
+
+    lesson("经验") {
+        text("""
+            • 按钮没反应时，先查它想打开的东西**存不存在**：`resolve-activity` 一查就知道。
+            • 能用"减法"（去掉竞争者）解决的，就不用"加法"（再加一个拦截服务）。后者多一层依赖，多一个出问题的地方。
+            • 旧版一键脚本还在注入无障碍服务，已经去掉，见「一键精简与恢复脚本」。
+        """)
+    }
+
+    related("debloat-method", "debloat-scripts", "system-packages")
+}
+
+val AppStorePivot = module("app-store-pivot", "找个应用商店：Aurora、Aptoide 都放弃了") {
+    keywords = "Aurora Store · Aptoide TV · GMS · 局域网安装"
+    overview = """
+        想找一个能在电视上直接搜索安装 App 的商店，先后试了 Aurora Store 和 Aptoide TV，都不好用，最后放弃商店，改成在 Deck 上下载、用 ADB 或局域网安装。
+    """
+    partial("2026-10-01")
+
+    story("经过") {
+        text("""
+            1. **Aurora Store**（第三方 Google Play 客户端）：启动后闪退。没有深究原因。
+            2. **Aptoide TV**（为电视设计的第三方商店）：能用，界面也适合遥控器。但从它装的 YouTube Music 一打开就退出，日志显示缺少 Google Play 服务。商店里很多海外 App 依赖 Google 服务，这台机器没有，装了也用不了。
+            3. **放弃商店**：两个都卸载了（YouTube Music 一起卸载），改为在 Deck 上下载 APK、确认是 32 位版本后，用 `adb install` 或局域网下载安装。
+        """)
+    }
+
+    steps("现在的装 App 方式") {
+        read("下载前查架构", "unzip -l app.apk | grep -oE 'lib/[^/]+/' | sort | uniq -c", Host.Deck) {
+            note = "有 armeabi-v7a 或没有任何 lib 目录才能装。详见「App 安装顺序与兼容」。"
+        }
+        change("用 ADB 安装", "adb install -r app.apk", Host.Deck) {
+            note = "`-r` 覆盖安装（升级）并保留数据。"
+            outcome = "输出 Success。"
+        }
+        danger("卸载第三方应用", "adb uninstall cm.aptoidetv.pt", Host.Deck) {
+            note = "第三方应用是真正卸载，数据一起删除，和预装应用的「对当前用户卸载」不同。"
+        }
+        read("核对现在装着的第三方应用", "pm list packages -3 | grep -iE 'aurora|aptoide|youtube'", Host.Adb) {
+            expectsError = true
+            note = "什么都不输出（grep 没匹配到，退出码 1）说明都已卸载。"
+        }
+    }
+
+    lesson("经验") {
+        text("""
+            • 选工具先看它的**前提条件**：Google 系的 App 大多需要 Google Play 服务，国内电视都没有。
+            • 一个方案试两次都不顺，就退回最朴素、最可控的做法（自己下载、自己装），不在工具上继续耗时间。
+            • 这几步是当时的经历，涉及的 App 已卸载，没有重新演示。
+        """)
+    }
+
+    related("app-install-order", "lan-share")
+}
+
+val ClashProxy = module("clash-proxy", "代理：Clash Meta 以 VPN 模式运行") {
+    keywords = "Clash Meta · VPN · tun0 · 7890 · http_proxy"
+    overview = """
+        Clash Meta 在这台投影仪上以系统 VPN 模式正常运行，所有 App 的流量都经过它，不需要每个 App 单独设代理。
+    """
+    verified("2026-10-01")
+
+    why {
+        text("""
+            安卓 App 想接管全部网络流量，要用系统的 **VpnService**：创建一个虚拟网卡 `tun0`，系统把所有 App 的数据包交给它，Clash 再按规则决定直连还是走代理。
+            第一次开启时系统会弹窗请求授权（由 `com.android.vpndialogs` 负责）。
+        """)
+    }
+
+    verify("实测：VPN 在运行") {
+        read("虚拟网卡", "ip -4 addr show tun0 | grep inet", Host.Adb) {
+            captured("2026-10-01", "    inet 172.19.0.1/30 scope global tun0")
+            note = "172.19.0.1 是 Clash Meta TUN 模式的默认地址。"
+        }
+        read("系统登记的 VPN", "dumpsys vpn_management 2>/dev/null | head -2", Host.Adb) {
+            captured("2026-10-01", """
+                VPNs:
+                  0: com.github.metacubex.clash.meta
+            """)
+        }
+        read("VPN 会话名", "dumpsys connectivity 2>/dev/null | grep -m1 -oE 'sessionId=[A-Za-z]+'", Host.Adb) {
+            captured("2026-10-01", "sessionId=Clash")
+        }
+        read("混合代理端口", "netstat -tln | grep 7890", Host.Adb) {
+            captured("2026-10-01", "tcp6       0      0 [::]:7890               [::]:*                  LISTEN")
+            note = "7890 是 Clash 的 HTTP/SOCKS 混合端口。`[::]` 表示监听所有地址（IPv4 也能连）。"
+        }
+        read("VPN 附带的 HTTP 代理", "dumpsys connectivity 2>/dev/null | grep -m1 -oE 'HttpProxy: \\[[^]]*\\] [0-9]+'", Host.Adb) {
+            varies = true
+            captured("2026-10-01", "HttpProxy: [127.33.187.145] 37855")
+            note = "Clash 还给 VPN 网络设置了一个本机 HTTP 代理（地址和端口每次启动随机），并附带不走代理的名单（局域网、国内常用站点等）。支持系统代理的 App 会直接用它。"
+        }
+        read("全局 http_proxy 设置", "settings get global http_proxy", Host.Adb) {
+            captured("2026-10-01", "null")
+            note = "没有另外设置全局代理。有 VPN 就不需要它。"
+        }
+    }
+
+    steps("备用：不用 VPN 时的代理办法") {
+        change("设置全局 HTTP 代理", "settings put global http_proxy 127.0.0.1:7890", Host.Adb) {
+            note = "只对遵守系统代理设置的 App 有效（浏览器、部分视频 App）。VPN 正常时用不着。"
+        }
+        change("清除全局代理", "settings put global http_proxy :0", Host.Adb) {
+            note = "`:0` 表示不使用代理。"
+        }
+    }
+
+    consequences {
+        text("""
+            • Clash 的规则里局域网地址要设成直连（DIRECT），否则 Deck 和投影仪之间的 ADB、SSH、局域网共享可能受影响。上面的 HTTP 代理排除名单里已经有 192.168.*。
+            • 订阅链接和节点信息不要写进笔记或截图分享。
+        """)
+    }
+
+    lesson("核对旧记录时发现的问题") {
+        text("""
+            • 旧版说"极米删了 VpnDialogs，点启动 VPN（TUN 模式）必定崩溃"，所以只能用端口代理。实测 vpndialogs 存在，Clash 正以 VPN 模式运行，这个结论**完全错误**，已改写。
+            • 截图里看到 SimpleSSHD 列出的 IP 有一个 172.19.0.1，顺着它查到 tun0，才发现 VPN 其实在运行。**留意不寻常的细节**往往能推翻错误的假设。
+        """)
+    }
+
+    related("app-install-order", "lan-share")
+}

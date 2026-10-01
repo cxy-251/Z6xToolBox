@@ -50,10 +50,9 @@ for pkg in "${DISABLED_PACKAGES[@]}"; do
     echo "  [Disabled] $pkg"
 done
 
-echo "=== 3. 注入并激活 Projectivy 无障碍服务 ==="
-$ADB shell settings put secure enabled_accessibility_services \
-    "com.xgimi.duertts/com.xgimi.duertts.MonitorService:com.spocky.projengmenu/com.spocky.projengmenu.services.ProjectivyAccessibilityService"
-$ADB shell settings put secure accessibility_enabled 1
+# 3. （已取消）注入 Projectivy 无障碍服务
+# 官方桌面 com.xgimi.home 已在第 1 步卸载，Projectivy 成为唯一桌面，Home 键自然回到它，不需要无障碍服务拦截。
+# 2026-10-01 实测：enabled_accessibility_services 只有 com.xgimi.duertts/.MonitorService，Home 键正常。
 
 echo "=== 4. 恢复默认输入法为搜狗（保障遥控器零延迟） ==="
 $ADB shell pm enable com.sohu.inputmethod.sogou.tv || true
@@ -63,5 +62,8 @@ $ADB shell ime set com.sohu.inputmethod.sogou.tv/.SogouIME || true
 echo "=== 5. 发送 Home 键拉起 Projectivy 桌面 ==="
 $ADB shell input keyevent 3
 
-echo "=== 定制固化完成，当前前台焦点: ==="
+echo "=== 定制固化完成，核对结果 ==="
+echo "  已停用：$($ADB shell 'pm list packages -d | wc -l') 个（应为 29）"
+echo "  已卸载（当前用户）："
+$ADB shell 'pm list packages -u | grep -vxF "$(pm list packages)"'
 $ADB shell "dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'"

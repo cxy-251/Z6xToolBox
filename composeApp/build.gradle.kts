@@ -36,3 +36,8 @@ compose.desktop {
         }
     }
 }
+
+// ./run.sh 时以项目根目录为工作目录，内容里的相对路径（如 scripts/）才能找到
+tasks.withType<JavaExec>().configureEach {
+    workingDir = rootDir
+}
