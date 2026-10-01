@@ -27,6 +27,14 @@ import z6x.content.inspect.Pivots
 import z6x.content.inspect.SshKeyLogin
 import z6x.content.inspect.TvScreencap
 import z6x.content.proposals.DropbearShell
+import z6x.content.proposals.HubSpec
+import z6x.content.proposals.ReviewControl
+import z6x.content.proposals.ReviewFiles
+import z6x.content.proposals.ReviewMedia
+import z6x.content.proposals.ReviewNetwork
+import z6x.content.proposals.ReviewSummary
+import z6x.content.proposals.ReviewSystem
+import z6x.content.proposals.ToolsSpec
 import z6x.content.proposals.EnvProfile
 import z6x.content.proposals.OomWatchdog
 import z6x.content.proposals.PacketCapture
@@ -91,6 +99,11 @@ object Content {
             "proposals", "💡", "提案",
             "想过但还没做的方案。每篇都附实机可行性审核：可行、可选还是做不到。",
             listOf(
+                Category("规格", "📐", "交给实现者的两份规格：Go 常驻服务、Rust 命令集", listOf(HubSpec, ToolsSpec)),
+                Category(
+                    "agy 的 109 个小项目", "🗂", "逐篇审核：纳入哪个项目、第几期，或为什么不做",
+                    listOf(ReviewSummary, ReviewFiles, ReviewMedia, ReviewNetwork, ReviewControl, ReviewSystem),
+                ),
                 Category(
                     "开发环境", "⚙️", "让投影仪上的开发更顺手",
                     listOf(EnvProfile, StraceDebug, DropbearShell, OomWatchdog, PacketCapture),

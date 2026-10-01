@@ -29,3 +29,6 @@ local.properties
 
 # Go 编译产物
 dev/go-server/z6x_go_server
+
+# Python 缓存
+__pycache__/
