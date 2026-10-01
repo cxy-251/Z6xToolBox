@@ -163,6 +163,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。静态 Go 程序能跑、高位端口能绑定都已实测；/data 剩余约 46G。U 盘挂载在 /storage/<卷ID>/，shell 可以访问。",
             "去向" to "**hub · files（第一期）**",
         )
+        text("**原理**\n• WebDAV 是在 HTTP 上加了几种请求方法：PROPFIND 列目录、MKCOL 建文件夹、PUT 上传、MOVE/COPY 移动复制。各系统的文件管理器都内置了客户端，所以能直接挂成网络盘。\n• Range 请求：客户端在请求头里写 `Range: bytes=起-止`，只要文件的一段。看视频拖进度条就是靠它，不用把整个文件下完。\n• Go 静态编译（CGO_ENABLED=0）把所有依赖打进一个文件，放到投影仪上直接运行；同类功能用 Python、Node 实现要先装运行环境。\n\n**注意**\n• U 盘重新插拔或换盘后，/storage/ 下的卷 ID 目录名会变，共享路径要能跟着变（比如共享 /storage 这一层再往下选）。\n• 只能用 1024 以上的端口。")
     }
     story("Go-08 · 大屏相册") {
         facts(
@@ -171,6 +172,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，缩图需要 CPU，并发要限制在 2 以内。",
             "去向" to "**第三期候选（作为 files 的扩展）**",
         )
+        text("**原理**\n• 缩略图缓存：第一次看时把大图缩成小图存起来，以后直接用小图，电视不用解码几十 MB 的原图。\n• EXIF 里记录着拍摄时间和方向，可以按时间排列，并把横竖方向纠正过来。\n• Go 的 embed 可以把网页文件打包进程序里，部署只需要一个文件。\n\n**注意**\n• 缩图很耗 CPU，同时只处理一张，或限制最多两个核心，否则会影响看视频。\n• 几万张照片的缩略图可能有 1~2GB，缓存放在 U 盘上，不要占机身存储。")
     }
     story("Go-09 · Deck 存档与截图自动备份") {
         facts(
@@ -179,6 +181,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。",
             "去向" to "**hub · files 的上传接口（第一期）**",
         )
+        text("**原理**\n• 增量备份：只传有变化的文件（比较修改时间或哈希），而不是每次全部重传。\n• Deck 端用 tar 打包后通过 HTTP 上传，投影仪端接收后按日期归档。\n\n**注意**\n• 接收大文件要边收边写盘，不能整个读进内存。\n• 先写成 .tmp 临时文件，收完再改名，防止网络中断留下半截文件；Deck 端上传失败要自动重试。")
     }
     story("Go-13 · 漫画与电子书阅读") {
         facts(
@@ -187,6 +190,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• ZIP 的目录放在文件末尾，先读目录就知道每张图在哪，看哪页只解压哪页。\n• 阅读器网页打包在程序里，手机、电视浏览器都能打开。\n\n**注意**\n• 老的 Windows 压缩包文件名是 GBK 编码，要能识别，否则文件名乱码。\n• 频繁翻页时复用缓冲区，避免内存忽高忽低。")
     }
     story("Go-21 · Windows 网络共享（SMB）") {
         facts(
@@ -195,6 +199,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "能绑定 1445 这类高位端口，但 Windows 资源管理器只认 445，打不开。",
             "去向" to "**不纳入（WebDAV 已覆盖文件共享）**",
         )
+        text("**原理**\n• SMB 是 Windows 网络共享用的协议，用户态程序也能实现它，不需要系统的 Samba。\n\n**注意**\n• Windows 资源管理器只认 445 端口，而 shell 只能用 1024 以上的端口，实际很难直接用。")
         claim("所有设备打开网络邻居即可直接访问", Verdict.Disproved, "非 445 端口在 Windows 网络邻居里打不开。")
     }
     story("Go-26 · S3 对象存储") {
@@ -204,6 +209,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，但 WebDAV 已覆盖。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• S3 是亚马逊定义、被广泛采用的对象存储接口；很多备份软件（Restic、Kopia）都支持把它当作备份目标。\n• 请求要用密钥签名，服务端校验签名后再接收数据。\n\n**注意**\n• 大文件分片上传的临时文件要和目标在同一分区，否则最后改名会失败。\n• exFAT 对文件名长度有限制。")
         claim("-dir /mnt/media_rw/USB_DISK/s3_storage", Verdict.Disproved, "/mnt/media_rw 对 shell 不可访问（实测）；U 盘要走 /storage/<卷ID>/。")
     }
     story("Go-30 · 私人 Git 仓库") {
@@ -213,6 +219,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，收益低。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• Git 的 HTTP 传输协议可以用纯 Go 实现，不需要系统装 git。\n\n**注意**\n• FAT32 不支持硬链接，裸仓库要用复制代替。")
     }
     story("Go-35 · SFTP 文件传输") {
         facts(
@@ -221,6 +228,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，但 WebDAV 和 SSH 已覆盖。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• SFTP 是跑在 SSH 加密连接上的文件传输协议，用户和密钥可以由程序自己管理，不依赖系统账户。\n\n**注意**\n• 主机密钥要持久保存，否则每次重启客户端都会提示主机身份变了。")
     }
     story("Go-47 · 缩略图生成") {
         facts(
@@ -229,6 +237,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。",
             "去向" to "**第三期候选（随相册一起）**",
         )
+        text("**原理**\n• 按需生成：第一次请求某个尺寸时才缩图，结果缓存到磁盘和内存。\n\n**注意**\n• 照片要按 EXIF 方向转正；要限制原图最大尺寸，防止超大图片撑爆内存。")
     }
     story("Go-50 · 网盘挂载") {
         facts(
@@ -237,6 +246,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，但现成的 AList 本身就是 Go 静态程序，可以直接单独部署。",
             "去向" to "**不纳入（不必重写）**",
         )
+        text("**原理**\n• 302 重定向：服务端只负责去网盘拿到真实下载地址，让播放器直接从网盘下载，自己不中转数据。\n\n**注意**\n• 网盘接口有频率限制，不要递归扫描整个网盘；网盘令牌要定时刷新。")
     }
     story("Go-57 · 重复文件查找") {
         facts(
@@ -245,6 +255,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。U 盘常见的 FAT32/exFAT 不支持硬链接，所以只报告、不自动处理。",
             "去向" to "**并入 tools · hash（第一期）**",
         )
+        text("**原理**\n• 两阶段查重：先按文件大小分组（不同大小肯定不重复），再对同样大小的文件比较内容哈希。\n\n**注意**\n• FAT32/exFAT 不支持硬链接；建了硬链接后改一个另一个也会变。")
     }
     story("Rust-04 · 文件哈希与查重") {
         facts(
@@ -253,6 +264,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。",
             "去向" to "**tools · hash（第一期）**",
         )
+        text("**原理**\n• xxh3 是非常快的非加密哈希，适合比较文件内容是否相同；ARM 的 NEON 向量指令能一次处理多个字节。\n• mmap 把文件映射进内存直接读，省掉一次复制。\n\n**注意**\n• 瓶颈通常是 U 盘读速，不是 CPU：先按大小、再按开头一小段过滤，最后才算全文件哈希。\n• 用 mmap 时如果 U 盘被拔掉，程序会收到 SIGBUS，要能处理。")
         claim("MediaTek MT9669 的 4 个 Cortex-A73 核心内部均集成了 NEON 向量处理单元", Verdict.Disproved, "实际是海思 Hi3751V660 的 8 个 Cortex-A55（同样有 NEON）。")
     }
     story("Rust-06 · 只读索引库") {
@@ -262,6 +274,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，没有需求。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 零拷贝读取：把索引文件映射进内存，直接把字节当结构体使用，不做反序列化。\n\n**注意**\n• 不同架构之间要固定字段的对齐和字节序；更新时生成新文件再原子替换。")
     }
     story("Rust-11 · 快速压缩归档") {
         facts(
@@ -270,6 +283,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行。",
             "去向" to "**tools · pack（第二期）**",
         )
+        text("**原理**\n• zstd 压缩和解压都很快，压缩率和 gzip 相当或更好，等级越高越慢、越占内存。\n\n**注意**\n• 电视上用 1~5 级就好，高等级内存占用大；写入慢的 U 盘要把读写和压缩分开。")
     }
     story("Rust-15 · U 盘健康检测") {
         facts(
@@ -278,6 +292,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "U 盘的块设备 shell 打不开，只能对文件测；FAT/exFAT 是否支持直接读写未验证。",
             "去向" to "**tools · iobench（第二期）**",
         )
+        text("**原理**\n• 直接读写（O_DIRECT）绕过系统缓存，测到的是存储介质本身的速度和延迟。\n• 缓冲区地址和大小必须按扇区（512 或 4096 字节）对齐。\n\n**注意**\n• U 盘的块设备 shell 打不开，只能对一个测试文件测；有的文件系统不支持 O_DIRECT，要能退回普通读写。")
     }
     story("Rust-17 · Rust 版 WebDAV") {
         facts(
@@ -286,6 +301,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，重复。",
             "去向" to "**并入 hub · files**",
         )
+        text("**原理**\n• 同 Go-01；Windows 挂载 WebDAV 时会先发 OPTIONS 请求，响应里要带上 `DAV: 1, 2`。\n\n**注意**\n• 视频点播必须支持 Range 请求。")
     }
     story("Rust-22 · Rust 版文件下载服务") {
         facts(
@@ -294,6 +310,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，重复。",
             "去向" to "**并入 hub · files**",
         )
+        text("**原理**\n• sendfile 让内核直接把文件内容送到网络连接，不经过程序内存。\n\n**注意**\n• /storage 下的外置存储经过 FUSE，sendfile 可能退化为普通读写。")
     }
     story("Rust-27 · 媒体全文检索") {
         facts(
@@ -302,6 +319,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，暂无需求。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• SQLite 的 FTS5 是全文检索模块：建立倒排索引，按关键词秒查。\n\n**注意**\n• 数据库放机身存储，不要放在 FAT/exFAT 的 U 盘上（锁机制不完整）。")
     }
     story("Rust-36 · 存储读写测速") {
         facts(
@@ -310,6 +328,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行（对文件测）。",
             "去向" to "**tools · iobench（第二期）**",
         )
+        text("**原理**\n• 用直接读写测 4K 随机读写次数（IOPS）、大块顺序吞吐，以及慢请求的比例（P99 延迟）。\n\n**注意**\n• 测试写入量不要太大，避免磨损机身存储。")
     }
     story("Rust-38 · LZ4 解压") {
         facts(
@@ -318,6 +337,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行；zstd 够用。",
             "去向" to "**并入 tools · pack**",
         )
+        text("**原理**\n• LZ4 压缩率不如 zstd，但解压极快，适合实时数据流。\n\n**注意**\n• LZ4 有帧格式和裸块格式两种，要分清楚。")
     }
     story("Rust-47 · 局域网 P2P 分发") {
         facts(
@@ -326,6 +346,7 @@ val ReviewFiles = module("review-files", "提案：文件与存储") {
             "在这台投影仪上" to "可行，收益低。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 内容寻址：大文件切成定长块，每块按哈希命名，缺哪块就从局域网里任何有这块的设备拉取。\n\n**注意**\n• FAT/exFAT 不支持稀疏文件，要预先分配空间。")
     }
 
     related("review-summary", "spec-hub", "spec-tools")
@@ -345,6 +366,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "下载目录可写。需要另找静态编译的 aria2c。关屏时系统一直醒着（实测），可以持续下载；选「关机」会进入睡眠，下载暂停，开机后继续。",
             "去向" to "**第三期候选（作为外部程序部署，不在 hub 里重写）**",
         )
+        text("**原理**\n• aria2 是命令行下载器，支持 HTTP、FTP、BT 和磁力链接，能把一个大文件分成多段同时下载。\n• 开启 RPC 后它在后台监听一个端口，网页前端（AriaNg）通过发送 JSON 指令添加、暂停任务。\n\n**注意**\n• FAT32 单个文件最大 4GB，下大文件的 U 盘要用 exFAT 或 NTFS（这台机器两种都支持，实测）。\n• 磁力链接刚开始可能没速度：需要配置一批活跃的 tracker，或者先拿到 .torrent 种子。\n• 预分配方式用 `file-allocation=trunc`，否则开始下载前会先把整个文件写满零，慢 U 盘会卡很久。")
         claim("关闭投影仪画面后下载停止……需配合执行模块 11 中的网络防休眠配置（`settings put global wifi_sleep_policy 2`）", Verdict.Unverified, "关屏 30 分钟实测网络一直在线，并没有断。wifi_sleep_policy 实测本来就是 2。")
     }
     story("Go-04 · 多画面短视频墙") {
@@ -354,6 +376,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "依赖电视浏览器能同时硬解几路视频，没有验证。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• 电视上的画面只能由 App（含浏览器）显示，命令行程序画不了，所以做成「后端 + 浏览器网页」。\n• 硬件解码器的路数有限，超出后会退回 CPU 软解。办法是只让获得焦点的几个格子真正播放，其余显示静态封面。\n\n**注意**\n• 多个视频同时有声音会很乱，默认全部静音，焦点格子按确认键才出声。\n• 10-bit HDR 等特殊编码可能解不了，H.264 / H.265 8-bit 最稳。这台的硬解支持 H.264、H.265、VP9 等（实测）。\n• 视频很多时按页加载列表，不要一次全部读进内存。")
         claim("极米 Z6X Pro 搭载联发科 MT9669 芯片……通常支持 2~4 路 1080p（或 1 路 4K）同时硬解", Verdict.Disproved, "芯片是海思 Hi3751V660（8 核 A55），不是联发科 MT9669。硬解路数没有测过。")
     }
     story("Go-05 · 家庭音乐服务器（Navidrome）") {
@@ -363,6 +386,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "Navidrome 本身就是 Go 静态程序，可以按 Go 测试服务的方式单独部署。",
             "去向" to "**不纳入 hub（需要时单独部署）**",
         )
+        text("**原理**\n• Subsonic 是个人音乐服务的开放协议：服务端提供曲库、封面、歌词和音频流，各种第三方播放器都能连。\n• 比 Plex、Jellyfin 这类全能媒体中心轻很多，只管音乐。\n\n**注意**\n• 关掉服务端转码，原样传输，让手机自己解码；投影仪 CPU 转码 FLAC 会吃力。\n• U 盘换了卷 ID，音乐目录路径要跟着改。")
     }
     story("Go-12 · 直播源整理") {
         facts(
@@ -371,6 +395,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行（纯网络任务）。",
             "去向" to "**第三期候选（与 Go-48、Go-59 合成一个模块）**",
         )
+        text("**原理**\n• 测试直播源是否可用，不需要真的看，只发一个 HEAD 请求看返回状态和响应时间。\n• XMLTV 是通用的节目单格式，播放器按频道 ID 把节目单和直播源对应起来。\n\n**注意**\n• 同时探测几百个源会把路由器的连接数打满，要限制并发（比如 20 个）并设超时。\n• 节目单文件可能有几十 MB，要边读边解析，不要整个读进内存。")
     }
     story("Go-16 · DLNA 投屏接收") {
         facts(
@@ -379,6 +404,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "有前提：UDP 1900 已被系统组件占用（实测）；视频链接没有默认播放器，要先装好播放器设为默认。",
             "去向" to "**第二期 · dlna**",
         )
+        text("**原理**\n• DLNA 投屏的流程：手机先在局域网广播搜索（SSDP），投影仪回复自己的设备描述；手机再把视频地址通过 SOAP 请求（SetAVTransportURI）发过来，投影仪打开播放。\n• 视频本身由手机提供的地址直接播放，投影仪不中转、不转码。\n\n**注意**\n• 路由器开了「AP 隔离」时，手机和投影仪互相看不见。\n• 有的视频地址带防盗链检查，直接打开会失败，需要加上相应的请求头。")
     }
     story("Go-19 · 把投影仪当无线音箱") {
         facts(
@@ -387,6 +413,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "不可行：shell 不在 audio 组，碰不到声卡（实测），系统也没有 tinyplay；放声音要在 App 里做。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 思路是接收网络传来的原始音频数据（PCM），直接交给声卡播放，中间加一小段缓冲抵消网络抖动。\n\n**注意**\n• 这台机器上做不到：shell 碰不到声卡（实测），放声音要由 App 通过系统音频接口完成。")
         claim("Go 服务在本地通过管道调用系统的 `tinyplay` 工具或 Android AudioTrack API 直接写入硬件音频设备节点", Verdict.Disproved, "系统里没有 tinyplay；/dev/snd 对 shell 不可读写；AudioTrack 只能在 App 里用。")
     }
     story("Go-22 · 影视海报刮削") {
@@ -396,6 +423,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行，但要访问 TMDB（外网，经常连不上）。",
             "去向" to "**不纳入（依赖外网，收益低）**",
         )
+        text("**原理**\n• 刮削：从文件名里提取片名和年份，去 TMDB（电影数据库）查信息，下载海报，生成播放器能读的 .nfo 描述文件。\n• 用 inotify 监听目录，文件写完（CLOSE_WRITE）才处理，避免下到一半就去刮。\n\n**注意**\n• TMDB 在国内经常连不上。\n• 同名电影要结合年份判断，否则容易匹配错。")
     }
     story("Go-25 · RSS 追更") {
         facts(
@@ -404,6 +432,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行。",
             "去向" to "**不纳入（收益低）**",
         )
+        text("**原理**\n• RSS / Atom 是网站发布更新列表的格式。定时拉取，和已经处理过的条目比对，新的就交给下载器。\n\n**注意**\n• 要记住处理过哪些条目，避免重复下载。")
     }
     story("Go-32 · 视频切片点播（HLS）") {
         facts(
@@ -412,6 +441,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "技术选型有问题（见下），收益低。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• HLS 把视频切成几秒一段的小文件，用 m3u8 列表描述，几乎所有设备都能播放。\n• 只重新封装、不重新编码，CPU 开销很小。\n\n**注意**\n• 需要能真正解析 MP4/MKV 的库；原方案选的 RTSP 库做不了这件事。\n• 老的编码格式（VC-1、MPEG-2）苹果设备放不了。")
         claim("Go 1.27 + `aler9/gortsplib` 底层流解析", Verdict.Unverified, "gortsplib 是 RTSP 流协议库，并不负责 MP4/MKV 的解封装，这个选型站不住。")
     }
     story("Go-39 · 磁力链接转种子") {
@@ -421,6 +451,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行，收益低。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 磁力链接只有文件的哈希，要先在 BT 的 DHT 网络里找到拥有这个文件的人，再向他们下载种子的元数据。\n\n**注意**\n• 第一次加入 DHT 需要连接引导节点，要能收发外网 UDP。")
     }
     story("Go-41 · 多房间同步音频") {
         facts(
@@ -429,6 +460,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "不可行：命令行进程既拿不到音频来源，也放不出声音。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 多房间同步：服务端给音频块打上时间戳，各客户端测出自己和服务端的时钟差，按统一时间播放。\n\n**注意**\n• 这台机器上命令行程序拿不到音频来源，也放不出声音。")
     }
     story("Go-42 · 字幕自动下载") {
         facts(
@@ -437,6 +469,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行，依赖外网字幕站。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 射手网的视频指纹：取文件几个固定位置的数据算 MD5，不用读完整个文件就能识别是哪部片子的哪个版本。\n\n**注意**\n• 字幕常是 GBK 编码，下载后转成 UTF-8，否则播放器乱码。\n• 字幕网站有频率限制，请求之间要有间隔。")
     }
     story("Go-48 · IPTV 列表清洗") {
         facts(
@@ -445,6 +478,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行。",
             "去向" to "**第三期候选（并入 Go-12）**",
         )
+        text("**原理**\n• 同 Go-12：探测、去重、按频道名对齐，生成 m3u。\n\n**注意**\n• 有的源会检查客户端标识（User-Agent），探测时要模拟播放器。")
     }
     story("Go-52 · 直播录制") {
         facts(
@@ -453,6 +487,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行，收益低。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 直播平台的弹幕通过 WebSocket 长连接推送，数据包有固定格式的头部，内容可能被压缩。\n\n**注意**\n• 要定时发送心跳包，否则会被断开；录制文件按大小或时长切分。")
     }
     story("Go-56 · 浏览器网页投屏") {
         facts(
@@ -461,6 +496,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "电视端要开浏览器页面解码显示，发起端还要求 HTTPS，整体复杂。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• WebRTC 让浏览器之间直接传输音视频，信令服务器只负责交换连接信息。\n\n**注意**\n• 浏览器只有在 HTTPS 页面下才允许共享屏幕。")
     }
     story("Go-59 · 节目单生成") {
         facts(
@@ -469,6 +505,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "可行。",
             "去向" to "**第三期候选（并入 Go-12）**",
         )
+        text("**原理**\n• 同 Go-12：抓取节目表，按 XMLTV 格式生成。\n\n**注意**\n• 时间要带上时区（+0800），否则播放器里的节目时间会错位。")
     }
     story("Rust-03 · 低延迟音频混音") {
         facts(
@@ -477,6 +514,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "不可行：/dev/snd 对 shell 不可读写（实测）。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 声卡按固定速率取数据，软件来不及送数据就会出现「欠载」，听到爆音。无锁环形缓冲区和不停顿的语言能减少这种情况。\n\n**注意**\n• 这台机器上做不到：shell 碰不到声卡（实测）；即便能碰到，声卡也通常被系统音频服务独占。")
     }
     story("Rust-25 · 录音探针") {
         facts(
@@ -485,6 +523,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "不可行：/dev/snd 不可访问。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 直接从声卡的录音节点读取原始音频，计算音量和削波。\n\n**注意**\n• 这台机器上 shell 碰不到声卡（实测）。")
     }
     story("Rust-30 · UDP 视频纠错转发") {
         facts(
@@ -493,6 +532,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "需要发送端配合，没有使用方。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 前向纠错（FEC）：发送时额外加一些冗余包，接收端丢了少量包也能直接算回来，不用重传。\n\n**注意**\n• 冗余比例太高会挤占带宽；调大内核接收缓冲需要 root。")
     }
     story("Rust-40 · 精细音量调节") {
         facts(
@@ -501,6 +541,7 @@ val ReviewMedia = module("review-media", "提案：下载、影音与直播") {
             "在这台投影仪上" to "不可行：声卡控制节点属于 audio 组，shell 不可访问。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 声卡的混音器控件（ALSA mixer）可以比系统更细地调音量。\n\n**注意**\n• 声卡控制节点 shell 访问不了（实测）；系统调音量时会覆盖掉手动设置。")
     }
 
     related("review-summary", "spec-hub", "spec-tools")
@@ -520,6 +561,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "DNS 标准端口 53 不能绑定（1024 以下都不行，实测），只能用 5353 等高位端口，再靠路由器把 53 转过来，很多家用路由器做不到。",
             "去向" to "**不纳入（Clash 已负责 DNS 和分流）**",
         )
+        text("**原理**\n• DNS 缓存：把查过的域名结果记在内存里，下次直接返回，省掉一次网络往返。\n• 去广告的原理是把广告域名解析成 0.0.0.0，App 就连不上广告服务器。\n\n**注意**\n• 53 端口需要 root，只能用高位端口，再让路由器把 53 转发过来。\n• 规则太多会占很多内存，电视上只放针对电视广告的精简规则。\n• 上游 DNS 不能指回自己或路由器，否则查询会绕圈。")
         claim("极米 Z6X Pro 拥有充裕的可用内存（1.5GB）与 Wi-Fi 6 低延迟连接", Verdict.Disproved, "可用内存约 1.5GB 成立；但网卡的 USB ID 是联发科 0e8d:7663，一般对应 MT7663，是 Wi-Fi 5，不是 Wi-Fi 6。")
     }
     story("Go-14 · 局域网测速") {
@@ -529,6 +571,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行。普通身份就能发 ICMP ping（实测），不必调用外部命令。",
             "去向" to "**hub · speed（第一期）**",
         )
+        text("**原理**\n• 测网速时由服务端在内存里生成数据发送，不读磁盘，测到的就是纯网络速度。\n• 测延迟用 ICMP ping；这台机器普通身份就能发（实测）。\n\n**注意**\n• 写数据的缓冲区要大（64KB 以上），否则 CPU 先成为瓶颈，测出来偏低。\n• 调用外部程序时都要设超时，防止卡住。")
         claim("由于 Linux 限制普通非特权用户创建原始套接字（Raw Socket），探针通过调用系统自带的 `/system/bin/ping` 命令", Verdict.Disproved, "这台机器对普通身份开放了 ICMP（ping_group_range 是 0~2147483647），程序可以直接发 ping。")
     }
     story("Go-24 · 局域网代理") {
@@ -538,6 +581,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，但没必要：Clash 已在所有地址上监听 7890，局域网设备本来就能直接用（实测，安全隐患见「安全」页）。",
             "去向" to "**不纳入（Clash 已有）**",
         )
+        text("**原理**\n• 代理的工作就是在两条 TCP 连接之间来回搬数据，不解析内容。SOCKS5 和 HTTP CONNECT 是两种常见的握手方式。\n\n**注意**\n• 连接断开时要及时关闭，否则文件句柄会耗尽。")
     }
     story("Go-27 · 路由器自动端口映射") {
         facts(
@@ -546,6 +590,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，但会把服务暴露到公网。",
             "去向" to "**不纳入（安全）**",
         )
+        text("**原理**\n• UPnP IGD 和 NAT-PMP 是两种让局域网设备请求路由器开放端口的协议，映射有租期，要定时续约。\n\n**注意**\n• 很多光猫默认关闭 UPnP；如果宽带没有公网 IPv4，映射成功了外面也访问不到。")
     }
     story("Go-33 · Tailscale 中继节点") {
         facts(
@@ -554,6 +599,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "需要公网可达和证书。",
             "去向" to "**不纳入（要对公网开放）**",
         )
+        text("**原理**\n• Tailscale 在两台设备直连失败时，通过 DERP 中继服务器转发加密后的数据，中继看不到内容。\n\n**注意**\n• 自建中继需要公网可达和证书，会占用家里宽带的上行。")
     }
     story("Go-36 · 应急 DHCP") {
         facts(
@@ -562,6 +608,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "不可行：DHCP 要用 67 端口（1024 以下不能绑定，实测）。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• DHCP 负责给新接入的设备分配 IP，客户端用广播请求，服务端在 67 端口应答。\n\n**注意**\n• 67 端口需要 root；和家里路由器同时开 DHCP 会互相冲突。")
         claim("需通过 Linux 能力集授权 `setcap cap_net_bind_service=+ep`", Verdict.Disproved, "setcap 需要 root，这台机器没有。")
     }
     story("Go-37 · 动态域名") {
@@ -571,6 +618,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行（投影仪确实有公网 IPv6，实测），但本项目不对公网开放。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• DDNS：定时检查自己的公网 IP，变了就调用域名服务商的接口更新解析记录。\n\n**注意**\n• 安卓会给网卡生成临时的隐私 IPv6 地址，要选稳定的那个上报。\n• 服务商的密钥要妥善保存。")
     }
     story("Go-38 · PAC 自动代理") {
         facts(
@@ -579,6 +627,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，Clash 已负责分流。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• PAC 是一段 JavaScript，浏览器对每个网址调用它，决定直连还是走哪个代理。\n\n**注意**\n• 返回的类型要是 `application/x-ns-proxy-autoconfig`，否则有的设备不认。")
     }
     story("Go-45 · 宽带定时测速") {
         facts(
@@ -587,6 +636,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，但每次测速消耗不少流量。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 测速：从测速服务器并发下载、上传一段时间，计算平均速度。\n\n**注意**\n• 每次测速消耗几百 MB 流量；正在看视频时应跳过。")
     }
     story("Go-46 · 跨网段网络唤醒") {
         facts(
@@ -595,6 +645,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行。",
             "去向" to "**并入 hub · wol（第一期）**",
         )
+        text("**原理**\n• 路由器一般不会把外面来的请求变成局域网广播，所以由投影仪在局域网里代为发出唤醒包。\n\n**注意**\n• 要用子网广播地址（如 192.168.0.255）；要有口令，防止被乱唤醒。")
     }
     story("Go-49 · iperf3 测速") {
         facts(
@@ -603,6 +654,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行。",
             "去向" to "**hub · speed（第二期，可选）**",
         )
+        text("**原理**\n• iperf3 是标准的网络吞吐测试工具，先通过控制连接协商参数，再用多条连接打满带宽。\n\n**注意**\n• 测速时会占较多 CPU，测完要立刻释放。")
     }
     story("Go-51 · HTTPS 证书自动申请") {
         facts(
@@ -611,6 +663,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，本项目不对公网开放。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• ACME 是 Let's Encrypt 用的证书申请协议。DNS-01 验证：在域名下加一条指定的 TXT 记录证明你拥有这个域名，不需要开放 80 端口。\n\n**注意**\n• TXT 记录生效需要等一段时间；证书私钥要设成只有自己能读。")
     }
     story("Go-53 · 局域网设备扫描") {
         facts(
@@ -619,6 +672,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行。UDP 1900 已被系统占用（实测），只发不绑定即可。",
             "去向" to "**第二期 · lanscan**",
         )
+        text("**原理**\n• SSDP 发现：向组播地址 239.255.255.250:1900 发送搜索，局域网里的 UPnP 设备会回复自己的描述文件地址。\n\n**注意**\n• 解析设备返回的 XML 时要禁用外部实体，防止安全问题。\n• 路由器开了 AP 隔离时搜不到。")
     }
     story("Go-55 · Tailscale 子网路由") {
         facts(
@@ -627,6 +681,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "用户态模式在这台机器上能否运行未验证。如果以后需要外出访问，这是首选方案。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• tsnet 是 Tailscale 的用户态模式：不创建虚拟网卡，在程序内部完成组网和转发。\n\n**注意**\n• 用户态模式下 ping（ICMP）不通，用 curl 测试；需要在 Tailscale 后台预先授权路由。")
     }
     story("Rust-05 · 用户态加密隧道") {
         facts(
@@ -635,6 +690,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "理论可行；/dev/net/tun 对 shell 不可访问（实测），Clash 已经在提供 VPN。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 用户态网络协议栈（smoltcp）在程序内部处理 IP 和 TCP，对外只用普通 UDP 端口，不需要系统虚拟网卡。WireGuard 的加解密由 boringtun 完成。\n\n**注意**\n• 加密头会占用额外字节，MTU 要设小一些（1280~1360）。")
     }
     story("Rust-09 · 端口敲门") {
         facts(
@@ -643,6 +699,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "不可行：要捕获未开放端口上的数据包，需要原始套接字权限，shell 没有。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 端口敲门：服务端口平时关闭，客户端按约定顺序访问几个端口后，服务端才为这个 IP 开放。\n\n**注意**\n• 要看到发往未开放端口的数据包，需要原始套接字，shell 没有这个权限。")
     }
     story("Rust-10 · 加密 DNS 转发") {
         facts(
@@ -651,6 +708,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "53 端口不能绑定；Clash 已经在做加密 DNS。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• DNS over HTTPS：把 DNS 查询放进 HTTPS 请求里，中间人看不到也改不了。\n• rustls 是纯 Rust 实现的 TLS，不依赖 OpenSSL。\n\n**注意**\n• 根证书可以打包进程序，不依赖系统的证书目录；刚开机时间不对会导致证书校验失败。")
     }
     story("Rust-16 · 限速代理") {
         facts(
@@ -659,6 +717,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，没有需求。",
             "去向" to "**不纳入（以后可作为 files 的限速选项）**",
         )
+        text("**原理**\n• 令牌桶限速：按固定速率往桶里放令牌，发送数据要先拿到等量的令牌，拿不到就等待，流量因此被平滑限制。\n\n**注意**\n• 限速时排队的数据要设上限，防止占用过多内存。")
     }
     story("Rust-20 · 抓包分析") {
         facts(
@@ -667,6 +726,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "不可行：需要 CAP_NET_RAW 能力，shell 没有。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• AF_PACKET 是 Linux 读取原始网络帧的接口，配合共享内存环形缓冲可以零拷贝抓包。\n\n**注意**\n• 需要 CAP_NET_RAW 能力，shell 没有；无线网卡也只能看到发给自己的包。")
     }
     story("Rust-24 · TUN 分流") {
         facts(
@@ -675,6 +735,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "不可行：/dev/net/tun 对 shell 不可访问（实测）。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• TUN 是虚拟网卡：程序从它读出系统发出的 IP 包，处理后再写回，VPN 就是这样实现的。\n\n**注意**\n• /dev/net/tun 对 shell 不可访问（实测）；普通 App 要通过系统的 VpnService 获得 TUN。")
     }
     story("Rust-26 · 双协议代理") {
         facts(
@@ -683,6 +744,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行；Clash 已有混合端口。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 看连接的第一个字节就能区分 SOCKS5（0x05）和 HTTP（字母），一个端口同时支持两种代理。\n\n**注意**\n• 对方只关闭写方向时要正确处理，防止连接泄漏。")
     }
     story("Rust-34 · 网络延迟雷达") {
         facts(
@@ -691,6 +753,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行：普通身份能发 ICMP（实测）。",
             "去向" to "**tools · ping（第一期）**",
         )
+        text("**原理**\n• 连续发 ping，记录每次往返时间，相邻两次的差值就是抖动。\n• 这台机器普通身份可以直接发 ICMP（实测）。\n\n**注意**\n• Wi-Fi 省电会让延迟周期性跳高；原方案建议的低延迟模式命令这台没有。")
         claim("实测前应通过 `cmd wifi set-low-latency-mode enabled` 开启低延迟模式", Verdict.Disproved, "这台机器的 cmd wifi 没有这个子命令。")
     }
     story("Rust-35 · 局域网名字发现（mDNS）") {
@@ -700,6 +763,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "UDP 5353 已被系统 mdnsd 占用（实测），能否共存未验证。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• mDNS：在局域网组播地址 224.0.0.251:5353 上回答「z6x.local 是谁」，不需要 DNS 服务器。\n\n**注意**\n• 5353 已被系统占用（实测）；路由器开 AP 隔离时组播过不去。")
     }
     story("Rust-42 · DNS 竞速") {
         facts(
@@ -708,6 +772,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "53 端口不能绑定；也没法把系统 DNS 指过来（见错误卡片）。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 同时向多个 DNS 发查询，用最先回来的结果，加上内存缓存。\n\n**注意**\n• 53 端口不能绑定；安卓 8 以后系统 DNS 也不能通过 net.dns1 指定（实测为空）。")
         claim("需在 shell 中通过 `setprop net.dns1 127.0.0.1` 引导系统优先走本地代理", Verdict.Disproved, "安卓 8 以后不再使用 net.dns1，这台机器上它是空的（实测）。")
     }
     story("Rust-46 · 多屏组播信令") {
@@ -717,6 +782,7 @@ val ReviewNetwork = module("review-network", "提案：网络、代理与远程�
             "在这台投影仪上" to "可行，没有使用方。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• UDP 组播：发一次，组里所有设备都收到，设备随时加入或离开，不需要维护连接。\n\n**注意**\n• UDP 不保证送达，重要消息要多发几次并去重。")
     }
 
     related("review-summary", "spec-hub", "spec-tools")
@@ -736,6 +802,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "按键控制可行（input keyevent 实测可用）。切换 HDMI 信号源的办法还没找到。",
             "去向" to "**hub · control（第一期）**",
         )
+        text("**原理**\n• HTTP 接口（Webhook）：智能家居平台发一个网络请求，投影仪收到后执行对应操作。\n• 在投影仪本机执行按键，比 Home Assistant 远程通过 ADB 控制更稳：后者要一直保持 ADB 连接，容易断。\n\n**注意**\n• 投影仪「关机」后会睡眠断网（实测），这时收不到任何请求。\n• 切换 HDMI 信号源的办法还没找到（原方案的 xgimi:// 链接已失效）。")
         claim("am start -a android.intent.action.VIEW -d \"xgimi://com.xgimi.home/hdmi\"", Verdict.Disproved, "这个链接实测没有任何界面响应（官方桌面已卸载）。")
     }
     story("Go-11 · 手机把文字和链接发给电视") {
@@ -745,6 +812,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行。打字只支持英文和符号（input text 的限制）。打开视频链接会弹出选择播放器的框（没有默认播放器，实测）。",
             "去向" to "**hub · paste（第一期）**",
         )
+        text("**原理**\n• 文字只存在服务的内存里，不落盘，重启即清空。\n• 「打到电视」用的是 `input text`，它模拟逐个按键输入。\n• 「在电视上打开」用 `am start -a android.intent.action.VIEW -d 链接`，让系统选应用打开。\n\n**注意**\n• `input text` 只能输入英文和符号，中文要另想办法（例如通过剪贴板或输入法接口）。\n• 视频链接会弹出选择播放器的界面，要先装好播放器并设为默认。")
         claim("Android 系统会自动调起内置的最佳播放器（或 VLC）进行硬件解码播放", Verdict.Disproved, "视频链接实测由一个「选择打开方式」的界面接管，不会自动播放。")
     }
     story("Go-15 · 手机当遥控器和触控板") {
@@ -754,6 +822,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "按键和按键宏可行；鼠标需要注入虚拟鼠标设备，/dev/uinput 可写（实测），但系统是否接受虚拟鼠标未验证。",
             "去向" to "**hub · control（第一期按键与宏，第二期触控板）**",
         )
+        text("**原理**\n• WebSocket 是一条一直保持的双向连接，手指滑动的位移能实时传过去，不用每次重新建立连接。\n• 按键宏就是按设定的间隔依次发出多个按键。\n\n**注意**\n• 手机每秒产生几百次滑动事件，要合并后再发（比如每 16 毫秒一次），否则会积压、指针拖尾。\n• 手机锁屏或切到别的 App 会断开连接，网页要能自动重连。")
     }
     story("Go-17 · 网络唤醒") {
         facts(
@@ -762,6 +831,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行。",
             "去向" to "**hub · wol（第一期）**",
         )
+        text("**原理**\n• 网络唤醒（WOL）的「魔术包」是 6 个 0xFF 加上目标网卡的 MAC 地址重复 16 次，通过 UDP 广播发出，关机待命的网卡认出自己的 MAC 就会让电脑开机。\n• 在线状态靠定时 ping 判断。\n\n**注意**\n• 电脑要在 BIOS 里开启网络唤醒；Windows 的「快速启动」会让网卡在关机后彻底断电，要关掉。\n• 广播只在同一网段有效。")
     }
     story("Go-18 · 大屏通知") {
         facts(
@@ -770,6 +840,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "`cmd notification post` 存在（实测），但电视的系统界面会不会把通知显示出来，没有验证。",
             "去向" to "**第二期 · notify（先验证能不能显示）**",
         )
+        text("**原理**\n• `cmd notification post` 可以从命令行发系统通知。\n• 兼容 Gotify、Bark 等推送服务的消息格式，现有的自动化脚本不用改。\n\n**注意**\n• 电视界面可能不显示通知；悬浮窗必须由 App 创建。\n• 短时间内大量通知要合并，避免刷屏。")
         claim("方案 B：通过极简的前端 WebView 浮窗（基于 `android.view.WindowManager` 的悬浮窗图层）", Verdict.Disproved, "悬浮窗必须由一个 App 来创建，命令行进程做不到。")
     }
     story("Go-23 · 物联网消息中心（MQTT）") {
@@ -779,6 +850,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行（1883 是高位端口）。目前家里没有这类设备的需求。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• MQTT 是「发布 / 订阅」模式：传感器把数据发到某个主题，关心这个主题的设备订阅后就会收到，设备之间不用直接连接。\n\n**注意**\n• 离线消息要设过期时间，否则会越积越多。")
     }
     story("Go-31 · 统一控制接口（JSON-RPC）") {
         facts(
@@ -787,6 +859,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行。用更简单的 REST 接口实现即可。",
             "去向" to "**并入 hub · control（第一期）**",
         )
+        text("**原理**\n• JSON-RPC 是一种约定格式的远程调用：发送 {方法名, 参数}，返回结果或错误码。\n\n**注意**\n• 要有鉴权和 IP 限制，防止别人发重启、关机指令。\n• 启动其他 App 时，目标界面要允许外部打开（exported）。")
     }
     story("Go-34 · Webhook 触发动作") {
         facts(
@@ -795,6 +868,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行。执行外部命令时参数要用数组传递、不拼字符串（防注入）。",
             "去向" to "**并入 hub · control（第一期）**",
         )
+        text("**原理**\n• Webhook：外部系统在事件发生时调用一个网址，投影仪收到后按规则执行动作。\n• 可以用 HMAC 签名验证请求确实来自可信方。\n\n**注意**\n• 执行外部命令时参数必须用数组传递，不能拼成一条命令字符串，否则会被注入命令。\n• 每个动作都要有超时。")
     }
     story("Go-40 · Miracast 投屏信令修正") {
         facts(
@@ -803,6 +877,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "不可行：Miracast 由系统投屏应用通过 Wi-Fi 直连建立，外部进程插不进去。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• Miracast 先通过 Wi-Fi 直连（P2P）建立连接，再用 RTSP 协商，最后传输视频流。\n\n**注意**\n• 整个过程由系统投屏应用完成，外部程序插不进中间。")
     }
     story("Go-44 · 接入苹果「家庭」") {
         facts(
@@ -811,6 +886,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "需要 mDNS，而 UDP 5353 已被系统 mdnsd 占用（实测），能否共存未验证。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• HomeKit 配件协议（HAP）：配件在局域网用 mDNS 宣告自己，iPhone 扫码配对后，通过加密连接发送控制指令。\n\n**注意**\n• 配对信息要持久保存，否则重启后 iPhone 显示设备无响应。\n• UDP 5353 已被系统占用，要确认能否共存。")
     }
     story("Go-54 · 传感器数据存储") {
         facts(
@@ -819,6 +895,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行，没有需求。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 降采样：把每秒一个的数据压缩成每 5 分钟一个平均值，长期保存只需要很小的空间。\n\n**注意**\n• 关机前要把内存里的数据写盘；旧数据要定期清理。")
     }
     story("Rust-02 · 遥控器按键重映射") {
         facts(
@@ -827,6 +904,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行：shell 在 input 组，能读遥控器节点（实测）。",
             "去向" to "**tools · keymap（第一期）**",
         )
+        text("**原理**\n• Linux 的输入子系统（evdev）把每个按键变成 /dev/input/eventN 上的一条二进制记录：时间、类型、键码、按下 / 松开。\n• shell 在 input 组里，可以直接读遥控器的节点（实测）。\n\n**注意**\n• 不要「独占」设备（EVIOCGRAB），否则系统收不到原来的按键。\n• 遥控器断开重连后节点号可能变，要按设备名重新查找。")
         claim("启动 Rust 按键监听服务（绑定蓝牙遥控器 event2）", Verdict.Disproved, "event2 是虚拟键盘 qwerty；遥控器是 event13（XGIMI RC Consumer Control）。")
     }
     story("Rust-07 · 蓝牙传感器网关") {
@@ -836,6 +914,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "不可行：内核里没有 hci 蓝牙设备（/sys/class/bluetooth 是空的，实测），蓝牙由厂商自己的驱动层管理。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 蓝牙低功耗（BLE）传感器会定期广播数据，不连接就能被动接收。Linux 一般通过 HCI 套接字直接和蓝牙芯片通信。\n\n**注意**\n• 这台机器的内核里没有 hci 设备（实测），蓝牙由厂商驱动层管理，走不了这条路。\n• Wi-Fi 和蓝牙可能共用一颗芯片，主动扫描会影响遥控器。")
         claim("极米 Z6X Pro 配备了 Wi-Fi/BT 组合芯片（MT7921）", Verdict.Disproved, "USB ID 是 0e8d:7663，一般对应 MT7663，不是 MT7921。")
     }
     story("Rust-13 · WebSocket 广播") {
@@ -845,6 +924,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行；需要时在 hub 里用 Go 实现，不再起一个进程。",
             "去向" to "**不单独做**",
         )
+        text("**原理**\n• 广播通道：一份消息被所有订阅者读取，慢的订阅者跟不上时直接跳过旧消息，不拖累其他人。\n\n**注意**\n• 要靠心跳检测已经断开但没正常关闭的连接。")
     }
     story("Rust-18 · 快速按键注入") {
         facts(
@@ -853,6 +933,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行：遥控器节点和 /dev/uinput 对 shell 都可写（实测）。系统 input 命令实测每次 79~106ms。",
             "去向" to "**tools · key（第一期）**",
         )
+        text("**原理**\n• 系统的 `input` 命令每次都要启动一个 Java 进程，所以慢（实测 80~100 毫秒）。\n• 直接往输入设备写按键事件，或用 /dev/uinput 创建虚拟键盘，每次只要几十微秒。\n\n**注意**\n• 每组事件后必须跟一个同步事件（EV_SYN），否则系统认为按键一直没松开。\n• /dev/uinput 可写，但系统是否接受虚拟键盘还要验证。")
         claim("单次调用耗时长达 200ms ~ 400ms", Verdict.Disproved, "实测 input keyevent 三次分别是 106、79、93 毫秒。慢，但没有这么夸张。")
     }
     story("Rust-21 · Rust 版 MQTT") {
@@ -862,6 +943,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "可行，重复。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 同 Go-23：MQTT 发布 / 订阅消息中转。\n\n**注意**\n• 1883 是高位端口，普通身份可以绑定（原方案说需要 root，不对）。")
         claim("标准 MQTT 端口 1883 需要 root 权限", Verdict.Disproved, "1883 大于 1024，普通身份可以绑定。")
     }
     story("Rust-23 · USB 串口网关") {
@@ -871,6 +953,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "目前没有串口设备节点；串口节点通常只有 root 能读写。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 串口用 termios 设置波特率、数据位等参数后，就是一个可读写的设备文件。\n\n**注意**\n• 串口设备节点一般只有 root 能读写；外接耗电大的设备要用带独立供电的 USB 集线器。")
         claim("在非 root 的 shell 下启动前需执行 `chmod 666 /dev/ttyUSB0`", Verdict.Disproved, "改设备节点权限需要 root。")
     }
     story("Rust-39 · HDMI-CEC 联动") {
@@ -880,6 +963,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "不可行：没有 /dev/cec0（实测）。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• HDMI-CEC 是 HDMI 线里的一根控制线，设备之间可以互相发开机、待机、音量指令。\n\n**注意**\n• 这台机器没有 /dev/cec0（实测）；而且 CEC 通常被系统服务占用。")
     }
     story("Rust-41 · 虚拟 USB 键盘") {
         facts(
@@ -888,6 +972,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "/dev/hidg0 不存在；/dev/uinput 可写，这部分并入 tools · key。",
             "去向" to "**部分并入 tools · key**",
         )
+        text("**原理**\n• USB 设备模式（gadget）可以让设备把自己模拟成键盘；uinput 则是在系统内部创建虚拟输入设备。\n\n**注意**\n• 这台没有 /dev/hidg0；/dev/uinput 可直接写（实测），见 tools · key。\n• 按下后要紧跟松开事件，防止按键卡住。")
         claim("Android 下 `/dev/uinput` 默认可能只属于 `system` 或 `root`，在普通 shell 启动前需通过 `chmod 666 /dev/uinput` 赋予读写权限", Verdict.Disproved, "/dev/uinput 属于 uhid 组，shell 就在这个组里，直接可写（实测）。")
     }
     story("Rust-45 · 蓝牙底层抓包") {
@@ -897,6 +982,7 @@ val ReviewControl = module("review-control", "提案：遥控、自动化与通�
             "在这台投影仪上" to "不可行：内核没有 hci 设备（实测）。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• HCI 是主机和蓝牙芯片之间的通信接口，抓 HCI 包可以看到蓝牙底层的每一条命令和事件。\n\n**注意**\n• 这台机器的内核没有 hci 设备（实测）。")
     }
 
     related("review-summary", "spec-hub", "spec-tools")
@@ -916,6 +1002,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "已实测：电源菜单没有「待机」。「关屏」时安卓照常运行，30 分钟内服务全程在线；「关机」是挂起到内存的睡眠，约 14 秒后断网，开机后原样恢复。",
             "去向" to "**hub 运行前提（已验证，写入规格）**",
         )
+        text("**原理**\n• 安卓的省电机制（Doze）会在屏幕关闭、无操作一段时间后限制后台和网络。\n• 这台投影仪的「关屏」只关光机，安卓认为屏幕还亮着，所以不会触发省电机制（实测）。\n• 「关机」是挂起到内存（Suspend-to-RAM）：CPU 停止，内存保持供电，所有进程冻结，开机原样恢复（实测）。\n\n**注意**\n• 想要 24 小时服务，就用「关屏」而不是「关机」。\n• 服务要能承受突然冻结再醒来：定时任务按实际时间补算，网络连接要能自动重连。")
         claim("按下遥控器关机后，系统通常在 15 分钟后进入深度睡眠（Doze Mode），切断 Wi-Fi 芯片供电并挂起 CPU", Verdict.Disproved, "「关屏」30 分钟没有进入睡眠；「关机」则是 14 秒内就挂起，都和这个说法不符。")
     }
     story("Go-10 · 系统状态面板") {
@@ -925,6 +1012,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行（读这些文件实测可用）。",
             "去向" to "**hub · metrics（第一期）**",
         )
+        text("**原理**\n• /proc 和 /sys 是内核提供的「虚拟文件」，读它们就能拿到 CPU、内存、温度等数据，比调用 dumpsys 快得多。\n• CPU 使用率要隔一段时间读两次 /proc/stat，按差值计算。\n• 判断还剩多少内存要看 MemAvailable，不看 MemFree。\n\n**注意**\n• 采样间隔 5~10 秒就够，太频繁反而增加开销。\n• 有的温度节点可能读不了，读失败时跳过它，不要整个报错。")
         claim("通过直接读取……`/sys/class/thermal/thermal_zone*/temp`（获取光机与核心摄氏度）", Verdict.Disproved, "温度区只有 cpu_thermal 和 vou_thermal，没有光机温度。")
     }
     story("Go-20 · 网页终端") {
@@ -934,6 +1022,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行（/dev/ptmx 可用，实测）。等于把 shell 权限开放给网页，必须鉴权、默认关闭。",
             "去向" to "**第二期 · webshell**",
         )
+        text("**原理**\n• 伪终端（PTY）让程序以为自己连着一个真正的终端，`top`、`vi`、Tab 补全这类交互程序才能正常工作。\n• 网页里用 xterm.js 显示终端，通过 WebSocket 和伪终端双向转发。\n\n**注意**\n• 窗口大小变了要通知伪终端，否则换行会错乱。\n• 这等于把 shell 权限开放给网页，必须鉴权，默认关闭。")
     }
     story("Go-28 · Prometheus 监控接口") {
         facts(
@@ -942,6 +1031,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。",
             "去向" to "**并入 hub · metrics（第一期）**",
         )
+        text("**原理**\n• Prometheus 定时来抓取 `/metrics` 页面，页面是「指标名 值」一行一个的纯文本格式。\n\n**注意**\n• U 盘休眠时读剩余空间可能要等它唤醒，抓取超时要设长一些。")
     }
     story("Go-29 · 统一登录保护") {
         facts(
@@ -950,6 +1040,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。",
             "去向" to "**简化为 hub · core 的 token 鉴权（第一期）**",
         )
+        text("**原理**\n• 反向代理：所有请求先到一个入口，鉴权通过后再转给后面真正的服务，各个服务就不用各自做登录。\n\n**注意**\n• 网页终端等用到 WebSocket 的服务，代理要正确转发升级请求。\n• 转发大文件时不要把请求内容整个缓存或记日志。")
     }
     story("Go-43 · 日志集中查看") {
         facts(
@@ -958,6 +1049,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。hub 是单进程，只需要自己的日志轮转和查看接口。",
             "去向" to "**简化为 hub · core 的日志（第一期）**",
         )
+        text("**原理**\n• 日志集中：各服务把日志发到一个地方，按时间和来源统一查询。\n\n**注意**\n• hub 是单进程，日志本来就在一处，做好轮转和查看接口即可。")
     }
     story("Go-58 · 网页改配置") {
         facts(
@@ -966,6 +1058,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。",
             "去向" to "**hub · core 配置页（第二期；第一期只读展示）**",
         )
+        text("**原理**\n• 根据配置的结构（字段名、类型、说明）自动生成表单，不用为每个配置手写页面。\n• 保存时先写临时文件、校验通过后再替换，断电也不会把配置写坏。\n\n**注意**\n• 要防跨站请求伪造（CSRF），防止打开恶意网页时配置被偷偷改掉。")
     }
     story("Go-60 · 把 Go 服务合成一个程序（Z6X Hub）") {
         facts(
@@ -974,6 +1067,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "这个方向被采纳为 z6x-hub 的架构（见规格）。",
             "去向" to "**hub 架构**",
         )
+        text("**原理**\n• 多个服务合进一个 Go 进程，共用一套运行时和内存，比每个服务一个进程省内存。\n• 每个模块实现同一个接口（启动、停止、注册路由），按配置决定启动哪些。\n\n**注意**\n• 一个模块崩溃不能拖垮整个进程：每个模块的协程里都要 recover。\n• 启动时统一检查端口冲突。")
         claim("storage_root: /mnt/media_rw/USB_DISK", Verdict.Disproved, "/mnt/media_rw 对 shell 不可访问（实测）。")
     }
     story("Rust-01 · 进程看门狗") {
@@ -983,6 +1077,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。原方案担心的「看门狗被低内存回收杀掉」不会发生（见错误卡片）。",
             "去向" to "**tools · run（第二期）**",
         )
+        text("**原理**\n• `kill(pid, 0)` 不发送任何信号，只检查这个进程是否存在、自己有没有权限，是检测进程存活最轻的办法。\n• Rust 没有垃圾回收，内存在编译时就确定何时释放，常驻小工具可以做到 1MB 级别的内存占用。\n\n**注意**\n• 进程号会被回收再分配，检测时还要核对 /proc/<pid>/cmdline 确认是同一个程序。\n• 交叉编译 musl 静态版本需要 musl 工具链，或者用 cross 在容器里编译。")
         claim("当电视前台播放 4K 超高清电影……连看门狗本身都会被 Android TV 的 LMK（低内存查杀）机制一同杀死", Verdict.Disproved, "从 ADB 启动的进程 oom_score_adj 是 -1000（继承 adbd），不会被内存回收杀掉。")
     }
     story("Rust-08 · 崩溃黑匣子") {
@@ -992,6 +1087,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "内核日志读不到（/proc/kmsg、dmesg 都没有权限，实测）；logcat 本身已有 crash 缓冲区。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 固定大小的环形缓冲区：新日志不断覆盖最旧的，内存占用恒定；出事时把缓冲区写盘。\n\n**注意**\n• 内核日志在这台机器上读不到（实测）。写盘后要 fsync，否则断电可能丢失。")
         claim("后台通过读取 `/proc/kmsg`（内核日志流）", Verdict.Disproved, "/proc/kmsg 对 shell 不可读（实测）。")
     }
     story("Rust-12 · 日志脱敏与轮转") {
@@ -1001,6 +1097,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行；更简单的做法是服务自己不写敏感信息。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 多模式匹配（Aho-Corasick）：一次扫描同时匹配多种敏感信息（IP、Token、MAC），再替换成占位符（如 [已隐藏]）。\n\n**注意**\n• 规则要带上下文（如 `token=`），否则会把普通数字误替换；日志写不动时宁可丢弃调试日志，也不能卡住上游服务。")
     }
     story("Rust-14 · 系统指标") {
         facts(
@@ -1009,6 +1106,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行（实测）。",
             "去向" to "**tools · sys（第一期）**",
         )
+        text("**原理**\n• 直接读 /proc 文本，只取需要的几项，用栈上的固定缓冲区，避免分配内存。\n\n**注意**\n• 温度原始值是千分之一摄氏度，用整数除以 1000 即可。")
     }
     story("Rust-19 · 进程守护") {
         facts(
@@ -1017,6 +1115,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。",
             "去向" to "**tools · run（第二期，与 Rust-01 合并）**",
         )
+        text("**原理**\n• 进程守护：父进程负责启动子进程，用 waitpid 回收退出的子进程（否则会留下僵尸进程），按策略重启。\n• 收到 SIGHUP 时重新读取配置。\n\n**注意**\n• 子进程反复崩溃时要逐渐拉长重启间隔，避免死循环占满 CPU。\n• 退出时先发 SIGTERM，等几秒再发 SIGKILL。")
     }
     story("Rust-28 · 定时任务调度") {
         facts(
@@ -1025,6 +1124,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行；hub 内部有定时功能即可。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 时间轮：把定时任务按到期时间放进环形的「格子」，每次只看当前格子，任务再多开销也不变。\n\n**注意**\n• 要用单调时钟（CLOCK_MONOTONIC），否则网络对时把时间调回去会出问题。")
     }
     story("Rust-29 · 温度监控") {
         facts(
@@ -1033,6 +1133,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。",
             "去向" to "**并入 tools · sys**",
         )
+        text("**原理**\n• 定时读温度节点，除了看是否超过阈值，还可以看升温速度提前预警。\n\n**注意**\n• 不同机器温度区的顺序和名字不一样，要先读 type 确认；这台只有 cpu_thermal 和 vou_thermal。")
         claim("追踪 CPU 核心、GPU 以及光学投影模组温度趋势", Verdict.Disproved, "只有 cpu_thermal 和 vou_thermal 两个温度区，没有光学模组温度。")
     }
     story("Rust-31 · 目录变化监听") {
@@ -1042,6 +1143,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行。监听数量上限是 8192（实测）。",
             "去向" to "**tools · watch（第一期）**",
         )
+        text("**原理**\n• inotify：内核在文件被创建、写完、移动时主动通知程序，不需要定时扫描目录。\n• CLOSE_WRITE 表示文件写完并关闭，这时再处理就不会读到半截文件。\n\n**注意**\n• 能同时监听的数量有上限（这台是 8192，实测），扩大它需要 root。\n• 跨分区移动其实是复制加删除，要监听 CLOSE_WRITE 而不只是 MOVED_TO。")
     }
     story("Rust-32 · 显存直读截图") {
         facts(
@@ -1050,6 +1152,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "不可行：fb0 属于 graphics 组，shell 不在其中（实测）。用 adb exec-out screencap 即可。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• 帧缓冲（/dev/graphics/fb0）里就是屏幕像素，映射进内存直接读就是截图。\n\n**注意**\n• fb0 属于 graphics 组，shell 读不了（实测）；播放有版权保护的视频时截图会是黑的。")
     }
     story("Rust-33 · 共享内存状态") {
         facts(
@@ -1058,6 +1161,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行，没有需求。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 多个进程映射同一个文件，用原子操作读写其中的变量，就能在进程之间瞬间共享状态。\n\n**注意**\n• ARM 是弱内存模型，原子操作要用正确的内存顺序；Android 上不一定有 /dev/shm，可以用 /data/local/tmp 下的文件。")
     }
     story("Rust-37 · 终端会话保持") {
         facts(
@@ -1066,6 +1170,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行（/dev/ptmx 可用）。",
             "去向" to "**第三期候选**",
         )
+        text("**原理**\n• 会话保持：一个后台进程托管伪终端，客户端断开后程序继续运行，重新连接时再接回来，和 tmux 一样。\n\n**注意**\n• 要转发窗口大小变化；终端编码设成 UTF-8，否则中文乱码。")
     }
     story("Rust-43 · Rust 版网页终端") {
         facts(
@@ -1074,6 +1179,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行，重复。",
             "去向" to "**并入 hub · webshell（第二期）**",
         )
+        text("**原理**\n• 同 Go-20：网页终端。\n\n**注意**\n• 必须鉴权。")
     }
     story("Rust-44 · 共享内存队列") {
         facts(
@@ -1082,6 +1188,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "可行，没有需求。",
             "去向" to "**不纳入**",
         )
+        text("**原理**\n• 单生产者单消费者的环形缓冲放在共享内存里，两端各管一个位置指针，用原子操作同步，不需要锁和系统调用。\n\n**注意**\n• 一端崩溃时另一端不能无限空转。")
     }
     story("Rust-48 · 资源限额沙箱") {
         facts(
@@ -1090,6 +1197,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "不可行：cgroup 对 shell 不可写（实测）。降低优先级（nice）可以，但不值得单独做。",
             "去向" to "**不可行**",
         )
+        text("**原理**\n• cgroup 是 Linux 限制一组进程 CPU 和内存用量的机制。\n\n**注意**\n• cgroup 对 shell 不可写（实测）；能做的只有降低进程优先级（nice）。")
     }
     story("Rust-49 · Rust 底座（Z6X Rust Core）") {
         facts(
@@ -1098,6 +1206,7 @@ val ReviewSystem = module("review-system", "提案：系统、运维与架构") 
             "在这台投影仪上" to "改为命令集：Rust 里可行的几乎都是「跑一次给结果」的工具，不需要常驻；原方案选的音频、蓝牙两个模块在这台机器上不可行。",
             "去向" to "**改为 z6x-tools 命令集（见规格）**",
         )
+        text("**原理**\n• 原方案是 Rust 常驻底座和 Go hub 两个常驻进程：Go 负责业务，Rust 负责底层硬件。\n• 审核后的做法：Rust 改成用完即退出的命令集，只有按键重映射常驻；hub 需要底层能力时调用它。\n\n**注意**\n• 原方案选的音频直写、蓝牙原始套接字在这台机器上都做不到。")
         claim("Rust 专注跑底层硬件（Watchdog、evdev 输入、音频硬件直写、蓝牙原始套接字）", Verdict.Disproved, "音频直写、蓝牙原始套接字在这台机器上都做不到（实测）。")
     }
 

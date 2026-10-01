@@ -59,6 +59,7 @@ import z6x.content.stack.ComposeInProject
 import z6x.content.stack.GitInProject
 import z6x.content.stack.GradleBasics
 import z6x.content.stack.InstallJdk
+import z6x.content.stack.JavaMemory
 import z6x.content.stack.KotlinInProject
 import z6x.content.stack.ProjectLayout
 import z6x.framework.Category
@@ -126,7 +127,7 @@ object Content {
             listOf(
                 Category("环境搭建", "📦", "在 Steam Deck 上准备开发环境", listOf(InstallJdk, GradleBasics)),
                 Category("读懂代码", "📘", "这个项目里用到的 Kotlin 和 Compose 写法", listOf(KotlinInProject, ComposeInProject)),
-                Category("项目日常", "🧭", "目录结构、运行与检查、Git", listOf(ProjectLayout, GitInProject)),
+                Category("项目日常", "🧭", "目录结构、运行与检查、Git", listOf(ProjectLayout, GitInProject, JavaMemory)),
             ),
         ),
     )

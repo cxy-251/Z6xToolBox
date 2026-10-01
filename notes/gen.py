@@ -4,6 +4,7 @@
 import glob, os, re, sys
 sys.path.insert(0, sys.argv[1])
 from proposals import GO, RS, GROUPS
+from proposals_tech import T
 
 root = os.path.abspath(os.path.join(sys.argv[1], '..'))
 old = root + '/Z6xToolBox.App/Content/Modules/'
@@ -28,6 +29,9 @@ def entry(kind, n):
     for k, v in (('用途', use), ('做法', how), ('在这台投影仪上', here), ('去向', f'**{dest}**')):
         out += f'            {q(k)} to {q(v)},\n'
     out += '        )\n'
+    how_, care = T[kind, n]
+    body = '**原理**\n' + '\n'.join('• ' + x for x in how_) + '\n\n**注意**\n' + '\n'.join('• ' + x for x in care)
+    out += '        text(' + q(body).replace('\n', '\\n') + ')\n'
     for quote, verdict, finding in wrong:
         if any(seg.strip() not in src for seg in quote.split('……')):
             errors.append((tag, quote[:30]))

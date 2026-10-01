@@ -228,3 +228,77 @@ val ProjectLayout = module("project-layout", "这个项目的结构与日常操�
 
     related("gradle-basics", "git-in-project", "kotlin-in-project")
 }
+
+val JavaMemory = module("java-memory", "案例：后台 Java 进程越来越占内存") {
+    keywords = "Gradle 守护进程 · Kotlin 编译守护进程 · -Xmx · idletimeout · jps"
+    overview = """
+        用了一段时间后，Deck 后台的 Java 进程合计占了 2~3GB 内存，而且越用越多。原因不是工具箱代码里的内存泄漏，而是**本项目的构建和启动方式有缺陷**：每次运行都可能多留下一个常驻的 Gradle 进程，每个都允许用到 2GB。已修复（提交 2f6aed6）。
+    """
+    verified("2026-10-01")
+
+    why("先弄懂三件事") {
+        text("""
+            • **Gradle 守护进程（GradleDaemon）**：`./gradlew` 本身很轻，真正干活的是一个常驻后台的 Java 进程。它编译完不退出，留着给下次用，下次编译就快很多。默认空闲 **3 小时**才退出。
+            • **Kotlin 编译守护进程（KotlinCompileDaemon）**：编译 Kotlin 时 Gradle 还会另起一个常驻进程，同样编译完不退出。
+            • **-Xmx 是 Java 堆的上限**：Java 进程用到多少就向系统要多少，垃圾回收后一般**不会**马上把内存还给系统，所以进程占用的内存会停在用过的最高点附近，看上去像「只涨不降」。
+        """)
+    }
+
+    story("原来的配置为什么会越来越多") {
+        facts(
+            "gradle.properties" to "Gradle 守护进程和 Kotlin 守护进程都设成 `-Xmx2g`：每个最多可以占 2GB",
+            "run.sh" to "原来是 `./gradlew :composeApp:run`：工具箱窗口在 Gradle 守护进程里面运行，**窗口不关，这个守护进程就一直「忙」**",
+            "忙的守护进程不能复用" to "这时再执行任何 `./gradlew`（编译、--check、再开一个窗口），Gradle 发现已有的守护进程在忙，就**新起一个**。开几次就多几个",
+            "空闲 3 小时才退出" to "关掉窗口后，这些守护进程还要空闲 3 小时才退出，在这之前一直占着内存",
+            "结果" to "几个 Gradle 守护进程 + Kotlin 守护进程 + 工具箱本身，合计约 3GB",
+        )
+        text("所以是**项目缺陷**：工具箱代码本身没有泄漏，但启动方式让守护进程堆积，这是当初写 run.sh 和 gradle.properties 时没考虑到的。")
+    }
+
+    steps("怎么查是谁在占内存") {
+        read("列出所有 Java 进程", "jps -l", Host.Deck) {
+            note = "jps 是 JDK 自带的命令。GradleDaemon、KotlinCompileDaemon、z6x.MainKt（工具箱本身）分别是什么，一眼就能看出来。"
+        }
+        read("看每个 Java 进程实际占的内存", "ps -C java -o pid,rss,etime,args --sort=-rss | cut -c1-150", Host.Deck) {
+            note = "RSS 是实际占用的物理内存（单位 KB），etime 是运行了多久。运行了很久、又不是工具箱窗口的，就是闲置的守护进程。"
+        }
+        change("让 Gradle 守护进程退出", "./gradlew --stop", Host.Deck) {
+            note = "只停当前 Gradle 版本的守护进程。Kotlin 守护进程空闲一段时间后会自己退出；急着释放的话，用 jps 查到进程号后 `kill 进程号`。"
+        }
+    }
+
+    steps("修复（已提交）") {
+        change("gradle.properties：降低上限、缩短空闲时间", """
+            org.gradle.jvmargs=-Xmx1g -Dfile.encoding=UTF-8
+            org.gradle.daemon.idletimeout=900000
+            kotlin.daemon.jvmargs=-Xmx1g
+        """, Host.Deck) {
+            note = "两个守护进程最多各 1GB（编译这个项目足够）；Gradle 守护进程空闲 15 分钟（900000 毫秒）就退出。"
+        }
+        change("run.sh：Gradle 只负责编译，窗口由 java 直接启动", """
+            ./gradlew -q :composeApp:writeDesktopClasspath || exit 1
+            exec java -Xmx512m -cp "$(cat build/desktop.classpath)" z6x.MainKt "$@"
+        """, Host.Deck) {
+            note = "writeDesktopClasspath 是 composeApp/build.gradle.kts 里加的任务：编译后把运行需要的所有 jar 和 class 目录写进 build/desktop.classpath。Gradle 做完这一步就空闲了，下次 `./gradlew` 能直接复用它，不会再新起。工具箱自己是一个独立的 java 进程，堆上限 512MB，关窗口就退出。"
+        }
+    }
+
+    verify("修复后的效果") {
+        facts(
+            "清理后" to "可用内存回到 7.6GB 左右（Deck 共 14GB）",
+            "常驻的进程" to "最多一个 Gradle 守护进程、一个 Kotlin 守护进程（各 ≤1GB），外加开着的工具箱窗口",
+            "实测（连续两次 ./run.sh --check）" to "两次用的是同一个 Gradle 守护进程（进程号不变），没有新起；Gradle 守护进程约 430MB、Kotlin 守护进程约 730MB",
+            "不用时" to "15 分钟后 Gradle 守护进程自动退出，关掉窗口工具箱进程也退出",
+        )
+    }
+
+    lesson("经验") {
+        text("""
+            • 看到 Java 占内存大，先用 `jps -l` 分清是哪个进程，不要直接认定是「内存泄漏」。真正的泄漏是**同一个进程**的占用随时间不断上涨；这次是**进程数量**在增加。
+            • Gradle 的 run 任务适合偶尔跑一下；需要反复打开的桌面程序，让 Gradle 只管编译，程序自己单独启动。
+            • 清理进程时按进程号 kill。不要用 `pkill -f GradleDaemon`：它按整条命令行匹配，可能把正在执行这条命令的 shell 自己也杀掉（这个项目里真的发生过）。
+        """)
+    }
+
+    related("gradle-basics", "project-layout", "install-jdk")
+}
