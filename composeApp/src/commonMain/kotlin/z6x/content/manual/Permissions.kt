@@ -107,18 +107,55 @@ val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为
         }
     }
 
-    verify("对照表（ADB 均为 2026-10-01 实测）") {
+    steps("SSH 那一侧（App 身份）") {
+        read("SSH 里的身份", "id", Host.Ssh) {
+            captured("2026-10-01", "uid=10068(u0_a68) gid=10068(u0_a68) groups=10068(u0_a68),3003(inet),9997(everybody),20068(u0_a68_cache),50068(all_a68) context=u:r:untrusted_app_27:s0:c68,c256,c512,c768")
+            note = "只有联网（inet）和几个 App 自己的组，没有 input、log、readproc。SELinux 域是 untrusted_app_27（普通 App），后面的 c68… 是把各个 App 互相隔开的标签。"
+        }
+        read("SSH 能看到几个进程", "ls /proc | grep -c '^[0-9]'", Host.Ssh) {
+            varies = true
+            captured("2026-10-01", "3")
+            note = "只看得到自己（SSH 服务、当前 shell、这条命令）。ADB 里 `ps -A` 有三百多个：安卓给 /proc 设置了「隐藏别人的进程」，只有 readproc 组能看到全部，shell 在这个组里。"
+        }
+        read("dumpsys", "dumpsys battery", Host.Ssh) {
+            expectsError = true
+            varies = true
+            captured("2026-10-01", "Permission Denial: can't dump BatteryService from from pid=30506, uid=10068 due to missing android.permission.DUMP permission")
+            note = "第二层直接拒绝：缺少 DUMP 权限。meminfo、wifi 等其他 dumpsys 也一样。"
+        }
+        read("连读设置都不行", "settings get global adb_enabled 2>&1 | grep -m1 SecurityException", Host.Ssh) {
+            expectsError = true
+            varies = true
+            captured("2026-10-01", "java.lang.SecurityException: Permission Denial: getCurrentUser() from pid=30531, uid=10068 requires android.permission.INTERACT_ACROSS_USERS")
+            note = "不是读设置本身被拒：settings 命令要先问系统「当前是哪个用户」，这一步需要跨用户的权限，App 没有。"
+        }
+        read("logcat 能看到多少", "logcat -d | wc -l", Host.Ssh) {
+            varies = true
+            captured("2026-10-01", "22")
+            note = "只有 SSH 这个 App 自己的日志（几十行）。没有 READ_LOGS 权限、也不在 log 组，看不到别的 App 和系统的日志。`logcat -g`（看缓冲区大小）倒是可以。"
+        }
+        read("读遥控器输入设备", "cat /dev/input/event0", Host.Ssh) {
+            expectsError = true
+            captured("2026-10-01", "cat: /dev/input/event0: Permission denied")
+            note = "设备属于 root:input，App 不在 input 组：第一层拒绝。"
+        }
+    }
+
+    verify("对照表（2026-10-01 实测）") {
         facts(
-            "pm list / getprop / 读 /proc" to "SSH ✓　ADB ✓（不需要特殊权限）",
-            "pm disable-user、am start" to "SSH ✗ SecurityException（实测，见「SSH 能查不能改」）　ADB ✓（第二层）",
-            "pm uninstall / clear" to "SSH 未验证（没法安全地测）　ADB ✓ 有 DELETE_PACKAGES 等权限",
-            "settings put global、wm density" to "SSH 未验证　ADB ✓ 有 WRITE_SECURE_SETTINGS",
-            "完整的 dumpsys、logcat" to "SSH 未验证　ADB ✓ 有 DUMP、READ_LOGS",
-            "读遥控器 /dev/input/event*" to "SSH 未验证（设备属于 root:input，App 身份不在 input 组，按第一层规则应该读不了）　ADB ✓（input 组）",
-            "访问 /data/local/tmp" to "SSH ✗ Permission denied　ADB ✓",
-            "kill 别的 App、读别人的 smaps" to "**ADB 也 ✗**（第一层）；用 am force-stop、dumpsys meminfo 代替",
-            "抓包、改系统时间（date -s）、声卡" to "**ADB 也 ✗**（没有 capability；声卡不对 shell 开放）",
-            "通过系统服务设置时间" to "未验证：shell 有 SET_TIME 权限，理论上能走系统服务改时间",
+            "getprop、pm list、读 /proc/meminfo" to "SSH ✓　ADB ✓",
+            "看到所有进程（ps -A）" to "SSH ✗ 只看到自己　ADB ✓（readproc 组）",
+            "dumpsys" to "SSH ✗ 缺 DUMP 权限　ADB ✓",
+            "settings get / put" to "SSH ✗ 连 get 都不行　ADB ✓（WRITE_SECURE_SETTINGS）",
+            "logcat" to "SSH 只有自己的日志　ADB 全部（log 组、READ_LOGS）",
+            "pm disable-user、am start" to "SSH ✗ SecurityException（见「SSH 能查不能改」）　ADB ✓",
+            "pm uninstall / clear" to "SSH 未验证（没法安全地测）　ADB ✓",
+            "读遥控器 /dev/input/event*" to "SSH ✗　ADB ✓（input 组）",
+            "访问 /data/local/tmp" to "SSH ✗　ADB ✓",
+            "/cache/recovery" to "**两边都 ✗** Permission denied",
+            "kill 别的 App、读别人的 smaps" to "**ADB 也 ✗**；用 am force-stop、dumpsys meminfo 代替",
+            "抓包、改系统时间（date -s）、声卡" to "**两边都 ✗**（没有 capability；声卡属于 audio 组）",
+            "通过系统服务设置时间" to "未验证：shell 有 SET_TIME 权限，理论上可以",
         )
     }
 
@@ -139,6 +176,13 @@ val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为
             "shell 确实没有任何 capability（CapEff 全 0），date -s 改不了。但 shell 有 SET_TIME 安卓权限，可能可以通过系统服务直接设时间，没有实测。")
         claim("SSH 进程归属于 u:r:untrusted_app:s0 域，受 Android CTS 严格沙盒限制，无法访问 /data/local/tmp 甚至大部分 /data 目录。", Verdict.Confirmed,
             "域名和 /data/local/tmp 被拒绝都实测过（见「SSH 能查不能改」）。但拒绝来自第一层的用户和组：这台是 Permissive，SELinux 不拦截。")
+        claim("dumpsys battery：SSH（UID 10068）与 ADB 均可读取。", Verdict.Disproved, "SSH 里报 Permission Denial：缺少 DUMP 权限。只有 ADB 能读。")
+        claim("dumpsys meminfo --oom：SSH 下执行会报安全限制（无 DUMP 权限）；ADB 拥有完整 DUMP 权限。", Verdict.Confirmed, "两边都实测，与描述一致。")
+        claim("logcat：SSH 受限，只能读取属于本 App 的日志；ADB 拥有完整日志缓冲区读取权。", Verdict.Confirmed, "SSH 里 logcat -d 只有 22 行，全是 SimpleSSHD 自己的。")
+        claim("/dev/input/event*：SSH 执行 getevent 报 Permission denied；ADB 拥有 input 组权限。", Verdict.Confirmed, "SSH 读 event0 被拒；ADB 的 id 里有 input 组。")
+        claim("/cache/recovery/：属于 system:cache，模式 770，普通应用（SSH）无权读取，ADB 可正常查看。", Verdict.Disproved, "ADB 也是 Permission denied（shell 不在 cache 组）。")
+        claim("/mnt/vendor/xgimiconfig：root:root 755，SSH 与 ADB 均可只读遍历目录，但均无写权限。", Verdict.Confirmed, "两边都能列出 G0073 等目录；ADB 试着建文件被拒。")
+        claim("settings put global http_proxy：SSH 无权写入全局设置（SecurityException）；ADB 拥有完整权限。", Verdict.Confirmed, "SSH 里连 `settings get` 都报 SecurityException（需要 INTERACT_ACROSS_USERS）。")
         claim("极米 Z6X Pro 内部未配备 RTC 硬件时钟电池，断电后重新上电系统时间会回退至 1970 年或出厂固件打包时间。", Verdict.Unverified,
             "没有 /dev/rtc 设备，这一点符合。时间具体回退到哪里没有测（要断电又断网）。")
     }
