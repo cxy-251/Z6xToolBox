@@ -56,6 +56,8 @@ data class Step(
     val expectsError: Boolean = false,
     /** 只读但不适合自动试跑（持续运行、需要交互、耗时很长）。 */
     val manual: Boolean = false,
+    /** 输出每次都会变（内存、磁盘占用、温度），试跑时不和实测记录对比。 */
+    val varies: Boolean = false,
 )
 
 /** 段落里的一项：要么是一段文字，要么是一条指令，要么是一张键值表。 */

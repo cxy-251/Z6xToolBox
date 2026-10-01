@@ -84,7 +84,7 @@ object Tools {
 
                 val (code, out) = runCatching { execute(s) }.getOrElse { -1 to "执行失败：${it.message}" }
                 val bad = (code != 0 || errorText.containsMatchIn(out)) && !s.expectsError
-                val diff = s.output.isNotEmpty() && normalize(out) != normalize(s.output)
+                val diff = s.output.isNotEmpty() && !s.varies && normalize(out) != normalize(s.output)
                 when {
                     bad -> { failed++; println("  ✗ 「${s.title}」退出码 $code") }
                     diff -> { changed++; println("  △ 「${s.title}」输出与 ${s.capturedOn} 的实测记录不同") }
@@ -103,19 +103,24 @@ object Tools {
     private fun skipReason(s: Step): String? = when {
         s.risk != Risk.Read -> "不是只读步骤"
         s.manual -> "标记为手动执行"
-        s.host !in setOf(Host.Adb, Host.Deck) -> "执行位置是 ${s.host.label}"
+        s.host !in setOf(Host.Adb, Host.Deck, Host.Ssh) -> "执行位置是 ${s.host.label}"
         Regex("""<[^<>\s]+>""").containsMatchIn(s.command) -> "含占位符"
         else -> null
     }
 
     private fun execute(s: Step): Pair<Int, String> = when (s.host) {
         Host.Adb -> runBlockingShell(DefaultAddress, s.command)
-        else -> {
-            val p = ProcessBuilder("bash", "-c", s.command).redirectErrorStream(true).start()
-            if (!p.waitFor(20, TimeUnit.SECONDS)) { p.destroyForcibly(); -1 to "超时（20 秒）" }
-            else p.exitValue() to p.inputStream.bufferedReader().readText().trim()
-        }
+        // SSH 步骤：用 ~/.ssh/config 里的 z6x 别名免密登录（见「SSH 免密登录 SimpleSSHD」）；BatchMode 防止卡在密码提示
+        Host.Ssh -> process(listOf("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "z6x", s.command))
+        else -> process(listOf("bash", "-c", s.command))
     }
 
-    private fun normalize(s: String) = s.lines().joinToString("\n") { it.trimEnd() }.trim()
+    private fun process(cmd: List<String>): Pair<Int, String> {
+        val p = ProcessBuilder(cmd).redirectErrorStream(true).start()
+        if (!p.waitFor(20, TimeUnit.SECONDS)) { p.destroyForcibly(); return -1 to "超时（20 秒）" }
+        return p.exitValue() to p.inputStream.bufferedReader().readText().trim()
+    }
+
+    // 只比较内容，忽略每行首尾空白（输出的缩进对比较没有意义）
+    private fun normalize(s: String) = s.lines().joinToString("\n") { it.trim() }.trim()
 }

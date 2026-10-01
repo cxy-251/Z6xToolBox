@@ -20,7 +20,7 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
     }
 
     story("关键发现：底层早就配好了") {
-        text("翻系统属性时发现三处关键配置（属性值与身份无关，用哪种 shell 读结果都一样）：")
+        text("翻系统属性时发现三处关键配置：")
         read("网络调试端口", "getprop service.adb.tcp.port", Host.Ssh) {
             captured("2026-10-01", "5555")
             note = "adbd 启动后会监听这个 TCP 端口。"
@@ -53,6 +53,33 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
         }
     }
 
+    story("事后验证：普通 App 真的能设置系统属性吗") {
+        text("""
+            上面说"能成功是因为 Permissive"，这是推理。2026-10-01 配好 SSH 免密登录后，用实验验证了一次。
+            **第一个办法：** 在 SSH 里再执行一次 `setprop ctl.start adbd`（adbd 已经在运行，init 会忽略这个请求，没有副作用），然后去日志里找 SELinux "违规但放行"的记录。
+        """)
+        change("SSH 里再发一次启动请求", "setprop ctl.start adbd; echo exit=${'$'}?", Host.Ssh) {
+            captured("2026-10-01", "exit=0")
+            note = "`${'$'}?` 是上一条命令的退出码，0 表示成功。adbd 的进程号前后没变，说明 init 确实忽略了这次请求。"
+        }
+        text("""
+            日志里没找到任何记录：这台机器的 init 不记录控制消息，`logcat -b all` 全量搜索还因为缓冲区太大超时了。**此路不通。**
+            **换方案：** 不找日志，直接做一个能看到结果的实验。写一个无害的调试属性 `debug.z6x.test`。正常（Enforcing）的安卓上，普通 App 没有权限写 debug 类属性；如果这里能写进去，就证明 SELinux 没在拦。
+        """)
+        change("App 身份写一个调试属性", "setprop debug.z6x.test 1; echo exit=${'$'}?; getprop debug.z6x.test", Host.Ssh) {
+            captured("2026-10-01", """
+                exit=0
+                1
+            """)
+            note = """
+                写进去了。实验后用 `setprop debug.z6x.test ""` 清空。
+                **意外发现：** setprop 不能删除属性，只能把值清空。之后 `getprop` 列出全部属性时仍有一行 `[debug.z6x.test]: []`，要到重启才消失（debug.* 不持久化）。
+                「案例：查出真实型号和芯片」里用 `grep z6x` 搜属性时就多出了这一行，被 `--try-read` 发现了。
+            """
+            outcome = "证实：在这台机器上，普通 App 可以设置本该被 SELinux 拦下的属性。"
+        }
+    }
+
     consequences {
         text("""
             • 断电重启后 adbd 不一定还在：需要时再从 SSH 执行一次 `setprop ctl.start adbd`。所以 SimpleSSHD **不要卸载**。
@@ -66,7 +93,7 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
             • 旧版写的另一种办法 `setprop xgimi.remoteDebug.on 1` 没有依据：这个属性在实机上的值是 `false`，ADB 并不是靠它开的，已删除。
             • 旧版第 5 篇说 ADB "默认开放无需授权"，第 8 篇又说要强开，两者矛盾。准确说法是：端口和免授权是**预设好的**，但 adbd 默认**不运行**，要手动拉起。
             • 旧版没提 SELinux。不知道 Permissive 这个前提，就解释不了为什么普通 App 能启动系统服务。
-            • 本页的"部分核实"：属性值和身份都在 2026-10-01 核对过；`setprop ctl.start adbd` 那一步发生在当时，现在 adbd 已经在运行，没有重新演示。
+            • 属性值、身份、Permissive 放行都在 2026-10-01 实验核对过。唯一没重现的是"adbd 没运行时执行 setprop 把它拉起来"那一刻：现在 adbd 已在运行，为此去关掉它会断开 ADB，不值得。
         """)
     }
 

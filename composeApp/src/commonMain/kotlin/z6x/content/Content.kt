@@ -1,7 +1,17 @@
 package z6x.content
 
 import z6x.content.inspect.FindRealModel
+import z6x.content.inspect.Pivots
+import z6x.content.inspect.SshKeyLogin
+import z6x.content.inspect.TvScreencap
+import z6x.content.records.AppInstallOrder
+import z6x.content.records.DeckHdmi
+import z6x.content.records.FindAdbEntry
 import z6x.content.records.ForceAdb
+import z6x.content.records.LanShare
+import z6x.content.records.SshPermissionWall
+import z6x.content.records.SshProbe
+import z6x.content.records.UsbApk1
 import z6x.content.stack.InstallJdk
 import z6x.framework.Category
 import z6x.framework.Scope
@@ -16,14 +26,19 @@ object Content {
             "records", "📖", "折腾记录",
             "从拿到投影仪到接管系统的真实经过：每一步尝试了什么、为什么失败、最后怎么解决。",
             listOf(
-                Category("设备接入", "🔌", "从 U 盘装 App、SSH 到强开 ADB", listOf(ForceAdb)),
+                Category(
+                    "设备接入", "🔌", "从 U 盘装 App、SSH 到强开 ADB",
+                    listOf(DeckHdmi, UsbApk1, LanShare, AppInstallOrder, SshProbe, SshPermissionWall, FindAdbEntry, ForceAdb),
+                ),
             ),
         ),
         Scope(
             "inspect", "🔍", "学会查设备",
             "用 adb 查这台投影仪的硬件、系统和权限。每页都是一次真实的核查过程。",
             listOf(
+                Category("连接设备", "📶", "ADB、SSH、截图：先连上，才能查", listOf(SshKeyLogin, TvScreencap)),
                 Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel)),
+                Category("经验", "💡", "一条路不通时怎么换", listOf(Pivots)),
             ),
         ),
         Scope(

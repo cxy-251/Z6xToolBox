@@ -83,6 +83,7 @@ class StepBuilder {
     var capturedOn = ""
     var expectsError = false
     var manual = false
+    var varies = false
 
     /** 记录实测输出：captured("2026-10-01", "...")。 */
     fun captured(date: String, text: String) {
@@ -92,5 +93,5 @@ class StepBuilder {
     }
 
     internal fun build(title: String, command: String, risk: Risk, host: Host) =
-        Step(title, command, risk, host, note.trimIndent(), outcome.trimIndent(), output, capturedOn, expectsError, manual)
+        Step(title, command, risk, host, note.trimIndent(), outcome.trimIndent(), output, capturedOn, expectsError, manual, varies)
 }

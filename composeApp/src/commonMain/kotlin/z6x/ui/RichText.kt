@@ -42,9 +42,18 @@ fun inlineMarkup(line: String): AnnotatedString = buildAnnotatedString {
     flush()
 }
 
+/** 序号行只加粗"1. 小标题："部分；没有冒号，或冒号落在 `代码` 里面时不加粗。 */
+private fun boldLead(line: String): String {
+    val colon = line.indexOfFirst { it == '：' || it == ':' }
+    if (colon < 1) return line
+    val lead = line.substring(0, colon + 1)
+    if (lead.count { it == '`' } % 2 != 0) return line
+    return "**" + lead.replace("**", "") + "**" + line.substring(colon + 1)
+}
+
 /**
  * 渲染一段多行文字：每行一个 Text。
- * 行首 "• " 一级列表、"- " 二级列表（缩进），"1. " 这类序号行加粗作小标题。
+ * 行首 "• " 一级列表、"- " 二级列表（缩进），"1. 小标题：" 这类序号行加粗冒号前的部分。
  */
 @Composable
 fun Markup(text: String, color: Color = Palette.TextBody, modifier: Modifier = Modifier) {
@@ -62,7 +71,7 @@ fun Markup(text: String, color: Color = Palette.TextBody, modifier: Modifier = M
             }
             val heading = Regex("""^\d{1,2}\. """).containsMatchIn(body)
             Text(
-                inlineMarkup(if (heading) "**${body.replace("**", "")}**" else body),
+                inlineMarkup(if (heading) boldLead(body) else body),
                 color = color,
                 fontSize = 14.sp,
                 lineHeight = 22.sp,
