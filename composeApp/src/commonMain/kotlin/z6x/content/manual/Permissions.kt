@@ -125,6 +125,8 @@ val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为
     audit {
         claim("pm 与 am 本质上是两个 shell 脚本，底层通过 Binder 调用系统核心服务。", Verdict.Confirmed, "实测两个文件都是 `cmd …` 的包装脚本。")
         claim("ADB（uid=2000）：拥有完整的 shell 权限组，可自由卸载、冻结、授予权限、启动任意未加白名单保护的组件。", Verdict.Confirmed, "shell 有 677 项安卓权限，包括停用、卸载、强制停止。")
+        claim("一旦调用涉及系统特权的服务（如卸载自带应用、跨应用启动受限组件），Android 12 内核会强制校验 UID 是否为 0(root) 或 2000(shell)，普通 UID 10068 会被立即拦截并抛错中断。", Verdict.Disproved,
+            "结果对（SSH 里会被拒），机制不对：检查的是 system_server（系统服务），不是内核；看的是调用者有没有对应的**安卓权限**，不是 uid 是不是 0 或 2000。只要某个 App 被授予了 CHANGE_COMPONENT_ENABLED_STATE，它一样能停用组件。")
         claim("kill：Linux DAC 机制规定普通进程只能向同 UID 进程发送信号。SSH 向非本应用发送信号直接报 Operation not permitted；ADB（UID 2000）可向几乎所有应用级进程（UID 10000+）发送信号。", Verdict.Disproved,
             "前半句对。但 ADB 一样受这条规则限制：`kill -0` 一个 App 进程报 Operation not permitted。")
         claim("cat /proc/<pid>/smaps_rollup：SSH 只能读取自己进程的；ADB 可以读取全系统任意非 root-isolated 进程的内存分布。", Verdict.Disproved,
