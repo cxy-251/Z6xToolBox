@@ -17,6 +17,7 @@ import z6x.content.manual.DumpsysSettings
 import z6x.content.manual.HardwareCmds
 import z6x.content.manual.LogsCrash
 import z6x.content.manual.NetworkCmds
+import z6x.content.manual.PermModel
 import z6x.content.manual.PmAm
 import z6x.content.manual.ProcessMemory
 import z6x.content.manual.PropsInit
@@ -99,7 +100,7 @@ object Content {
                 Category(
                     "命令手册", "📚", "按主题整理的常用命令，全部在这台投影仪上跑过",
                     listOf(
-                        AdbBasics, PmAm, PropsInit, DumpsysSettings, ProcessMemory, StoragePartitions,
+                        PermModel, AdbBasics, PmAm, PropsInit, DumpsysSettings, ProcessMemory, StoragePartitions,
                         NetworkCmds, LogsCrash, SelinuxCmds, HardwareCmds, BackgroundCmds,
                     ),
                 ),

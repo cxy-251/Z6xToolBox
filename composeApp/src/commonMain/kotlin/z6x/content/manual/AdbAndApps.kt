@@ -11,6 +11,23 @@ val AdbBasics = module("adb-basics", "ADB 基础：连接、安装、传文件�
     """
     verified("2026-10-01")
 
+    why("ADB 由哪三部分组成") {
+        text("""
+            • **adb 客户端**：在 Deck 终端里敲的 `adb` 命令。它自己不连投影仪，只把命令交给本机的 adb server。
+            • **adb server**：第一次执行 adb 时在 Deck 后台自动启动，监听本机 **5037** 端口，负责维持和所有设备的连接。好几个终端同时用 adb，共用的是同一个 server。
+            • **adbd**：投影仪上的守护进程，监听 5555 端口，收到命令后以 shell 身份（uid 2000）执行。
+            投影仪上只有 adbd，没有 adb 客户端，所以在 SSH 里敲 `adb` 是没有这个命令的。adb 永远是从 Deck 往投影仪发。
+        """)
+        read("Deck 上的 adb server", "ss -ltnp | grep 5037", Host.Deck) {
+            varies = true
+            captured("2026-10-01", "LISTEN 0      128             127.0.0.1:5037       0.0.0.0:*    users:((\"adb\",pid=1288885,fd=15))")
+            note = "只监听 127.0.0.1，局域网里的其他机器连不到这个 server。连接出问题时可以 `adb kill-server` 让它重新启动。"
+        }
+        read("投影仪上有没有 adb 命令", "which adb || echo 无adb", Host.Adb) {
+            captured("2026-10-01", "无adb")
+        }
+    }
+
     steps("连接") {
         read("连接投影仪", "adb connect 192.168.0.109:5555", Host.Deck) {
             captured("2026-10-01", "already connected to 192.168.0.109:5555")
@@ -232,6 +249,19 @@ val PropsInit = module("props-init", "系统属性与 init 服务") {
             • 其他（如 `service.*`、`debug.*`）：普通属性，重启后丢失。
             谁能读写哪些属性由 SELinux 决定。这台机器是 Permissive，所以连普通 App 都能写很多属性。
         """)
+        text("""
+            **属性是怎么存的：** 由 init 维护，放在一块共享内存里（/dev/__properties__ 下的文件），每个进程启动时把它映射进来，所以读属性非常快，不需要和 init 通信。写属性则要发请求给 init，由 init 检查后修改。`persist.*` 的改动 init 还会另存到 /data/property，下次开机读回来。
+        """)
+        read("共享内存所在的目录", "ls /dev/__properties__ | head -3", Host.Adb) {
+            expectsError = true
+            captured("2026-10-01", "ls: /dev/__properties__: Permission denied")
+            note = "目录本身不让 shell 列出，但里面的文件已经映射进每个进程，getprop 照样能读（实测能读出 930 条）。"
+        }
+        read("持久化属性保存的位置", "ls -ld /data/property", Host.Adb) {
+            varies = true
+            captured("2026-10-01", "drwx------  2 root root 4096 2026-10-01 23:30 /data/property")
+            note = "只有 root 能进，shell 看不到内容，只能通过 getprop 读。"
+        }
     }
 
     steps("常用属性") {
