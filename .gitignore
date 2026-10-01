@@ -1,16 +1,12 @@
 # 构建输出
-bin/
-obj/
 dist/
 target/
 node_modules/
 build/
 
 # 编辑器与系统文件
-.vs/
 .idea/
 .vscode/
-*.user
 *.swp
 *~
 .DS_Store

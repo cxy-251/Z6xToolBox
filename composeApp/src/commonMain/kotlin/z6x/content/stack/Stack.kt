@@ -145,7 +145,7 @@ val ComposeInProject = module("compose-in-project", "Compose：界面是怎么�
 val GitInProject = module("git-in-project", "Git：这个项目怎么用它") {
     keywords = "commit · tag · baseline · log · show · diff · worktree"
     overview = """
-        这个仓库用 git 记录每一步改动。agy 的旧版本打了标签 `avalonia-baseline`，永久保留，随时可以对照。
+        这个仓库用 git 记录每一步改动。最初的 Avalonia（C#）版本已经从目录里删掉，但它在 git 历史里打了标签 `avalonia-baseline`，随时可以取回来看。
     """
     verified("2026-10-01")
 
@@ -156,10 +156,23 @@ val GitInProject = module("git-in-project", "Git：这个项目怎么用它") {
         }
         read("标签", "git tag", Host.Deck) {
             captured("2026-10-01", "avalonia-baseline")
-            note = "标签是给某次提交起的永久名字。avalonia-baseline 指向 agy 的原始版本，之后怎么改它都不会变。"
+            note = "标签是给某次提交起的永久名字。avalonia-baseline 指向最初的 C# 版本：文件从目录里删掉了，历史里还在，标签指向的内容永远不变。"
+        }
+        read("列出旧版本里某个目录的文件", "git ls-tree --name-only avalonia-baseline:Z6xToolBox.App/Content/Modules/PreAdb/", Host.Deck) {
+            captured("2026-10-01", """
+                01_HdmiDisplayData.cs
+                02_UsbApk1BypassData.cs
+                03_LanSharingFlowData.cs
+                04_AppCompatibilityData.cs
+                05_SshHardwareAuditData.cs
+                06_SshUninstallFailureData.cs
+                07_DeveloperModeBlocksData.cs
+                08_ForceAdbdActivationData.cs
+            """)
+            note = "文件已经不在目录里了，也能从标签里列出来。"
         }
         read("看旧版本里的某个文件", "git show avalonia-baseline:run.sh", Host.Deck) {
-            note = "`版本:路径`。不用切换版本，直接把内容打印出来。"
+            note = "`版本:路径`。不用切换版本，直接把内容打印出来。notes/gen.py 就是这样读取旧提案原文、核对引用的。"
         }
         read("某个文件和旧版本的差别", "git diff avalonia-baseline -- run.sh", Host.Deck) {
             varies = true
@@ -172,7 +185,7 @@ val GitInProject = module("git-in-project", "Git：这个项目怎么用它") {
 
     consequences("这个仓库的约定") {
         text("""
-            • 旧的 Avalonia 代码（Z6xToolBox.App、Z6xToolBox.Desktop）永久保留不动，用来对比。
+            • 旧的 Avalonia 代码（Z6xToolBox.App、Z6xToolBox.Desktop）有用的内容已全部吸收进新版，目录已删除（2026-10-01）；需要对照时从标签 `avalonia-baseline` 里取。
             • 代理节点、Wi-Fi 信息、私钥不进仓库（.gitignore 排除了 nodes.txt、clash.yaml、*.apk、*.apk1 等）。
             • 每次提交前跑 `./run.sh --check`，涉及设备的改动再跑 `./run.sh --try-read 模块id`。
         """)
@@ -197,7 +210,6 @@ val ProjectLayout = module("project-layout", "这个项目的结构与日常操�
             "scripts/" to "一键精简与恢复脚本",
             "dev/go-server/" to "Go 测试服务的源码",
             "notes/" to "环境搭建记录、提案审核结论表与生成脚本",
-            "Z6xToolBox.App / .Desktop" to "agy 的旧版 Avalonia 代码，保留不动",
         )
     }
 
@@ -213,7 +225,6 @@ val ProjectLayout = module("project-layout", "这个项目的结构与日常操�
         change("命令行版一键体检", "./run.sh --health", Host.Deck) {
             note = "和工具箱「📡 设备」页里的体检是同一组检查。必检项有异常时退出码为 1，可以放进脚本里用。"
         }
-        change("打开旧版", "./run-avalonia.sh", Host.Deck)
     }
 
     story("新增一篇内容") {

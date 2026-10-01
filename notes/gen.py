@@ -1,17 +1,20 @@
 # 用法：python3 notes/gen.py notes
 # 根据 notes/proposals.py 生成 composeApp/.../proposals/Reviews.kt。
 # 内容全部来自 proposals.py（Claude 重写的说明）；只有错误卡片里的「agy 原话」取自旧代码，并逐字校验确实存在。
-import glob, os, re, sys
+import os, re, sys
 sys.path.insert(0, sys.argv[1])
 from proposals import GO, RS, GROUPS
 from proposals_tech import T
 
 root = os.path.abspath(os.path.join(sys.argv[1], '..'))
-old = root + '/Z6xToolBox.App/Content/Modules/'
+# 旧代码已从工作区删除，原文从 git 标签 avalonia-baseline 里读
+import subprocess
+TAG, OLD = 'avalonia-baseline', 'Z6xToolBox.App/Content/Modules/'
+git = lambda *a: subprocess.run(['git', '-C', root, *a], capture_output=True, text=True, check=True).stdout
 def plain(dirn):
     out = {}
-    for f in glob.glob(old + dirn + '/*.cs'):
-        out[int(os.path.basename(f).split('_')[0])] = open(f).read().replace('\\"', '"').replace('\\\\', '\\')
+    for f in git('ls-tree', '--name-only', f'{TAG}:{OLD}{dirn}/').split():
+        out[int(f.split('_')[0])] = git('show', f'{TAG}:{OLD}{dirn}/{f}').replace('\\"', '"').replace('\\\\', '\\')
     return out
 OLDG, OLDR = plain('GoServices'), plain('RustServices')
 assert len(GO) == 60 and len(RS) == 49 and len(OLDG) == 60 and len(OLDR) == 49

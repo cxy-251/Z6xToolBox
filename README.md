@@ -63,5 +63,5 @@
 
 ## 其他
 
-- `Z6xToolBox.App/`、`Z6xToolBox.Desktop/` 是最初的 Avalonia（C#）版本，保留作对照，不再维护。`./run-avalonia.sh` 可以打开它。
+- 最初的 Avalonia（C#）版本已经删除，内容都已整理进来；需要时可以从 git 标签 `avalonia-baseline` 取回。
 - 不要把代理节点、订阅链接、序列号、MAC 地址等个人信息写进仓库；`--check` 会检查常见的几种。
