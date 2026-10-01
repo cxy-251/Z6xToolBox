@@ -67,31 +67,31 @@ for kind, d in (('Go', GO), ('Rust', RS)):
 summary = f'''val ReviewSummary = module("review-summary", "提案总表：109 个小项目的去向") {{
     keywords = "Go 60 个 · Rust 49 个 · 第一期 / 第二期 / 第三期 / 不纳入 / 不可行"
     overview = """
-        共收集了 109 个可在投影仪上运行的小项目提案（Go 60 个、Rust 49 个）。审核原则：只采纳在这台投影仪上**实测可行**、日常**确有用途**、且**不重复**的项目；Go 项目并入 z6x-hub（常驻服务），Rust 项目并入 z6x-tools（命令集）。
+        共收集了 109 个可在投影仪上运行的小项目提案（Go 60 个、Rust 49 个）。审核原则：只采纳在这台投影仪上**实测可行**、日常**确有用途**、且**不重复**的项目；Go 项目并入 z6x-hub（常驻服务，在本项目内实现）；Rust 项目归入 z6x-tools（命令集），因 Deck 上无法完成 Rust 编译，目前暂缓。
         各项目的用途、技术栈、原理和判断依据见五个分类页。
     """
     proposal()
 
     why("统计") {{
         facts(
-            "第一期" to "hub：core、files、paste、control、wol、metrics、speed；tools：sys、ports、key、keymap、hash、watch、ping",
-            "第二期" to "hub：notify、lanscan、webshell、dlna、配置页、iperf3；tools：iobench、pack、run",
+            "第一期" to "hub：core、files、paste、control、wol、metrics、speed；tools（暂缓）：sys、ports、key、keymap、hash、watch、ping",
+            "第二期" to "hub：notify、lanscan、webshell、dlna、配置页、iperf3；tools（暂缓）：iobench、pack、run",
             "第三期候选" to "离线下载、相册、阅读、直播源、MQTT、HomeKit、Tailscale、mDNS、终端会话保持等",
-            "不可行" to "需要 root、1024 以下端口、抓包权限、声卡、tun、cgroup、蓝牙 hci、CEC、hidg0、fb0 的项目",
-            "重复合并" to "WebDAV、网页终端、MQTT、监控、DNS、代理等在 Go 和 Rust 里各写过一遍，只保留一份",
+            "不可行" to "依赖 root、1024 以下端口、抓包权限、声卡、tun、cgroup、蓝牙 hci、CEC、hidg0 或 fb0 的项目",
+            "重复合并" to "WebDAV、网页终端、MQTT、监控、DNS、代理等在 Go 和 Rust 中各有一份方案，只保留其一",
         )
     }}
 
-    story("「不纳入」的都是些什么") {{
+    story("「不纳入」的项目类型") {{
         text("""
-            1. 已经有现成的在做：DNS 去广告、加密 DNS、局域网代理、PAC、用户态隧道（Clash 已负责）；SMB、S3、SFTP、Git 仓库（WebDAV 已覆盖文件共享）；Go 和 Rust 的重复实现。
-            2. 要把投影仪暴露到公网：路由器端口映射、动态域名、HTTPS 证书、Tailscale 中继。本项目只在家里局域网用。
-            3. 依赖外网服务，或者目前用不上：影视刮削、字幕下载、RSS 追更、磁力转种子、直播录制、定时测速、网盘挂载、传感器数据存储、视频切片。需求变了可以从第三期候选里提上来。
-            4. 偏技术演示，日常没有使用场景：共享内存、只读索引库、日志脱敏、UDP 纠错、组播信令、P2P 分发、限速代理、浏览器网页投屏。
+            1. 已有现成方案：DNS 去广告、加密 DNS、局域网代理、PAC、用户态隧道（由 Clash 负责）；SMB、S3、SFTP、Git 仓库（文件共享已由 WebDAV 覆盖）；Go 与 Rust 的重复实现。
+            2. 需要将投影仪暴露到公网：路由器端口映射、动态域名、HTTPS 证书、Tailscale 中继。本项目只在家庭局域网内使用。
+            3. 依赖外网服务或目前没有需求：影视刮削、字幕下载、RSS 追更、磁力转种子、直播录制、定时测速、网盘挂载、传感器数据存储、视频切片。需求变化时可从第三期候选中提前。
+            4. 偏重技术演示，日常没有使用场景：共享内存、只读索引库、日志脱敏、UDP 纠错、组播信令、P2P 分发、限速代理、浏览器网页投屏。
         """)
     }}
 
-    verify("逐个去向") {{
+    verify("各项目的去向") {{
         facts(
 {chr(10).join(rows)}
         )
