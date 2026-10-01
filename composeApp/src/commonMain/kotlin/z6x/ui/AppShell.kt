@@ -73,7 +73,7 @@ private fun TopBar(state: AppState) {
         }
         Column(Modifier.padding(start = 10.dp)) {
             Text("Z6xToolBox", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Palette.TextStrong)
-            Text("极米 Z6X Pro 折腾手册", fontSize = 11.sp, color = Palette.TextMuted)
+            Text("极米 Z6X Pro 实践手册", fontSize = 11.sp, color = Palette.TextMuted)
         }
         Spacer(Modifier.weight(1f))
         Row(

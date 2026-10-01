@@ -201,7 +201,7 @@ val PacketCapture = module("packet-capture", "在投影仪上抓包（tcpdump）
         """)
     }
 
-    steps("原方案的命令（在这台机器上跑不通）") {
+    steps("原方案的命令（在本机上无法运行）") {
         read("看某个端口的通信", "tcpdump -i wlan0 -nn -s0 -A 'tcp port 8088'", Host.Adb) { manual = true }
         read("抓投屏的 SSDP 发现报文", "tcpdump -i wlan0 -nn 'udp port 1900'", Host.Adb) { manual = true }
         read("抓 100 个包存文件", "tcpdump -i wlan0 -c 100 -w /data/local/tmp/traffic.pcap 'port 8088'", Host.Adb) {
@@ -229,7 +229,7 @@ val PacketCapture = module("packet-capture", "在投影仪上抓包（tcpdump）
 
     audit {
         claim("报错 socket: Operation not permitted。原因：Android 内核严格限制普通 UID 创建 AF_PACKET 原始套接字。若内核 SELinux 策略阻止了 shell 域使用 raw socket，可通过测试端口监听（nc -l）结合外部 PC 发送端单向抓包作为补充验证手段。", Verdict.Confirmed,
-            "报错原文一致。但原因不是 SELinux（这台是 Permissive），是 shell 没有 CAP_NET_RAW 能力。")
+            "报错原文一致。但原因不是 SELinux（本机为 Permissive），是 shell 没有 CAP_NET_RAW 能力。")
         claim("技术栈：musl 静态链接编译的 ARM64 tcpdump + libpcap（单文件约 2.2MB）。", Verdict.Disproved, "不需要自己部署：系统自带 `/system/bin/tcpdump`。只是没权限用。")
     }
 

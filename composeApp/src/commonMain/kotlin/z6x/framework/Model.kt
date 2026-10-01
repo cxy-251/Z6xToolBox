@@ -65,7 +65,7 @@ data class Step(
     val manual: Boolean = false,
     /** 输出每次都会变（内存、磁盘占用、温度），试跑时不和实测记录对比。 */
     val varies: Boolean = false,
-    /** 来自旧记录的命令：未验证，或在这台机器上跑不通。null 表示正常命令。 */
+    /** 来自旧记录的命令：未验证，或在本机上无法运行。null 表示正常命令。 */
     val verdict: Verdict? = null,
 )
 

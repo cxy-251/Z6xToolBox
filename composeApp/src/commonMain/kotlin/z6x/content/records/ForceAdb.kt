@@ -34,7 +34,7 @@ val ForceAdb = module("force-adb", "通过 SSH 启动网络 ADB") {
             captured("2026-10-01", "Permissive")
             note = """
                 **这是方法得以成功的真正前提。** `ctl.start` 这类控制属性由 SELinux 策略决定谁可以设置；在正常（Enforcing）系统上，普通应用无权启动系统服务。
-                这台机器处于 **Permissive（宽容模式）**：违规操作只记录日志而不拦截，因此普通应用也能启动 adbd。
+                本机处于 **Permissive（宽容模式）**：违规操作只记录日志而不拦截，因此普通应用也能启动 adbd。
             """
         }
     }
@@ -64,7 +64,7 @@ val ForceAdb = module("force-adb", "通过 SSH 启动网络 ADB") {
             note = "`${'$'}?` 是上一条命令的退出码，0 表示成功。adbd 的进程号前后未变，说明 init 确实忽略了该请求。"
         }
         text("""
-            日志中没有找到任何记录：这台机器的 init 不记录控制消息，而 `logcat -b all` 全量搜索又因缓冲区过大而超时。**此方法无效。**
+            日志中没有找到任何记录：本机的 init 不记录控制消息，而 `logcat -b all` 全量搜索又因缓冲区过大而超时。**此方法无效。**
             **调整方案：** 不再查日志，改为设计一个结果可直接观察的实验：写入一个无害的调试属性 `debug.z6x.test`。在正常（Enforcing）的安卓系统上，普通应用无权写入 debug 类属性；若此处能够写入，即证明 SELinux 没有拦截。
         """)
         change("以应用身份写入调试属性", "setprop debug.z6x.test 1; echo exit=${'$'}?; getprop debug.z6x.test", Host.Ssh) {
@@ -77,7 +77,7 @@ val ForceAdb = module("force-adb", "通过 SSH 启动网络 ADB") {
                 **意外发现：** setprop 无法删除属性，只能清空其值。此后 `getprop` 列出全部属性时仍有一行 `[debug.z6x.test]: []`，直到重启才消失（debug.* 不会持久化；2026-10-01 重启后确认已消失）。
                 「核查：真实型号与芯片」中用 `grep z6x` 搜索属性时多出的正是这一行，由 `--try-read` 发现。
             """
-            outcome = "证实：在这台机器上，普通应用可以设置本应被 SELinux 拦截的属性。"
+            outcome = "证实：在本机上，普通应用可以设置本应被 SELinux 拦截的属性。"
         }
     }
 

@@ -93,7 +93,7 @@ class StepBuilder {
     var expectsError = false
     var manual = false
     var varies = false
-    /** 来自旧记录的命令：Verdict.Unverified 未验证，Verdict.Disproved 在这台机器上跑不通。 */
+    /** 来自旧记录的命令：Verdict.Unverified 未验证，Verdict.Disproved 在本机上无法运行。 */
     var verdict: Verdict? = null
 
     /** 记录实测输出：captured("2026-10-01", "...")。 */

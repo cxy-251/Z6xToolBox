@@ -7,7 +7,7 @@ import z6x.framework.module
 val SshProbe = module("ssh-probe", "通过 SSH 获取硬件与系统信息") {
     keywords = "SimpleSSHD · getprop · /proc · df · wm"
     overview = """
-        通过 U 盘安装 SimpleSSHD 后，首次获得了命令行。虽然只有普通应用的权限，但查询类命令基本可用，借此查清了这台机器的硬件与系统信息。
+        通过 U 盘安装 SimpleSSHD 后，首次获得了命令行。虽然只有普通应用的权限，但查询类命令基本可用，借此查清了本机的硬件与系统信息。
     """
     verified("2026-10-01")
 

@@ -69,7 +69,7 @@ private fun gui() = application {
     val state = remember { AppState(Content.scopes) }
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Z6xToolBox · 极米 Z6X Pro 折腾手册",
+        title = "Z6xToolBox · 极米 Z6X Pro 实践手册",
         state = rememberWindowState(width = 1280.dp, height = 800.dp, position = WindowPosition.Aligned(androidx.compose.ui.Alignment.Center)),
     ) {
         App(state, DadbShell(), ::copyToClipboard)
