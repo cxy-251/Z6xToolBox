@@ -6,19 +6,19 @@ import z6x.framework.module
 val PowerModes = module("power-modes", "核查：「关屏」与「关机」的实际行为") {
     keywords = "mWakefulness · /proc/uptime · suspend · mem_sleep · 关机是睡眠"
     overview = """
-        极米的电源菜单有关屏、关机、重启、定时关机。想知道哪种状态下后台服务还在，从 Deck 每隔几秒检查一次网络、ADB 端口、系统唤醒状态和运行时长，实测得出：**关屏时系统照常运行；关机其实是睡眠**。
+        极米的电源菜单提供关屏、关机、重启和定时关机。为确定在哪种状态下后台服务仍可用，从 Deck 每隔数秒检查一次网络、ADB 端口、系统唤醒状态和运行时长，实测结论为：**关屏时系统照常运行；关机实际上是睡眠**。
     """
     verified("2026-10-01")
 
     why("用来判断的几个指标") {
         text("""
-            • **mWakefulness**（`dumpsys power`）：安卓的唤醒状态。Awake 醒着；Asleep 休眠；Dozing 打盹。
-            • **/proc/uptime** 第一个数：开机以来经过的秒数，**包括睡眠的时间**。真关机重启后从 0 开始；睡眠醒来则接着累加。
-            • 网络通不通、5555 端口开不开：从 Deck 上看投影仪还在不在线。
+            • **mWakefulness**（`dumpsys power`）：安卓的唤醒状态。Awake 为唤醒，Asleep 为休眠，Dozing 为低功耗待机。
+            • **/proc/uptime** 的第一个数：开机以来经过的秒数，**包含睡眠时间**。真正关机重启后从 0 开始；从睡眠中唤醒则继续累加。
+            • 网络是否可达、5555 端口是否开放：从 Deck 判断投影仪是否在线。
         """)
     }
 
-    steps("从 Deck 上盯着看") {
+    steps("从 Deck 持续监测") {
         read("每 3 秒记录一次变化", """
             prev=""; while true; do
               p=${'$'}(ping -c1 -W1 192.168.0.109 >/dev/null 2>&1 && echo 通 || echo 断)
@@ -29,57 +29,57 @@ val PowerModes = module("power-modes", "核查：「关屏」与「关机」的�
             done
         """, Host.Deck) {
             manual = true
-            note = "一直运行，只在网络、端口、唤醒状态变化时打印一行（带上当时的 uptime），Ctrl+C 停止。`${'$'}{w%% *}` 去掉 uptime 只留唤醒状态。`/dev/tcp/IP/端口` 是 bash 测端口通不通的写法。"
+            note = "持续运行，仅在网络、端口或唤醒状态变化时输出一行（附带当时的 uptime），按 Ctrl+C 停止。`${'$'}{w%% *}` 去掉 uptime，只保留唤醒状态。`/dev/tcp/IP/端口` 是 bash 测试端口是否可达的写法。"
         }
     }
 
     story("实验 1：关屏") {
         facts(
-            "21:46" to "选「关屏」。光机关闭，但音乐继续播放",
-            "关屏后立刻查" to "mWakefulness=Awake；`dumpsys window` 里 mScreenOnFully=true；显示状态 ON、亮度策略 BRIGHT",
-            "之后 30 分钟" to "网络、ADB、SSH、Go 服务**全程在线，没有任何变化**",
+            "21:46" to "选择「关屏」。光机关闭，但音乐继续播放",
+            "关屏后立即查询" to "mWakefulness=Awake；`dumpsys window` 中 mScreenOnFully=true；显示状态为 ON，亮度策略为 BRIGHT",
+            "此后 30 分钟" to "网络、ADB、SSH 和 Go 服务**全程在线，没有任何变化**",
         )
-        text("**结论：**「关屏」只是极米把光机关了，安卓系统根本不知道，照常运行。后台服务在这个状态下一直可用。")
+        text("**结论：**「关屏」只是极米关闭了光机，安卓系统并未感知，照常运行。后台服务在此状态下始终可用。")
     }
 
     story("实验 2：关机") {
         facts(
             "22:47:28 关机前" to "网络通 | ADB开 | Awake | uptime 6382 秒",
-            "22:47:36 选「关机」" to "网络通 | ADB开 | **Asleep** | uptime 6388 秒",
+            "22:47:36 选择「关机」" to "网络通 | ADB开 | **Asleep** | uptime 6388 秒",
             "22:47:42（约 14 秒后）" to "**网络断 | ADB关**",
             "22:49:13 按开机键" to "网络通 | ADB开 | Awake | uptime **6487 秒**",
         )
-        read("醒来后：进程还在吗", "pidof z6x_go_server", Host.Adb) {
+        read("唤醒后进程是否仍在", "pidof z6x_go_server", Host.Adb) {
             varies = true
             captured("2026-10-01", "9089")
-            note = "和关机前是**同一个进程号**，服务没有重启，醒来后直接继续工作。"
+            note = "与关机前是**同一个进程号**，服务没有重启，唤醒后直接继续工作。"
         }
-        read("内核用的睡眠方式", "cat /sys/power/mem_sleep", Host.Adb) {
+        read("内核采用的睡眠方式", "cat /sys/power/mem_sleep", Host.Adb) {
             captured("2026-10-01", "s2idle [deep]")
-            note = "方括号里是当前选用的：`deep` = 挂起到内存（Suspend-to-RAM）：CPU 断电，内存保持供电，所有进程冻结在原地。"
+            note = "方括号内为当前选用的方式：`deep` 即挂起到内存（Suspend-to-RAM），CPU 断电，内存保持供电，所有进程冻结在原状态。"
         }
         read("系统记录的睡眠原因", "dumpsys power | grep -m1 mLastSleepReason", Host.Adb) {
             varies = true
             captured("2026-10-01", "  mLastSleepReason=display_groups_turned_off")
         }
         text("""
-            **结论：「关机」其实是睡眠。** uptime 接着关机前的数往上加（多出的 99 秒正好是关机到开机的时间），进程号不变，内核没有重启。
-            关机后约 14 秒挂起，网络断开，期间投影仪对局域网完全不可见；按开机键后原样恢复。
+            **结论：「关机」实际上是睡眠。** uptime 在关机前的数值上继续累加（多出的 99 秒正是从关机到开机的时间），进程号不变，内核没有重启。
+            关机约 14 秒后系统挂起，网络断开，其间投影仪在局域网中完全不可见；按开机键后原样恢复。
         """)
     }
 
-    verify("这对我们意味着什么") {
+    verify("实际影响") {
         facts(
-            "关屏" to "系统照常运行。想让文件共享、遥控网页等服务 24 小时可用，看完投影就选「关屏」",
-            "关机" to "睡眠：服务暂停、对外不可达；开机后自动恢复，**不需要**重新启动任何东西",
-            "重启 / 拔电源" to "真正的重启：自己部署的服务要重新启动（ADB 会自动起来）",
+            "关屏" to "系统照常运行。若希望文件共享、网页遥控等服务全天可用，观看结束后应选择「关屏」",
+            "关机" to "睡眠：服务暂停，外部无法访问；开机后自动恢复，**无需**重新启动任何程序",
+            "重启 / 断电" to "真正的重启：自行部署的服务需要重新启动（ADB 会自动运行）",
         )
     }
 
     lesson("经验") {
         text("""
-            • 「关机」这个词不可信，要看证据：uptime 是否归零、进程号是否改变。
-            • 用一个只在状态变化时输出的循环盯着看，比隔一会儿手动查一次可靠，能拿到精确到秒的时间线。
+            • 不能仅凭「关机」这个名称判断，要看证据：uptime 是否归零、进程号是否改变。
+            • 用只在状态变化时输出的循环持续监测，比间隔手动查询更可靠，能得到精确到秒的时间线。
         """)
     }
 
