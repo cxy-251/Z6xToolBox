@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Z6xToolBox</AssemblyName>
+    <RootNamespace>Z6xToolBox.Desktop</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>Z6xToolBox</Product>
+    <Authors>cxy251</Authors>
+    <Description>极米 Z6X Pro 运维实操工作台 (Linux Desktop)</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Z6xToolBox.App\Z6xToolBox.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+  </ItemGroup>
+</Project>

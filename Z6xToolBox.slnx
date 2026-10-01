@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Z6xToolBox.App/Z6xToolBox.App.csproj" />
+  <Project Path="Z6xToolBox.Desktop/Z6xToolBox.Desktop.csproj" />
+</Solution>
