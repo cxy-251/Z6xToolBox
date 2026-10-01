@@ -25,6 +25,7 @@ import z6x.content.manual.StoragePartitions
 import z6x.content.inspect.FocusWindow
 import z6x.content.inspect.PortOwner
 import z6x.content.inspect.Pivots
+import z6x.content.inspect.PowerModes
 import z6x.content.inspect.SshKeyLogin
 import z6x.content.inspect.TvScreencap
 import z6x.content.proposals.DropbearShell
@@ -93,7 +94,7 @@ object Content {
             "用 adb 查这台投影仪的硬件、系统和权限。每页都是一次真实的核查过程。",
             listOf(
                 Category("连接与查看", "📶", "ADB、SSH、截图、焦点窗口：先连上，才能查", listOf(SshKeyLogin, TvScreencap, FocusWindow)),
-                Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel, PortOwner, AdbAutostart)),
+                Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel, PortOwner, AdbAutostart, PowerModes)),
                 Category(
                     "命令手册", "📚", "按主题整理的常用命令，全部在这台投影仪上跑过",
                     listOf(

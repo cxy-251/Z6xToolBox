@@ -25,9 +25,10 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
             "文件位置" to "程序和配置放 `/data/local/tmp/z6x-hub/`；用户文件在 `/storage/emulated/0`（可写）；U 盘在 `/storage/<卷ID>/`。**不要用 /mnt/media_rw**（shell 无权访问）",
             "能用的系统能力" to "`input keyevent/text`、`am start`、`cmd notification post`、`settings get`、读 /proc 和 /sys/class/thermal、写 /dev/input/event* 和 /dev/uinput、打开 /dev/ptmx、普通身份 ICMP ping",
             "不能用的" to "绑定 <1024 端口、root、CAP_NET_RAW（抓包/原始套接字）、/dev/snd、/dev/net/tun、cgroup、/proc/kmsg",
-            "重启" to "重启后 ADB 自动可用，但 hub 要由 Deck 上的工具箱重新启动",
+            "重启" to "只有「重启」和拔电源才是真重启：ADB 自动可用，但 hub 要由 Deck 上的工具箱重新启动",
             "关屏时" to "**已验证（2026-10-01）**：电源菜单选「关屏」后，安卓认为屏幕仍开着（Awake、显示 ON），30 分钟内进程、Wi-Fi、ADB/SSH/8088 端口全程在线。关屏状态下 hub 可以持续服务",
-            "已知未验证" to "电源菜单里的「关机」是真断电还是深度休眠（待测；极米没有单独的「待机」选项）；视频链接没有默认播放器（`am start` 会弹选择框）",
+            "关机时" to "**已验证（2026-10-01）**：「关机」其实是挂起到内存的睡眠。约 14 秒后断网，hub 对外不可达；开机后进程原样恢复（同一 PID），**不需要**重新启动。所以 hub 要能经受「突然冻结一段时间再醒来」：定时任务按实际时间补算、网络连接断了要能重连。见「案例：关屏和关机到底做了什么」",
+            "已知未验证" to "视频链接没有默认播放器（`am start` 会弹选择框）",
         )
     }
 
