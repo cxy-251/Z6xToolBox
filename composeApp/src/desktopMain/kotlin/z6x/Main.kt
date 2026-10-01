@@ -19,7 +19,9 @@ import kotlinx.coroutines.withContext
 import z6x.content.Content
 import z6x.device.DefaultAddress
 import z6x.device.DeviceShell
+import z6x.device.Level
 import z6x.device.probes
+import z6x.device.runHealthChecks
 import z6x.ui.AppState
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -51,6 +53,16 @@ fun main(args: Array<String>) {
         "--probe" -> runBlocking {
             val address = args.getOrElse(1) { DefaultAddress }
             for (p in probes) println("${p.label.padEnd(8, '　')} ${DadbShell().run(address, p.command)}")
+        }
+        // ./run.sh --health [地址]：命令行版一键体检
+        "--health" -> runBlocking {
+            val results = runHealthChecks(DadbShell(), args.getOrElse(1) { DefaultAddress })
+            for (r in results) {
+                val mark = if (r.ok) "✓" else if (r.check.level == Level.Info) "⚠" else "✗"
+                println("$mark ${r.check.title}：${r.error ?: r.output.ifEmpty { "（无输出）" }}" + if (r.ok) "" else "（期望 ${r.check.expect.text}）")
+            }
+            val bad = results.count { !it.ok && it.check.level == Level.Must }
+            kotlin.system.exitProcess(if (bad == 0) 0 else 1)
         }
         "--check" -> kotlin.system.exitProcess(Tools.check(Content.scopes))
         "--try-read" -> kotlin.system.exitProcess(Tools.tryRead(Content.scopes, args.drop(1)))

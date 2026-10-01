@@ -46,7 +46,7 @@ fun AppShell(state: AppState, shell: DeviceShell, onCopy: (String) -> Unit) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 val located = state.current?.let { state.index[it.id] }
                 when {
-                    state.showDevice -> DevicePanel(shell)
+                    state.showDevice -> DevicePanel(shell, state::open)
                     located != null -> ModuleView(
                         module = located.module,
                         breadcrumb = located.breadcrumb,

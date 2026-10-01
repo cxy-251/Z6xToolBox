@@ -210,6 +210,9 @@ val ProjectLayout = module("project-layout", "这个项目的结构与日常操�
             note = "不写模块 id 就跑全部。ADB 步骤发给投影仪，Deck 步骤在本机，SSH 步骤走 `ssh z6x`（连不上会整体跳过）。和实测记录不一样的会标 △。"
         }
         change("命令行查设备", "./run.sh --probe", Host.Deck)
+        change("命令行版一键体检", "./run.sh --health", Host.Deck) {
+            note = "和工具箱「📡 设备」页里的体检是同一组检查。必检项有异常时退出码为 1，可以放进脚本里用。"
+        }
         change("打开旧版", "./run-avalonia.sh", Host.Deck)
     }
 
