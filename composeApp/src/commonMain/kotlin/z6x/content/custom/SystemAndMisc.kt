@@ -65,10 +65,41 @@ val SystemPackages = module("system-packages", "系统里还剩什么：组件�
         }
     }
 
+    story("没有界面的系统组件") {
+        text("Activity Launcher 里看不到、但系统离不开的包。按类别列出 2026-10-01 实机上确认存在的：")
+        facts(
+            "样式覆盖层（Overlay）" to "com.android.internal.display.cutout.emulation.*（刘海屏模拟）、com.android.internal.systemui.navbar.*（导航栏样式）、com.android.frameworkres.overlay、com.android.theme.font.notoserifsource。只有资源，没有代码",
+            "数据提供者（Provider）" to "com.android.providers.settings（系统设置数据库）、providers.media.module（媒体索引）、providers.tv（电视频道数据）",
+            "网络" to "com.android.networkstack、networkstack.tethering（热点）、pacprocessor 和 proxyhandler（代理自动配置）、captiveportallogin（Wi-Fi 认证页）、keychain（证书）、vpndialogs（VPN 授权弹窗）",
+            "极米底层服务" to "com.xgimi.inuiserver、com.xgimiui.api、com.xgimi.appdb、com.xgimi.xgimiservice、com.xgimi.persistentservice、com.xgimi.rgbdupgrade。从名字看是界面框架、应用数据库、系统服务和固件升级相关，具体用途未查",
+        )
+        read("自己列一遍", "pm list packages | grep -iE 'overlay|cutout|navbar|providers|networkstack|xgimiservice|persistentservice|appdb|inuiserver'", Host.Adb) {
+            varies = true
+        }
+        text("这些都**不要动**。停掉网络栈或设置数据库，系统可能直接无法正常工作。")
+    }
+
+    story("儿童模式去哪了") {
+        text("儿童模式不是独立的 App，而是官方桌面 `com.xgimi.home` 里的一组界面：")
+        read("官方桌面里的儿童模式组件", "dumpsys package com.xgimi.home 2>/dev/null | grep -oE 'com.xgimi.childmode.[A-Za-z]+' | sort -u", Host.Adb) {
+            captured("2026-10-01", """
+                com.xgimi.childmode.BaByListActivity
+                com.xgimi.childmode.ParentSettingActivity
+                com.xgimi.childmode.Setting
+                com.xgimi.childmode.SettingActivity
+                com.xgimi.childmode.provider
+                com.xgimi.childmode.service
+            """)
+            note = "官方桌面虽然对当前用户卸载了，安装包还在系统分区里，dumpsys 仍能读到它的组件清单。"
+        }
+        text("当初官方桌面只是**停用**时，这些界面还出现在 Activity Launcher 的列表里，点了打不开。改成**对当前用户卸载**后，列表里也清净了。要恢复：`cmd package install-existing com.xgimi.home`。")
+    }
+
     consequences {
         text("""
             • 这一页里的组件**不要停用**，否则可能失去画面校正、遥控器、信号源等基本功能。
             • 开机时出现的梯形校正提示框来自 newsettings（它有开机广播接收器 BootBroadcastReceiver），按返回键关闭即可。
+            • 旧记录说用 shell 停用 newsettings 里的单个组件会被系统拒绝。要验证就得真的去停用它，没有无害的测法，所以**未验证**。newsettings 以 system（uid 1000）身份运行，被拒绝是合理的推测。
         """)
     }
 
@@ -176,6 +207,7 @@ val ScreenCast = module("screen-cast", "无线投屏") {
     lesson("核对说明") {
         text("""
             • 旧版写的入口 `.activity.NewMainActivity` 存在，但系统的 MAIN 入口是 `.safe.SafeModeActivity`。
+            • 旧版说系统常驻一个 AirPlayInitService，投屏应用里实际没有这个组件。
             • 旧版对蓝牙卡顿的解释（"射频开关主动挂起蓝牙接收"）写得很肯定，但没有依据，改为推测。
             • 发送端的操作是常规用法，没有逐个平台重新测试。
         """)

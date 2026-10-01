@@ -42,6 +42,14 @@ val LanShare = module("lan-share", "局域网传文字：解决电视上没法�
             manual = true
             note = "共享开着时另开一个终端执行。`-s` 不显示进度条。"
         }
+        read("只看响应头，测服务通不通", "curl -I http://192.168.0.21:8000/", Host.Deck) {
+            manual = true
+            note = "`-I` 只请求头部，第一行 `HTTP/1.0 200 OK` 就说明通了。`-v` 可以看完整的连接过程。"
+        }
+        change("断点续传下载大文件", "wget -c http://192.168.0.21:8000/app.apk1 -O /tmp/app.apk1", Host.Deck) {
+            manual = true
+            note = "`-c` 中断后再执行会接着下载，`-O` 指定保存路径。在另一台 Linux 设备上从 Deck 拉文件时用。"
+        }
     }
 
     consequences {

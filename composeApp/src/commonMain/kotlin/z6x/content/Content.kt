@@ -10,6 +10,7 @@ import z6x.content.custom.ProjectivyLauncher
 import z6x.content.custom.ScreenCast
 import z6x.content.custom.SystemPackages
 import z6x.content.inspect.FindRealModel
+import z6x.content.inspect.FocusWindow
 import z6x.content.inspect.PortOwner
 import z6x.content.inspect.Pivots
 import z6x.content.inspect.SshKeyLogin
@@ -53,7 +54,7 @@ object Content {
             "inspect", "🔍", "学会查设备",
             "用 adb 查这台投影仪的硬件、系统和权限。每页都是一次真实的核查过程。",
             listOf(
-                Category("连接设备", "📶", "ADB、SSH、截图：先连上，才能查", listOf(SshKeyLogin, TvScreencap)),
+                Category("连接与查看", "📶", "ADB、SSH、截图、焦点窗口：先连上，才能查", listOf(SshKeyLogin, TvScreencap, FocusWindow)),
                 Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel, PortOwner)),
                 Category("经验", "💡", "一条路不通时怎么换", listOf(Pivots)),
             ),

@@ -138,6 +138,9 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             **为什么要停 OTA：** 升级可能把停用的应用恢复、把 SELinux 改回 Enforcing（强开 ADB 就失效了），甚至修掉 adbd 的预设配置。
             代价是不再收到官方的修复和新功能。想升级时先 `pm enable` 这两个，升级后检查 ADB 是否还能用。
         """)
+        change("立刻结束正在运行的升级进程", "am force-stop com.xgimi.upgrade; am force-stop com.xgimi.ota.accessories", Host.Adb) {
+            note = "disable-user 本身就会结束进程，这一步是保险。force-stop 只是结束当前进程，不阻止它下次被启动。"
+        }
     }
     story("智能家居与伴生设备") {
         group(listOf(
@@ -149,9 +152,13 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             "com.xgimi.mobilebridgeservice" to "手机 App 遥控桥接",
             "com.xgimi.smartaccessories" to "智能配件管理",
             "com.xgimi.mateservice" to "伴生外设服务（推测）",
-            "com.xgimi.user" to "极米账号与会员",
+            "com.xgimi.user" to "极米账号与会员；含芒果、优酷账号绑定服务（MgBindService、YoukuBindService，已核实存在）",
             "com.xgimi.soundermodeservice" to "音箱模式（推测）",
         ))
+        read("看看它们还在不在运行", "ps -A | grep -E 'hilink|iotserver|vcontrol|mateservice'", Host.Adb) {
+            expectsError = true
+            note = "停用前这里能看到它们的常驻进程（旧记录说 hilink 占用 CPU 较多，未复核）。停用后什么都不输出。"
+        }
         text("这一组以后如果要用极米手机 App 遥控、蓝牙音箱模式或智能家居联动，需要恢复对应的包。")
     }
 

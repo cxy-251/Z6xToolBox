@@ -37,10 +37,14 @@ val DeckHdmi = module("deck-hdmi", "Deck 接投影仪黑屏") {
             note = "重新打开：`kscreen-doctor output.DP-1.enable`"
         }
         change("缩放设为 100%", "kscreen-doctor output.DP-1.scale.1", Host.Deck)
+        change("旋转外接屏", "kscreen-doctor output.DP-1.rotation.left", Host.Deck) {
+            note = "可选值（来自 `kscreen-doctor --help`）：`none` 不旋转、`left` 逆时针 90°、`right` 顺时针 90°、`inverted` 180°。投影仪吊装倒挂时可能用得上。"
+        }
     }
 
     lesson("核对旧记录时发现的问题") {
         text("""
+            • 旧版的旋转参数写的是 `normal`，kscreen-doctor 里没有这个值，应为 `none`。
             • 旧版命令写的接口名是 `HDMI-A-1`，在 Deck 上不存在。接口名要先用 `kscreen-doctor -o` 查，不能照抄网上的例子。
             • 旧版写的"最低对焦距离 0.8 米""EDID 握手超时"无法核实，已删除。黑屏原因写成推测。
         """)
@@ -78,6 +82,12 @@ val UsbApk1 = module("usb-apk1", "U 盘装 App：改名 .apk1 绕过拦截") {
         }
         change("全部改回 .apk", "for f in *.apk1; do [ -f \"\$f\" ] && mv -- \"\$f\" \"\${f%.apk1}.apk\"; done", Host.Deck) {
             note = "`${'$'}{f%.apk1}` 去掉结尾的 .apk1。"
+        }
+        change("Windows CMD 批量改名", "ren *.apk *.apk1", Host.Windows) {
+            note = "改回：`ren *.apk1 *.apk`。没有在 Windows 上实测。"
+        }
+        change("Windows PowerShell 批量改名", "Get-ChildItem *.apk | Rename-Item -NewName { \$_.Name + '1' }", Host.Windows) {
+            note = "`${'$'}_` 代表管道传进来的每个文件。没有在 Windows 上实测。"
         }
         change("拔盘前把缓存写入 U 盘", "sync", Host.Deck) {
             note = "直接拔盘可能丢掉还在缓存里的数据。"

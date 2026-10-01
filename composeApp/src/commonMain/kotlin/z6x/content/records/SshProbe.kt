@@ -65,6 +65,17 @@ val SshProbe = module("ssh-probe", "SSH 连上后摸清硬件") {
         read("投影仪的局域网 IP", "ip -4 addr show wlan0 | grep inet", Host.Ssh) {
             captured("2026-10-01", "    inet 192.168.0.109/24 brd 192.168.0.255 scope global wlan0")
         }
+        read("品牌和固件版本号", "getprop ro.product.brand; getprop ro.build.display.id", Host.Ssh) {
+            captured("2026-10-01", """
+                XGIMI
+                tv_hi3751v660 HuanglongV200R006C00SPC009B020
+            """)
+            note = "固件版本号里也带着芯片型号 hi3751v660。序列号 `getprop ro.serialno` 属于个人设备信息，不记录。"
+        }
+        read("系统预装的极米包", "pm list packages -s | grep -c xgimi", Host.Ssh) {
+            captured("2026-10-01", "55")
+            note = "`-s` 只列系统预装的。现在 55 个，加上对当前用户卸载的 2 个，出厂时是 57 个。"
+        }
         read("已安装的应用数", "pm list packages | wc -l", Host.Ssh) {
             varies = true
             captured("2026-10-01", "111")

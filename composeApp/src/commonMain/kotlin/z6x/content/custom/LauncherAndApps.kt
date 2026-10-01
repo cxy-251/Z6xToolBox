@@ -17,6 +17,14 @@ val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Pro
         """)
     }
 
+    steps("安装") {
+        change("用 ADB 安装", "adb install -r ProjectivyLauncher-4.71.apk", Host.Deck) {
+            note = "安装包在 shared 目录。Projectivy 是 GitHub 上的开源项目，下载 Release 里的 APK。"
+            outcome = "输出 Success。"
+        }
+        change("手动打开它", "am start -n com.spocky.projengmenu/.ui.home.MainActivity", Host.Adb)
+    }
+
     story("经过：先走了无障碍这条路") {
         text("""
             1. 装好 Projectivy（4.71）后，官方桌面还在，按 Home 仍回到官方桌面。
@@ -58,6 +66,9 @@ val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Pro
             captured("2026-10-01", "com.xgimi.duertts/.MonitorService")
             note = "当时用 ADB 开启过 Projectivy 的服务，但 2026-10-01 查看时列表里只剩极米语音服务，什么时候被关掉的不清楚。官方桌面已卸载，Home 键照样回到 Projectivy，所以没有再开。"
         }
+        change("按一下 Home 再看焦点", "input keyevent 3; sleep 1; dumpsys window | grep -E 'mCurrentFocus|mFocusedApp'", Host.Adb) {
+            note = "模拟按 Home 键，等 1 秒再查焦点窗口，应该是 com.spocky.projengmenu。会切换屏幕画面。见「屏幕上现在是谁」。"
+        }
         read("Projectivy 版本", "dumpsys package com.spocky.projengmenu 2>/dev/null | grep -m1 versionName", Host.Adb) {
             captured("2026-10-01", "    versionName=4.71")
         }
@@ -93,6 +104,7 @@ val AppStorePivot = module("app-store-pivot", "找个应用商店：Aurora、Apt
         text("""
             1. **Aurora Store**（第三方 Google Play 客户端）：启动后闪退。没有深究原因。
             2. **Aptoide TV**（为电视设计的第三方商店）：能用，界面也适合遥控器。但从它装的 YouTube Music 一打开就退出，日志显示缺少 Google Play 服务。商店里很多海外 App 依赖 Google 服务，这台机器没有，装了也用不了。
+            当时也考虑过 **F-Droid**（开源应用商店，不依赖 Google），它收录的多是开源工具，不是电视上想装的那些 App，没有用。
             3. **放弃商店**：两个都卸载了（YouTube Music 一起卸载），改为在 Deck 上下载 APK、确认是 32 位版本后，用 `adb install` 或局域网下载安装。
         """)
     }
@@ -104,6 +116,9 @@ val AppStorePivot = module("app-store-pivot", "找个应用商店：Aurora、Apt
         change("用 ADB 安装", "adb install -r app.apk", Host.Deck) {
             note = "`-r` 覆盖安装（升级）并保留数据。"
             outcome = "输出 Success。"
+        }
+        change("当时安装 Aptoide TV", "adb install -r aptoide_tv.apk", Host.Deck) {
+            note = "安装包还在 shared 目录。包名是 `cm.aptoidetv.pt`。"
         }
         danger("卸载第三方应用", "adb uninstall cm.aptoidetv.pt", Host.Deck) {
             note = "第三方应用是真正卸载，数据一起删除，和预装应用的「对当前用户卸载」不同。"
@@ -153,6 +168,14 @@ val ClashProxy = module("clash-proxy", "代理：Clash Meta 以 VPN 模式运行
         read("VPN 会话名", "dumpsys connectivity 2>/dev/null | grep -m1 -oE 'sessionId=[A-Za-z]+'", Host.Adb) {
             captured("2026-10-01", "sessionId=Clash")
         }
+        read("Clash 的进程", "ps -A | grep -i clash", Host.Adb) {
+            varies = true
+            captured("2026-10-01", """
+                u0_a69        7091  2665 1168048  94624 0                   0 S com.github.metacubex.clash.meta
+                u0_a69        7124  2665 1784584 123820 0                   0 S com.github.metacubex.clash.meta:background
+            """)
+            note = "两个进程：界面进程和 `:background` 后台服务进程（VPN 和代理核心在这里）。第 5 列是实际占用内存（KB），约 120MB。"
+        }
         read("混合代理端口", "netstat -tln | grep 7890", Host.Adb) {
             captured("2026-10-01", "tcp6       0      0 [::]:7890               [::]:*                  LISTEN")
             note = "7890 是 Clash 的 HTTP/SOCKS 混合端口。`[::]` 表示监听所有地址（IPv4 也能连）。"
@@ -174,6 +197,9 @@ val ClashProxy = module("clash-proxy", "代理：Clash Meta 以 VPN 模式运行
         }
         change("清除全局代理", "settings put global http_proxy :0", Host.Adb) {
             note = "`:0` 表示不使用代理。"
+        }
+        change("只给某个 App 设代理", "", Host.Tv) {
+            note = "SmartTube、TV Bro 等 App 自己的设置里有代理选项，填 `127.0.0.1` 端口 `7890` 即可，只影响这个 App。"
         }
     }
 
