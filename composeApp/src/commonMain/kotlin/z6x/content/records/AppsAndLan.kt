@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val LanShare = module("lan-share", "局域网传文字：解决电视上没法复制粘贴") {
+val LanShare = module("lan-share", "局域网传递文本：解决电视端无法复制粘贴") {
     keywords = "python http.server · TV Bro · 剪贴板"
     overview = """
         代理订阅链接、Token 这类几十上百个字符的内容，用遥控器一个个按根本不现实。
@@ -81,7 +81,7 @@ val LanShare = module("lan-share", "局域网传文字：解决电视上没法�
     related("usb-apk1", "app-install-order")
 }
 
-val AppInstallOrder = module("app-install-order", "App 安装顺序与兼容问题") {
+val AppInstallOrder = module("app-install-order", "应用的安装顺序与兼容性") {
     keywords = "32 位 · armeabi-v7a · 闪退 · unzip -l"
     overview = """
         没有 ADB 的阶段，按需要一个个装 App：先解决输入和传文件，再拿命令行，再弄网络。中间两个 App 闪退，一个装不上。

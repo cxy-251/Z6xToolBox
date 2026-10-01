@@ -3,7 +3,7 @@ package z6x.content.inspect
 import z6x.framework.Host
 import z6x.framework.module
 
-val PowerModes = module("power-modes", "案例：「关屏」和「关机」到底做了什么") {
+val PowerModes = module("power-modes", "核查：「关屏」与「关机」的实际行为") {
     keywords = "mWakefulness · /proc/uptime · suspend · mem_sleep · 关机是睡眠"
     overview = """
         极米的电源菜单有关屏、关机、重启、定时关机。想知道哪种状态下后台服务还在，从 Deck 每隔几秒检查一次网络、ADB 端口、系统唤醒状态和运行时长，实测得出：**关屏时系统照常运行；关机其实是睡眠**。

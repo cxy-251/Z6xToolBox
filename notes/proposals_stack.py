@@ -75,7 +75,7 @@ S['G',23] = ("Go + mochi-mqtt/server（纯 Go 的 MQTT 服务端库）。",
  "第三期候选。家里出现 MQTT 设备时再做，作为 hub 的一个模块。")
 S['G',24] = ("Go 标准库 net：TCP 双向转发 + SOCKS5 协议解析。",
  "armon/go-socks5。",
- "不做。Clash 已经在局域网上提供代理（这本身还是一个需要收紧的安全问题，见「安全」页）。")
+ "不做。Clash 已经在局域网上提供代理（这本身还是一个需要收紧的安全问题，见「安全检查」页）。")
 S['G',25] = ("Go + mmcdole/gofeed（RSS/Atom 解析）+ bbolt（记录已处理的条目）。",
  "gofeed、Miniflux。",
  "不做，收益低。")

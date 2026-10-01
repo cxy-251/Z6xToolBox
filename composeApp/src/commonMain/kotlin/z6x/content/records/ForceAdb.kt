@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
+val ForceAdb = module("force-adb", "通过 SSH 启动网络 ADB") {
     keywords = "setprop · ctl.start adbd · ro.adb.secure · SELinux"
     overview = """
         系统里找不到开发者选项，SimpleSSHD 又只有普通 App 权限，卸不掉也停不了预装应用。
@@ -75,7 +75,7 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
             note = """
                 写进去了。实验后用 `setprop debug.z6x.test ""` 清空。
                 **意外发现：** setprop 不能删除属性，只能把值清空。之后 `getprop` 列出全部属性时仍有一行 `[debug.z6x.test]: []`，要到重启才消失（debug.* 不持久化；2026-10-01 重启后确认已消失）。
-                「案例：查出真实型号和芯片」里用 `grep z6x` 搜属性时就多出了这一行，被 `--try-read` 发现了。
+                「核查：真实型号与芯片」里用 `grep z6x` 搜属性时就多出了这一行，被 `--try-read` 发现了。
             """
             outcome = "证实：在这台机器上，普通 App 可以设置本该被 SELinux 拦下的属性。"
         }
@@ -83,7 +83,7 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
 
     consequences {
         text("""
-            • **重启后 adbd 会自动运行**（2026-10-01 实测：重启后 `ro.boottime.adbd` 约 6.6 秒，ADB 直接能连）。原因是极米启动配置里的一段补丁，见「案例：ADB 为什么开机就自动运行」。
+            • **重启后 adbd 会自动运行**（2026-10-01 实测：重启后 `ro.boottime.adbd` 约 6.6 秒，ADB 直接能连）。原因是极米启动配置里的一段补丁，见「核查：ADB 开机自动运行的原因」。
             • 但只要 adbd 被停掉一次，这个"自启"就会失效，要从 SSH 再强开。所以 SimpleSSHD **不要卸载**。
             • `ro.adb.secure=0` 意味着同一局域网里**任何人**都能连上并获得 shell 权限，不要把投影仪放在不可信的网络里。
             • 系统 OTA 升级可能把 SELinux 改回 Enforcing，这条路就会失效。深度定制里停用 OTA 也有这个考虑。

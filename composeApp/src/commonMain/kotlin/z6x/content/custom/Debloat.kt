@@ -5,7 +5,7 @@ import z6x.framework.SectionBuilder
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val DebloatMethod = module("debloat-method", "精简预装应用：停用还是卸载") {
+val DebloatMethod = module("debloat-method", "精简预装应用：停用与卸载的取舍") {
     keywords = "pm disable-user · pm uninstall --user 0 · install-existing"
     overview = """
         有了 ADB（shell 身份）就能处理预装应用了。这台机器一共处理了 31 个：29 个**停用**，2 个**对当前用户卸载**。两种都能随时恢复，不需要刷机。

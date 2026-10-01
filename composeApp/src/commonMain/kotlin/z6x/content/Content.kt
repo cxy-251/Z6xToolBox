@@ -73,62 +73,64 @@ import z6x.framework.Scope
 object Content {
     val scopes = listOf(
         Scope(
-            "records", "📖", "折腾记录",
-            "从拿到投影仪到接管系统的真实经过：每一步尝试了什么、为什么失败、最后怎么解决。",
+            "records", "📖", "实践记录",
+            "从接入投影仪到接管系统的完整过程：每一步的尝试、失败原因与最终方案。",
             listOf(
+                Category("设备接入", "🔌", "外接显示、U 盘安装应用、局域网传输与兼容性", listOf(DeckHdmi, UsbApk1, LanShare, AppInstallOrder)),
                 Category(
-                    "设备接入", "🔌", "从 U 盘装 App、SSH 到强开 ADB",
-                    listOf(DeckHdmi, UsbApk1, LanShare, AppInstallOrder, SshProbe, SshPermissionWall, FindAdbEntry, ForceAdb),
+                    "获取权限", "🔑", "从 SSH 到网络 ADB",
+                    listOf(SshProbe, SshPermissionWall, FindAdbEntry, ForceAdb, AdbAutostart, SshKeyLogin),
                 ),
                 Category(
-                    "深度定制", "🧹", "有了 ADB 之后：精简预装、换桌面、代理、脚本",
+                    "系统定制", "🧹", "精简预装、替换桌面、输入法、代理与投屏",
                     listOf(
-                        DebloatMethod, DebloatList, ProjectivyLauncher, ClashProxy, AppStorePivot,
-                        InputMethodPivot, ScreenCast, SystemPackages, DebloatScripts,
+                        DebloatMethod, DebloatList, SystemPackages, DebloatScripts, ProjectivyLauncher,
+                        InputMethodPivot, AppStorePivot, ClashProxy, ScreenCast,
                     ),
                 ),
-                Category("开发环境", "⚙️", "在投影仪上跑自己编译的程序", listOf(NativeExec, Busybox, GoServer, ProcMetrics)),
-                Category("应急与安全", "🛟", "出事了怎么恢复；对局域网开放了什么", listOf(Emergency, Security)),
+                Category("开发环境", "⚙️", "在投影仪上运行自编译程序", listOf(NativeExec, Busybox, GoServer, ProcMetrics)),
+                Category("应急与安全", "🛟", "故障恢复与局域网暴露面", listOf(Emergency, Security)),
             ),
         ),
         Scope(
-            "inspect", "🔍", "学会查设备",
-            "用 adb 查这台投影仪的硬件、系统和权限。每页都是一次真实的核查过程。",
+            "inspect", "🔍", "设备查询",
+            "通过 ADB 查询这台投影仪的硬件、系统与权限：原理、命令手册与核查案例。",
             listOf(
-                Category("连接与查看", "📶", "ADB、SSH、截图、焦点窗口：先连上，才能查", listOf(SshKeyLogin, TvScreencap, FocusWindow)),
-                Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel, PortOwner, AdbAutostart, PowerModes)),
+                Category("原理", "🧭", "理解命令为什么能执行或被拒绝", listOf(PermModel)),
+                Category("查看工具", "📶", "截图与焦点窗口", listOf(TvScreencap, FocusWindow)),
                 Category(
-                    "命令手册", "📚", "按主题整理的常用命令，全部在这台投影仪上跑过",
+                    "命令手册", "📚", "按主题整理的常用命令，均在本机实测",
                     listOf(
-                        PermModel, AdbBasics, PmAm, PropsInit, DumpsysSettings, ProcessMemory, StoragePartitions,
+                        AdbBasics, PmAm, PropsInit, DumpsysSettings, ProcessMemory, StoragePartitions,
                         NetworkCmds, LogsCrash, SelinuxCmds, HardwareCmds, BackgroundCmds,
                     ),
                 ),
-                Category("经验", "💡", "一条路不通时怎么换", listOf(Pivots)),
+                Category("核查案例", "🧪", "对旧记录中的说法逐项实测", listOf(FindRealModel, PortOwner, PowerModes)),
+                Category("经验", "💡", "方案不通时如何调整", listOf(Pivots)),
             ),
         ),
         Scope(
             "proposals", "💡", "提案",
-            "想过但还没做的方案。每篇都附实机可行性审核：可行、可选还是做不到。",
+            "尚未实施的方案，均附实机可行性审核：可行、可选或不可行。",
             listOf(
-                Category("规格", "📐", "交给实现者的两份规格：Go 常驻服务、Rust 命令集", listOf(HubSpec, ToolsSpec)),
+                Category("规格", "📐", "z6x-hub（Go，在本项目内实现）与 z6x-tools（Rust，暂缓）", listOf(HubSpec, ToolsSpec)),
                 Category(
-                    "109 个小项目", "🗂", "逐篇审核：纳入哪个项目、第几期，或为什么不做",
+                    "小项目审核", "🗂", "109 个提案：采纳、暂缓或不可行的依据",
                     listOf(ReviewSummary, ReviewFiles, ReviewMedia, ReviewNetwork, ReviewControl, ReviewSystem),
                 ),
                 Category(
-                    "开发环境", "⚙️", "让投影仪上的开发更顺手",
+                    "开发辅助", "⚙️", "改善投影仪上开发体验的提案",
                     listOf(EnvProfile, StraceDebug, DropbearShell, OomWatchdog, PacketCapture),
                 ),
             ),
         ),
         Scope(
             "stack", "🛠", "本项目技术栈",
-            "这个工具箱本身用到的 JDK、Gradle、Kotlin、Compose 和 Git：是什么、怎么装、怎么用。",
+            "工具箱本身使用的 JDK、Gradle、Kotlin、Compose 与 Git：作用、安装与用法。",
             listOf(
                 Category("环境搭建", "📦", "在 Steam Deck 上准备开发环境", listOf(InstallJdk, GradleBasics)),
-                Category("读懂代码", "📘", "这个项目里用到的 Kotlin 和 Compose 写法", listOf(KotlinInProject, ComposeInProject)),
-                Category("项目日常", "🧭", "目录结构、运行与检查、Git", listOf(ProjectLayout, GitInProject, JavaMemory)),
+                Category("代码解读", "📘", "本项目用到的 Kotlin 与 Compose 写法", listOf(KotlinInProject, ComposeInProject)),
+                Category("项目维护", "🧭", "目录结构、运行检查、Git 与问题记录", listOf(ProjectLayout, GitInProject, JavaMemory)),
             ),
         ),
     )

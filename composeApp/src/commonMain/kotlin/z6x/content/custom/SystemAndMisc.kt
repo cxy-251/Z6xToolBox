@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val SystemPackages = module("system-packages", "系统里还剩什么：组件与入口") {
+val SystemPackages = module("system-packages", "精简后的系统组件与入口") {
     keywords = "Activity Launcher · resolve-activity · 系统组件 · uid 1000"
     overview = """
         精简之后，系统里还装着哪些极米组件、各自大概管什么、哪些入口打不开。用 Activity Launcher 能看到并打开各个 App 里隐藏的界面。
@@ -159,7 +159,7 @@ val SystemPackages = module("system-packages", "系统里还剩什么：组件�
     related("find-adb-entry", "projectivy-launcher", "port-owner")
 }
 
-val InputMethodPivot = module("input-method", "输入法：换了 LeanKeyboard 又换回搜狗") {
+val InputMethodPivot = module("input-method", "输入法：LeanKeyboard 替换失败，恢复搜狗") {
     keywords = "ime · LeanKeyboard · 搜狗 · 遥控器延迟"
     overview = """
         想用开源的 LeanKeyboard 替换预装的搜狗输入法，换完后遥控器操作明显变卡，于是卸掉 LeanKeyboard，恢复搜狗。
@@ -215,7 +215,7 @@ val InputMethodPivot = module("input-method", "输入法：换了 LeanKeyboard �
     related("system-packages", "debloat-scripts")
 }
 
-val ScreenCast = module("screen-cast", "无线投屏") {
+val ScreenCast = module("screen-cast", "无线投屏：AirPlay、Miracast 与 DLNA") {
     keywords = "Miracast · AirPlay · DLNA · wirelessscreen"
     overview = """
         极米的无线投屏应用同时支持 Miracast（Windows、安卓镜像）、AirPlay（苹果）和 DLNA（视频 App 里的投屏按钮）。发送端用系统自带的投屏功能即可，不用装 App。

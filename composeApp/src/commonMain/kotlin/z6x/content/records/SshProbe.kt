@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val SshProbe = module("ssh-probe", "SSH 连上后摸清硬件") {
+val SshProbe = module("ssh-probe", "通过 SSH 获取硬件与系统信息") {
     keywords = "SimpleSSHD · getprop · /proc · df · wm"
     overview = """
         用 U 盘装上 SimpleSSHD 后，第一次有了命令行。虽然只是普通 App 权限，但查询类命令几乎都能用，先把这台机器摸了个底。
@@ -31,7 +31,7 @@ val SshProbe = module("ssh-probe", "SSH 连上后摸清硬件") {
         }
         read("芯片平台", "getprop ro.board.platform", Host.Ssh) {
             captured("2026-10-01", "huanglong")
-            note = "这是平台代号。具体芯片型号要交叉验证，见「案例：查出真实型号和芯片」。"
+            note = "这是平台代号。具体芯片型号要交叉验证，见「核查：真实型号与芯片」。"
         }
         read("Android 版本", "getprop ro.build.version.release; getprop ro.build.version.sdk", Host.Ssh) {
             captured("2026-10-01", """
@@ -108,19 +108,19 @@ val SshProbe = module("ssh-probe", "SSH 连上后摸清硬件") {
         claim("光机分辨率：0.33 英寸 DMD 芯片，物理点对点 1920x1080@60Hz，屏幕密度 240 DPI", Verdict.Unverified,
             "1920x1080、240 dpi 已实测；DMD 芯片尺寸命令行查不到。")
         claim("调试接口：网络 ADB 端口 5555（默认开放且无需授权指纹，uid=2000）", Verdict.Disproved,
-            "端口 5555 和免授权是**预设**好的，但 adbd 默认**不运行**，要从 SSH 手动拉起。见「在 SSH 里强开网络 ADB」。")
+            "端口 5555 和免授权是**预设**好的，但 adbd 默认**不运行**，要从 SSH 手动拉起。见「通过 SSH 启动网络 ADB」。")
         claim("getprop ro.product.model 输出 `Z6X Pro`；ro.build.display.id 输出 `GMUI_...`", Verdict.Disproved,
             "ro.product.model 是 `XGIMI TV`；display.id 是 `tv_hi3751v660 HuanglongV200R006C00SPC009B020`。型号在 `xgimi.bt.name` 里。")
         claim("总包数: 183；极米内置包数: 57", Verdict.Disproved,
             "总包数 111（加上对当前用户卸载的也只有 113）。极米预装 57 **成立**：现在 55 个，加卸载的 home、stream.video 共 57。")
         claim("为什么查询命令能执行：/proc/meminfo、getprop、df 对所有普通应用开放只读权限；为什么修改与删除执行不了：调用系统特权服务时会校验 UID 是否为 0 或 2000，普通 UID 10068 会被拦截。", Verdict.Confirmed,
-            "查询全部可用；修改被拒见「SSH 能查不能改」的实验。")
+            "查询全部可用；修改被拒见「SSH 的权限边界」的实验。")
     }
 
     related("ssh-permission-wall", "find-real-model", "ssh-key-login")
 }
 
-val SshPermissionWall = module("ssh-permission-wall", "SSH 能查不能改：撞上权限墙") {
+val SshPermissionWall = module("ssh-permission-wall", "SSH 的权限边界：可查询，不可修改") {
     keywords = "uid 10068 · SecurityException · am · pm"
     overview = """
         想在 SSH 里直接停用、卸载预装应用，全被系统拒绝。这一页用实验弄清楚：被谁拒、为什么拒，以及为什么非得拿到 ADB。
@@ -212,7 +212,7 @@ val SshPermissionWall = module("ssh-permission-wall", "SSH 能查不能改：撞
         facts(
             "SSH（uid 10068）" to "查询：可以 · 启动其他应用界面：拒绝 · 停用应用：拒绝",
             "ADB（uid 2000）" to "以上全部可以。深度定制里停用的 29 个组件都是用 ADB 做的",
-            "所以" to "要接管系统，必须拿到 ADB，见「在 SSH 里强开网络 ADB」",
+            "所以" to "要接管系统，必须拿到 ADB，见「通过 SSH 启动网络 ADB」",
         )
     }
 

@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val NativeExec = module("native-exec", "不 root 也能跑自己的程序") {
+val NativeExec = module("native-exec", "在非 root 环境下运行自编译程序") {
     keywords = "/data/local/tmp · noexec · 静态编译 · 32/64 位"
     overview = """
         有了 ADB 的 shell 身份，就能把自己编译的 Linux 程序放到 `/data/local/tmp` 里直接运行，不需要 root、不需要装 App。后面的 BusyBox 和 Go 服务都是这样跑起来的。
@@ -73,7 +73,7 @@ val NativeExec = module("native-exec", "不 root 也能跑自己的程序") {
     related("busybox", "go-server", "force-adb")
 }
 
-val Busybox = module("busybox", "BusyBox：补齐 396 个 Linux 命令") {
+val Busybox = module("busybox", "部署 BusyBox：补充 396 个 Linux 命令") {
     keywords = "busybox --install · toybox · PATH"
     overview = """
         安卓自带的 toybox 命令很精简，缺 vi、wget 等，有的命令功能也不全（比如 awk 没有 strtonum）。放一个静态编译的 BusyBox 进去，一次补齐 396 个命令。
@@ -138,7 +138,7 @@ val Busybox = module("busybox", "BusyBox：补齐 396 个 Linux 命令") {
     related("native-exec", "go-server", "port-owner")
 }
 
-val GoServer = module("go-server", "Go 服务：交叉编译、部署、常驻") {
+val GoServer = module("go-server", "Go 服务：交叉编译、部署与常驻运行") {
     keywords = "GOOS GOARCH · 交叉编译 · nohup · oom_score_adj"
     overview = """
         在 Deck 上用 Go 编译 arm64 程序，推到投影仪上后台运行，局域网能访问。一个最小的 HTTP 服务实测只占 2~4MB 内存，从 2026-10-01 中午起一直在跑。
@@ -227,7 +227,7 @@ val GoServer = module("go-server", "Go 服务：交叉编译、部署、常驻")
     related("native-exec", "proc-metrics", "oom-watchdog")
 }
 
-val ProcMetrics = module("proc-metrics", "不用 root 读系统指标") {
+val ProcMetrics = module("proc-metrics", "在非 root 环境下读取系统指标") {
     keywords = "/proc/stat · /proc/meminfo · thermal_zone"
     overview = """
         CPU、内存、温度这些数据，内核都以文本文件的形式放在 /proc 和 /sys 里，shell 身份直接读。工具箱的「设备」面板和以后的监控服务都靠它们。

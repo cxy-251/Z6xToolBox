@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val FindRealModel = module("find-real-model", "案例：查出真实型号和芯片") {
+val FindRealModel = module("find-real-model", "核查：真实型号与芯片") {
     keywords = "getprop · /proc/cpuinfo · CPU part"
     overview = """
         旧文档写的是"联发科 MT9669、4 核 A73"。用 adb 查了几条属性和 /proc/cpuinfo，实际是**海思 Hi3751V660、8 核 Cortex-A55**。
@@ -75,7 +75,7 @@ val FindRealModel = module("find-real-model", "案例：查出真实型号和芯
     }
 
     audit {
-        claim("芯片平台：联发科 MT9669（开发代号 huanglong），4 核 Cortex-A73 处理器（旧版「SSH 全机参数探测」）", Verdict.Disproved,
+        claim("芯片平台：联发科 MT9669（开发代号 huanglong），4 核 Cortex-A73 处理器（旧版「通过 SSH 获取硬件与系统信息」）", Verdict.Disproved,
             "海思 Hi3751V660，8 核 Cortex-A55。查法就是本页。")
         claim("设备型号：getprop ro.product.model 输出 Z6X Pro", Verdict.Disproved,
             "输出是 `XGIMI TV`；型号在 `xgimi.bt.name` 里。")

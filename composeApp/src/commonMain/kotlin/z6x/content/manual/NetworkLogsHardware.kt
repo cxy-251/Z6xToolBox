@@ -50,7 +50,7 @@ val NetworkCmds = module("network-cmds", "网络：地址、路由、端口、�
     steps("端口") {
         read("在监听的 TCP 端口", "netstat -tln", Host.Adb) {
             varies = true
-            note = "`-p` 在 shell 下看不到进程名，查端口归属见「案例：这个端口是谁开的」。5555 是 ADB，2222 是 SimpleSSHD，7890 是 Clash，8088 是 Go 服务，8080、7100 等属于系统组件。"
+            note = "`-p` 在 shell 下看不到进程名，查端口归属见「核查：端口的所属进程」。5555 是 ADB，2222 是 SimpleSSHD，7890 是 Clash，8088 是 Go 服务，8080、7100 等属于系统组件。"
         }
     }
 
@@ -114,7 +114,7 @@ val NetworkCmds = module("network-cmds", "网络：地址、路由、端口、�
     steps("从 Deck 登录 SSH") {
         read("SimpleSSHD", "ssh z6x", Host.Deck) {
             manual = true
-            note = "别名的配置见「SSH 免密登录 SimpleSSHD」。不用别名时：`ssh -p 2222 192.168.0.109`。"
+            note = "别名的配置见「SimpleSSHD 公钥登录」。不用别名时：`ssh -p 2222 192.168.0.109`。"
         }
     }
 
@@ -258,7 +258,7 @@ val SelinuxCmds = module("selinux-cmds", "SELinux：模式与安全标签") {
         read("进程的安全标签", "ps -AZ | grep adbd", Host.Adb) {
             varies = true
             captured("2026-10-01", "u:r:adbd:s0                    shell        18717     1   56416   8948 0                   0 S adbd")
-            note = "adbd 在 `adbd` 域；ADB shell 在 `shell` 域；SimpleSSHD 在 `untrusted_app` 域（见「SSH 免密登录」）。"
+            note = "adbd 在 `adbd` 域；ADB shell 在 `shell` 域；SimpleSSHD 在 `untrusted_app` 域（见「SimpleSSHD 公钥登录」）。"
         }
         change("切换模式（需要 root）", "setenforce 0", Host.Adb) {
             expectsError = true
@@ -510,7 +510,7 @@ val HardwareCmds = module("hardware-cmds", "硬件：温度、CPU、显示、解
     related("proc-metrics", "screen-cast", "focus-window")
 }
 
-val BackgroundCmds = module("background-cmds", "后台、唤醒、时间与其他") {
+val BackgroundCmds = module("background-cmds", "后台任务、唤醒、时间与其他") {
     keywords = "wakelock · deviceidle · jobscheduler · alarm · broadcasts · users · inotifyd · date · ntp · screenrecord · toybox"
     overview = """
         查谁在后台偷偷运行、系统时间对不对，以及几个零散但好用的工具。

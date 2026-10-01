@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val DeckHdmi = module("deck-hdmi", "Deck 接投影仪黑屏") {
+val DeckHdmi = module("deck-hdmi", "Steam Deck 外接投影仪无信号") {
     keywords = "kscreen-doctor · 分辨率 · 刷新率"
     overview = """
         Steam Deck 用 Type-C 转 HDMI 接投影仪，投影仪提示无信号。把 Deck 的外接输出改成 1920x1080@60 后正常显示。
@@ -76,7 +76,7 @@ val DeckHdmi = module("deck-hdmi", "Deck 接投影仪黑屏") {
     related("usb-apk1")
 }
 
-val UsbApk1 = module("usb-apk1", "U 盘装 App：改名 .apk1 绕过拦截") {
+val UsbApk1 = module("usb-apk1", "U 盘安装应用：修改扩展名绕过拦截") {
     keywords = "文件管理器 · PackageInstaller · 批量改名"
     overview = """
         还没有 ADB 的时候，只能用 U 盘装 App。系统文件管理器不让直接点 .apk 安装，把后缀改成 .apk1 再打开，就能选系统安装器装上。

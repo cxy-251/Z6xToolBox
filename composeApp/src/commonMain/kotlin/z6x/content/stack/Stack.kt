@@ -59,7 +59,7 @@ val GradleBasics = module("gradle-basics", "Gradle：构建工具与 wrapper") {
     related("install-jdk", "kotlin-in-project", "project-layout")
 }
 
-val KotlinInProject = module("kotlin-in-project", "Kotlin：这个项目里用到的写法") {
+val KotlinInProject = module("kotlin-in-project", "Kotlin：本项目用到的语法") {
     keywords = "data class · sealed · enum · 扩展 · DSL · 协程 · 字符串模板"
     overview = """
         不讲完整语法，只讲这个项目代码里实际用到、看代码时会碰到的 Kotlin 写法，每个都指出在哪个文件。和 C# 对照着看。
@@ -105,7 +105,7 @@ val KotlinInProject = module("kotlin-in-project", "Kotlin：这个项目里用�
     related("compose-in-project", "gradle-basics", "project-layout")
 }
 
-val ComposeInProject = module("compose-in-project", "Compose：界面是怎么写出来的") {
+val ComposeInProject = module("compose-in-project", "Compose：界面的编写方式") {
     keywords = "@Composable · remember · mutableStateOf · 重组 · Modifier · 多平台"
     overview = """
         Compose 用函数描述界面「长什么样」，状态变了就重新调用函数刷新界面（重组）。和 Avalonia 的 XAML + 数据绑定是完全不同的思路：没有 XAML、没有 ViewModel 的属性通知，界面就是 Kotlin 代码。
@@ -142,7 +142,7 @@ val ComposeInProject = module("compose-in-project", "Compose：界面是怎么�
     related("kotlin-in-project", "project-layout")
 }
 
-val GitInProject = module("git-in-project", "Git：这个项目怎么用它") {
+val GitInProject = module("git-in-project", "Git 在本项目中的用法") {
     keywords = "commit · tag · baseline · log · show · diff · worktree"
     overview = """
         这个仓库用 git 记录每一步改动。最初的 Avalonia（C#）版本已经从目录里删掉，但它在 git 历史里打了标签 `avalonia-baseline`，随时可以取回来看。
@@ -194,7 +194,7 @@ val GitInProject = module("git-in-project", "Git：这个项目怎么用它") {
     related("project-layout", "gradle-basics")
 }
 
-val ProjectLayout = module("project-layout", "这个项目的结构与日常操作") {
+val ProjectLayout = module("project-layout", "项目结构与日常操作") {
     keywords = "目录结构 · run.sh · 新增模块 · --check · --try-read"
     overview = """
         仓库里有什么、怎么运行、怎么加一篇内容、改完怎么检查。
@@ -240,7 +240,7 @@ val ProjectLayout = module("project-layout", "这个项目的结构与日常操�
     related("gradle-basics", "git-in-project", "kotlin-in-project")
 }
 
-val JavaMemory = module("java-memory", "案例：后台 Java 进程越来越占内存") {
+val JavaMemory = module("java-memory", "问题记录：后台 Java 进程内存持续增长") {
     keywords = "Gradle 守护进程 · Kotlin 编译守护进程 · -Xmx · idletimeout · jps"
     overview = """
         用了一段时间后，Deck 后台的 Java 进程合计占了 2~3GB 内存，而且越用越多。原因不是工具箱代码里的内存泄漏，而是**本项目的构建和启动方式有缺陷**：每次运行都可能多留下一个常驻的 Gradle 进程，每个都允许用到 2GB。已修复（提交 2f6aed6）。

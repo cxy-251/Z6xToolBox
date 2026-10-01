@@ -7,7 +7,7 @@ import z6x.framework.module
  * 给实现者（agy）的说明：
  * 这一页是 z6x-tools（Rust）的规格，是唯一的原始版本。仓库在别处，按这里实现；有疑问或要改规格，先改这一页。
  */
-val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集）") {
+val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集，暂缓）") {
     keywords = "Rust · BusyBox 式 · 子命令 · musl 静态 · 验收"
     overview = """
         z6x-tools 是一个 Rust 写的命令集，像 BusyBox 一样：一个静态二进制 `z6x`，用子命令区分功能（`z6x sys`、`z6x ports`……），用完即退出。
@@ -41,7 +41,7 @@ val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集）") {
     story("第一期子命令") {
         text("""
             1. `z6x sys`（「系统指标」「温度监控」）：一次性输出 CPU 使用率（隔 500ms 读两次 /proc/stat）、MemTotal/MemAvailable、所有 thermal_zone 的 type 和温度、/data 剩余空间、运行时长。`--watch 2` 每 2 秒刷新一次。
-            2. `z6x ports`（本项目「案例：这个端口是谁开的」）：读 /proc/net/tcp、tcp6、udp、udp6，列出监听端口 → uid → 包名（调用 `pm list packages -U`；/data/system/packages.list 对 shell 不可读，已实测）。
+            2. `z6x ports`（本项目「核查：端口的所属进程」）：读 /proc/net/tcp、tcp6、udp、udp6，列出监听端口 → uid → 包名（调用 `pm list packages -U`；/data/system/packages.list 对 shell 不可读，已实测）。
             3. `z6x key`（「快速按键注入」「虚拟 USB 键盘」）：注入按键。默认通过 /dev/uinput 创建一个虚拟键盘设备（不依赖遥控器节点号）。/dev/uinput 可写已实测，**但系统是否接受这个虚拟键盘的按键还没验证**，实现时先做这一步，不行就退回直接写遥控器节点（/dev/input/event13 也可写）；`z6x key home`、`z6x key volup --repeat 5 --interval 50ms`；`z6x key --bench` 测单次注入耗时。键名表包括方向、确认、返回、主页、菜单、音量、静音、电源、媒体键。
             4. `z6x keymap --daemon`（「遥控器按键重映射」）：监听遥控器节点（默认按设备名 "XGIMI RC" 查找，不写死 event13），识别长按 / 双击，执行配置里的动作（发按键序列或运行命令）。**不独占设备**（不调用 EVIOCGRAB），原有按键功能不受影响。遥控器重连后节点变化要能自动重新绑定。
             5. `z6x hash`（「文件哈希与查重」「重复文件查找」）：对目录求重复文件：先按大小分组，再比头尾 64KB，最后全文件 xxh3；输出重复组和可节省空间。**只报告不删除**，删除由用户自己决定。
@@ -62,7 +62,7 @@ val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集）") {
         text("""
             • 全体：`file z6x` 显示 ARM aarch64、statically linked；体积 < 2MB；在投影仪上 `z6x --help` 能运行。
             • sys：数值和 `cat /proc/meminfo`、thermal 节点手工读数一致；`--json` 输出能被 `jq` 解析。
-            • ports：列出的 5555 对应 shell、2222 对应 org.galexander.sshd、7890 对应 Clash，和「案例：这个端口是谁开的」的结果一致。
+            • ports：列出的 5555 对应 shell、2222 对应 org.galexander.sshd、7890 对应 Clash，和「核查：端口的所属进程」的结果一致。
             • key：`z6x key home` 后电视回到桌面；`--bench` 报告单次耗时，要明显低于 `input keyevent`（后者每次都要启动 Java 进程）。
             • keymap：配置「长按返回 = 打开 Activity Launcher」，长按生效、短按返回仍然正常；关掉再打开遥控器后依然生效。
             • hash：在准备好的测试目录（含已知重复文件）上报告正确；不删除任何文件。

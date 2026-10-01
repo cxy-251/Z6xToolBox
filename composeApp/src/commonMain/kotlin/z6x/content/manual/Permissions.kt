@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为什么结果不一样") {
+val PermModel = module("perm-model", "原理：SSH 与 ADB 的权限差异") {
     keywords = "uid · 用户组 · capability · SELinux · Binder · cmd · 系统权限 · DUMP"
     overview = """
         同一条 `pm disable-user`，在 ADB 里成功，在 SSH 里报 SecurityException；`kill` 在 ADB 里也杀不掉别的 App。原因是安卓有**两层**权限检查：Linux 内核管文件、设备和信号；安卓系统服务管 pm、am、settings 这类操作。ADB 和 SSH 在这两层上的身份不同。
@@ -86,7 +86,7 @@ val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为
                 tcp        0      0 0.0.0.0:1297            0.0.0.0:*               LISTEN      -
                 tcp6       0      0 [::]:8088               [::]:*                  LISTEN      9089/z6x_go_server
             """)
-            note = "自己从 ADB 启动的 Go 服务能显示进程名；别人的端口显示 `-`。查别人的端口见「案例：查出端口属于哪个程序」。"
+            note = "自己从 ADB 启动的 Go 服务能显示进程名；别人的端口显示 `-`。查别人的端口见「核查：端口的所属进程」。"
         }
         read("声卡设备的权限", "ls -l /dev/snd | head -3", Host.Adb) {
             captured("2026-10-01", """
@@ -148,7 +148,7 @@ val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为
             "dumpsys" to "SSH ✗ 缺 DUMP 权限　ADB ✓",
             "settings get / put" to "SSH ✗ 连 get 都不行　ADB ✓（WRITE_SECURE_SETTINGS）",
             "logcat" to "SSH 只有自己的日志　ADB 全部（log 组、READ_LOGS）",
-            "pm disable-user、am start" to "SSH ✗ SecurityException（见「SSH 能查不能改」）　ADB ✓",
+            "pm disable-user、am start" to "SSH ✗ SecurityException（见「SSH 的权限边界」）　ADB ✓",
             "pm uninstall / clear" to "SSH 未验证（没法安全地测）　ADB ✓",
             "读遥控器 /dev/input/event*" to "SSH ✗　ADB ✓（input 组）",
             "访问 /data/local/tmp" to "SSH ✗　ADB ✓",
@@ -175,7 +175,7 @@ val PermModel = module("perm-model", "原理：同一条命令，SSH 和 ADB 为
         claim("date -s：修改系统时间需要 CAP_SYS_TIME 能力。SSH 调用报 Operation not permitted；ADB 同样受限，但可通过 settings put global 触发系统的自动同步逻辑。", Verdict.Unverified,
             "shell 确实没有任何 capability（CapEff 全 0），date -s 改不了。但 shell 有 SET_TIME 安卓权限，可能可以通过系统服务直接设时间，没有实测。")
         claim("SSH 进程归属于 u:r:untrusted_app:s0 域，受 Android CTS 严格沙盒限制，无法访问 /data/local/tmp 甚至大部分 /data 目录。", Verdict.Confirmed,
-            "域名和 /data/local/tmp 被拒绝都实测过（见「SSH 能查不能改」）。但拒绝来自第一层的用户和组：这台是 Permissive，SELinux 不拦截。")
+            "域名和 /data/local/tmp 被拒绝都实测过（见「SSH 的权限边界」）。但拒绝来自第一层的用户和组：这台是 Permissive，SELinux 不拦截。")
         claim("dumpsys battery：SSH（UID 10068）与 ADB 均可读取。", Verdict.Disproved, "SSH 里报 Permission Denial：缺少 DUMP 权限。只有 ADB 能读。")
         claim("dumpsys meminfo --oom：SSH 下执行会报安全限制（无 DUMP 权限）；ADB 拥有完整 DUMP 权限。", Verdict.Confirmed, "两边都实测，与描述一致。")
         claim("logcat：SSH 受限，只能读取属于本 App 的日志；ADB 拥有完整日志缓冲区读取权。", Verdict.Confirmed, "SSH 里 logcat -d 只有 22 行，全是 SimpleSSHD 自己的。")

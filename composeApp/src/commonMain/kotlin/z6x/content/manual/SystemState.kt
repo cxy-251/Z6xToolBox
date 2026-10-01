@@ -165,7 +165,7 @@ val ProcessMemory = module("process-memory", "进程、内存与信号") {
     steps("内存") {
         read("按 oom 分组的内存", "dumpsys meminfo --oom | head -12", Host.Adb) {
             varies = true
-            note = "按进程的重要程度分组：Native（底层服务）、Persistent（常驻）、Foreground（前台）、Cached（缓存，最先被杀）。分组依据就是 oom_score_adj，见「Go 服务」。"
+            note = "按进程的重要程度分组：Native（底层服务）、Persistent（常驻）、Foreground（前台）、Cached（缓存，最先被杀）。分组依据就是 oom_score_adj，见「Go 服务：交叉编译、部署与常驻运行」。"
         }
         read("某个进程的精确内存", "cat /proc/\$(pidof z6x_go_server)/smaps_rollup | head -4", Host.Adb) {
             varies = true
@@ -333,7 +333,7 @@ val StoragePartitions = module("storage-partitions", "存储与分区") {
                 lost+found
                 public
             """)
-            note = "按机型编号分的目录，**G0073 就是这台**（见「案例：查出真实型号和芯片」）。同一个固件支持好几个机型。"
+            note = "按机型编号分的目录，**G0073 就是这台**（见「核查：真实型号与芯片」）。同一个固件支持好几个机型。"
         }
         read("xgimidatabase 里有什么", "ls /mnt/vendor/xgimidatabase", Host.Adb) {
             captured("2026-10-01", """

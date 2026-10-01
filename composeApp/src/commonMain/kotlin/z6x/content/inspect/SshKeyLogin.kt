@@ -3,7 +3,7 @@ package z6x.content.inspect
 import z6x.framework.Host
 import z6x.framework.module
 
-val SshKeyLogin = module("ssh-key-login", "SSH 免密登录 SimpleSSHD") {
+val SshKeyLogin = module("ssh-key-login", "SimpleSSHD 公钥登录") {
     keywords = "ssh-keygen · authorized_keys · dropbear · ~/.ssh/config"
     overview = """
         SimpleSSHD 默认每次登录都要输入一个一次性密码，很麻烦，也没法让脚本自动登录。
@@ -57,7 +57,7 @@ val SshKeyLogin = module("ssh-key-login", "SSH 免密登录 SimpleSSHD") {
             captured("2026-10-01", "uid=10068(u0_a68) gid=10068(u0_a68) groups=10068(u0_a68),3003(inet),9997(everybody),20068(u0_a68_cache),50068(all_a68) context=u:r:untrusted_app_27:s0:c68,c256,c512,c768")
             note = """
                 `BatchMode=yes` 禁止任何交互提示：密钥不行就直接失败，不会卡在等密码。脚本里自动登录都应该加上。
-                输出说明 SSH 里的身份是 **uid 10068**、SELinux 域是 **untrusted_app**，也就是一个普通第三方 App。和 ADB 的 uid 2000（shell）对比，见「SSH 能做什么、不能做什么」。
+                输出说明 SSH 里的身份是 **uid 10068**、SELinux 域是 **untrusted_app**，也就是一个普通第三方 App。和 ADB 的 uid 2000（shell）对比，见「SSH 的权限边界」。
             """
         }
     }
@@ -112,7 +112,7 @@ val SshKeyLogin = module("ssh-key-login", "SSH 免密登录 SimpleSSHD") {
     related("ssh-permission-wall", "tv-screencap", "force-adb")
 }
 
-val TvScreencap = module("tv-screencap", "给投影仪截图") {
+val TvScreencap = module("tv-screencap", "投影仪截图") {
     keywords = "screencap · exec-out · 远程看画面"
     overview = "通过 ADB 把投影仪当前画面截成 PNG 存到 Deck 上，不用走到投影仪前面看。"
     verified("2026-10-01")

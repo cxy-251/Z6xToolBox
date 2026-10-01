@@ -3,7 +3,7 @@ package z6x.content.inspect
 import z6x.framework.Host
 import z6x.framework.module
 
-val PortOwner = module("port-owner", "案例：这个端口是谁开的") {
+val PortOwner = module("port-owner", "核查：端口的所属进程") {
     keywords = "netstat · /proc/net/tcp · uid · pm list packages -U"
     overview = """
         投影仪上开着十几个网络端口。想知道每个端口属于哪个应用，常用的 `netstat -p` 在 shell 身份下看不到。换了两次办法才查出来。

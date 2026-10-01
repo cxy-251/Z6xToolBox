@@ -3,7 +3,7 @@ package z6x.content.records
 import z6x.framework.Host
 import z6x.framework.module
 
-val Emergency = module("emergency", "应急手册：出事了怎么恢复") {
+val Emergency = module("emergency", "应急恢复手册") {
     keywords = "ADB 连不上 · 遥控器失灵 · 定制被还原 · 恢复出厂 · 重启后"
     overview = """
         把各篇里验证过的退路串成一页：先看是什么情况，再按步骤恢复。每条恢复手段都在 2026-10-01 实际用过或核实过。
@@ -19,10 +19,10 @@ val Emergency = module("emergency", "应急手册：出事了怎么恢复") {
         change("重启 Deck 端的 adb 再连", "adb kill-server && adb connect 192.168.0.109:5555", Host.Deck)
         read("5555 端口开着吗", "timeout 3 bash -c 'echo > /dev/tcp/192.168.0.109/5555' && echo 开 || echo 关", Host.Deck) {
             manual = true
-            note = "网络通但端口关：说明 adbd 没在运行。注意：adbd 一旦停过，开机自启也会失效（见「案例：ADB 为什么开机就自动运行」）。"
+            note = "网络通但端口关：说明 adbd 没在运行。注意：adbd 一旦停过，开机自启也会失效（见「核查：ADB 开机自动运行的原因」）。"
         }
         change("从 SSH 重新拉起 adbd", "ssh z6x 'setprop ctl.start adbd'", Host.Deck) {
-            note = "先在电视上打开 SimpleSSHD 点 Start。拉起后极米的补丁会把开机自启也恢复。原理见「在 SSH 里强开网络 ADB」。"
+            note = "先在电视上打开 SimpleSSHD 点 Start。拉起后极米的补丁会把开机自启也恢复。原理见「通过 SSH 启动网络 ADB」。"
         }
         text("""
             **如果 SSH 也登不上：**
@@ -62,7 +62,7 @@ val Emergency = module("emergency", "应急手册：出事了怎么恢复") {
         text("""
             恢复出厂会清掉一切：第三方 App、定制、ADB 自启（persist 属性）、/data/local/tmp 下的程序。按当初的顺序重来：
             1. U 盘装 TV Bro、SimpleSSHD（.apk1 改名法，见「U 盘装 App」）。
-            2. SimpleSSHD 点 Start，用一次性密码登录，登记 Deck 的公钥（见「SSH 免密登录 SimpleSSHD」）。
+            2. SimpleSSHD 点 Start，用一次性密码登录，登记 Deck 的公钥（见「SimpleSSHD 公钥登录」）。
             3. `ssh z6x 'setprop ctl.start adbd'` 强开 ADB（前提：SELinux 仍是 Permissive）。
             4. `./scripts/z6x_debloat_apply.sh` 重新精简，`adb install` 装回 Projectivy、Clash 等。
             5. 重新部署 BusyBox、Go 服务。
@@ -71,7 +71,7 @@ val Emergency = module("emergency", "应急手册：出事了怎么恢复") {
 
     story("情况 6：投影仪重启以后") {
         text("""
-            注意：遥控器电源菜单里的「关机」**不是**重启，而是睡眠，开机后一切原样恢复，什么都不用做（见「案例：关屏和关机到底做了什么」）。下面说的是选「重启」或拔过电源之后：
+            注意：遥控器电源菜单里的「关机」**不是**重启，而是睡眠，开机后一切原样恢复，什么都不用做（见「核查：「关屏」与「关机」的实际行为」）。下面说的是选「重启」或拔过电源之后：
         """)
         text("""
             • ADB：自动可用，不用管（约开机 1 分钟后）。
@@ -98,7 +98,7 @@ val Emergency = module("emergency", "应急手册：出事了怎么恢复") {
     related("force-adb", "adb-autostart", "ssh-key-login", "debloat-scripts", "security")
 }
 
-val Security = module("security", "安全：这台投影仪对局域网开放了什么") {
+val Security = module("security", "安全检查：对局域网开放的服务") {
     keywords = "ADB 免授权 · SSH 公钥 · Clash 7890 · 节点信息 · 端口清单"
     overview = """
         为了方便折腾，这台投影仪在局域网里开了几扇门。在自己家的 Wi-Fi 里问题不大，但要知道门在哪、谁能进、怎么关。
@@ -111,7 +111,7 @@ val Security = module("security", "安全：这台投影仪对局域网开放了
             "SSH 2222" to "只接受 Deck 那把 ECDSA 公钥，密码登录已自动关闭。较安全，前提是私钥不外泄",
             "Clash 7890 / 7891" to "监听所有地址，**从 Deck 能直接连上**（实测）：局域网里的其他设备都能借用你的代理节点和流量",
             "Go 测试服务 8088" to "只返回版本信息，无害；以后的 z6x-hub 规格要求带 token 鉴权",
-            "系统组件端口" to "8080、7100、1458 等属于系统组件（uid 1000），见「案例：这个端口是谁开的」",
+            "系统组件端口" to "8080、7100、1458 等属于系统组件（uid 1000），见「核查：端口的所属进程」",
         )
     }
 

@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val DropbearShell = module("dropbear-shell", "以 shell 身份跑 SSH 服务（Dropbear）") {
+val DropbearShell = module("dropbear-shell", "以 shell 身份运行 SSH 服务（Dropbear）") {
     keywords = "dropbear · uid 2000 · scp · /data/local/tmp"
     overview = """
         现在的 SSH 是 SimpleSSHD，身份是 App（uid 10068），碰不到 /data/local/tmp。提案：用 ADB 启动一个静态编译的 Dropbear，让 SSH 以 shell（uid 2000）身份登录，`scp` 可以直接把程序传进 /data/local/tmp。
@@ -131,7 +131,7 @@ val EnvProfile = module("env-profile", "Shell 环境自动加载（env.sh）") {
     related("busybox", "native-exec")
 }
 
-val StraceDebug = module("strace-debug", "用 strace 排查程序为什么挂") {
+val StraceDebug = module("strace-debug", "使用 strace 排查程序故障") {
     keywords = "strace · ptrace · 系统调用 · ENOENT"
     overview = """
         自己的程序推到投影仪上闪退、报权限错误或卡住，又没有调试环境。提案：放一个静态编译的 strace，看程序和内核之间的每一次交互，哪一步出错一目了然。
@@ -236,7 +236,7 @@ val PacketCapture = module("packet-capture", "在投影仪上抓包（tcpdump）
     related("port-owner", "native-exec")
 }
 
-val OomWatchdog = module("oom-watchdog", "服务保活：看门狗与 oom 分") {
+val OomWatchdog = module("oom-watchdog", "服务保活：看门狗与 OOM 优先级") {
     keywords = "oom_score_adj · LMK · watchdog · 重启"
     overview = """
         担心自己的服务在看 4K 视频、内存吃紧时被系统杀掉，提案写一个看门狗脚本定时检查、挂了就重启，并调低 oom 分。**实测发现被杀的风险本来就不存在**，真正要解决的是重启后自动启动。

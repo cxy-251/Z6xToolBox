@@ -4,10 +4,10 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val FindAdbEntry = module("find-adb-entry", "找开发者模式入口：全部碰壁") {
+val FindAdbEntry = module("find-adb-entry", "寻找开发者模式入口（均未成功）") {
     keywords = "开发者选项 · 工厂模式 · minitvfactory · Activity"
     overview = """
-        普通安卓设备在"关于本机"里连点版本号就能打开开发者选项，再开 ADB 调试。这台投影仪上试了三条路都走不通，最后才转向「在 SSH 里强开网络 ADB」。
+        普通安卓设备在"关于本机"里连点版本号就能打开开发者选项，再开 ADB 调试。这台投影仪上试了三条路都走不通，最后才转向「通过 SSH 启动网络 ADB」。
     """
     partial("2026-10-01")
 

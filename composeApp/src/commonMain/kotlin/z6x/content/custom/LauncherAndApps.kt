@@ -4,7 +4,7 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Projectivy Launcher") {
+val ProjectivyLauncher = module("projectivy-launcher", "替换官方桌面：Projectivy Launcher") {
     keywords = "HOME · com.xgimi.home · 无障碍服务 · resolve-activity"
     overview = """
         官方桌面满屏影视推荐和广告。装上开源的 Projectivy Launcher 后，把官方桌面和影视推荐对当前用户卸载，按 Home 键就只会回到 Projectivy。
@@ -54,7 +54,7 @@ val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Pro
             pm uninstall -k --user 0 com.xgimi.home
             pm uninstall -k --user 0 com.xgimi.stream.video
         """, Host.Adb) {
-            note = "恢复：`cmd package install-existing com.xgimi.home`（stream.video 同理）。原理见「精简预装应用：停用还是卸载」。"
+            note = "恢复：`cmd package install-existing com.xgimi.home`（stream.video 同理）。原理见「精简预装应用：停用与卸载的取舍」。"
         }
     }
 
@@ -119,7 +119,7 @@ val ProjectivyLauncher = module("projectivy-launcher", "换掉官方桌面：Pro
     related("debloat-method", "debloat-scripts", "system-packages")
 }
 
-val AppStorePivot = module("app-store-pivot", "找个应用商店：Aurora、Aptoide 都放弃了") {
+val AppStorePivot = module("app-store-pivot", "应用商店选型：Aurora 与 Aptoide 均不适用") {
     keywords = "Aurora Store · Aptoide TV · GMS · 局域网安装"
     overview = """
         想找一个能在电视上直接搜索安装 App 的商店，先后试了 Aurora Store 和 Aptoide TV，都不好用，最后放弃商店，改成在 Deck 上下载、用 ADB 或局域网安装。

@@ -2,7 +2,7 @@ package z6x.content.inspect
 
 import z6x.framework.module
 
-val Pivots = module("pivots", "换方案记录：一条路不通时") {
+val Pivots = module("pivots", "方案调整记录") {
     keywords = "排查思路 · 换方案 · 经验总结"
     overview = """
         折腾过程中每一次"试了不行 → 弄清为什么 → 换一条路"，都汇总在这一页。详细经过在各自的模块里，点页面底部的相关模块跳过去看。
@@ -61,7 +61,7 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
             3. 想用 `pkill -f GradleDaemon` 杀守护进程，结果把执行这条命令的 shell 自己也杀了（命令行里含有这个词）→ 改用 `./gradlew --stop`。
             4. 写内容时凭印象补了一行 `java -version` 的输出 → 实际跑一遍才发现少了一行 → **所有实测输出必须真跑**，`--try-read` 会自动对比。
             5. 把权限实验命令标成了"只读" → `--check` 指出它们其实是修改操作（只是预期被拒）→ 按真实风险标注。
-            6. 后台 Java 进程合计占了约 3GB → 用 `jps -l` 一看，不是工具箱泄漏，而是 Gradle 守护进程越积越多（窗口跑在守护进程里，占着它，下次编译只好新起一个）→ 改成 Gradle 只编译、java 直接启动窗口，并调低上限和空闲时间。见「案例：后台 Java 进程越来越占内存」。
+            6. 后台 Java 进程合计占了约 3GB → 用 `jps -l` 一看，不是工具箱泄漏，而是 Gradle 守护进程越积越多（窗口跑在守护进程里，占着它，下次编译只好新起一个）→ 改成 Gradle 只编译、java 直接启动窗口，并调低上限和空闲时间。见「问题记录：后台 Java 进程内存持续增长」。
             7. 查声卡时用 `ls -l /dev/snd | head -4`，只看到 `total 0`，就写了"shell 看不到声卡设备" → `--try-read` 重跑 `ls /dev/snd | wc -l` 得到 8，前后矛盾 → 原来 `total 0` 只是磁盘块数（设备文件都是 0），真正的设备行被 `head` 截掉了。结论（用不了声卡）没变，但原因要改成"设备属于 audio 组，shell 不在组里"。**截断过的输出不能当证据**。
         """)
     }

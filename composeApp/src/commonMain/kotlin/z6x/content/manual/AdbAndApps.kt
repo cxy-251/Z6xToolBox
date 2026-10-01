@@ -132,13 +132,13 @@ val PmAm = module("pm-am", "应用管理：pm、am、appops") {
 
     steps("停用、卸载、清数据（需 ADB）") {
         change("停用 / 恢复", "pm disable-user --user 0 包名\npm enable 包名", Host.Adb) {
-            note = "详见「精简预装应用：停用还是卸载」。"
+            note = "详见「精简预装应用：停用与卸载的取舍」。"
         }
         danger("对当前用户卸载 / 装回", "pm uninstall -k --user 0 包名\ncmd package install-existing 包名", Host.Adb) {
             note = "`--user 0` 只影响用户 0（这台机器唯一的用户），`-k` 保留数据。"
         }
         danger("清空应用的全部数据", "pm clear 包名", Host.Adb) {
-            note = "相当于刚装好的状态：登录、设置全没了。SSH 被锁在门外时就是靠它恢复的，见「SSH 免密登录」。"
+            note = "相当于刚装好的状态：登录、设置全没了。SSH 被锁在门外时就是靠它恢复的，见「SimpleSSHD 公钥登录」。"
         }
         change("授予 / 撤销运行时权限", "pm grant 包名 android.permission.POST_NOTIFICATIONS\npm revoke 包名 android.permission.POST_NOTIFICATIONS", Host.Adb) {
             note = "免去弹窗，直接授权。只对应用声明过的「危险权限」有效。"
@@ -226,7 +226,7 @@ val PmAm = module("pm-am", "应用管理：pm、am、appops") {
         """, Verdict.Disproved,
             "前三个包**固件里都没有**；只有 minitvfactory 存在，但「HDMI 信号源切换中枢」没有依据（信号源是 com.xgimi.tvinput）。**不要用这份清单判断哪些能停**，真正不该动的组件见「系统里还剩什么」。")
         claim("pm disable-user / pm enable：SSH（UID 10068）调用会抛出 java.lang.SecurityException: Neither user 10068 nor current process has android.permission.CHANGE_COMPONENT_ENABLED_STATE。", Verdict.Disproved,
-            "确实会被拒绝，但报错原文是 `Attempt to change component state; pid=…, uid=10068, package=…`（见「SSH 能查不能改」）。")
+            "确实会被拒绝，但报错原文是 `Attempt to change component state; pid=…, uid=10068, package=…`（见「SSH 的权限边界」）。")
         claim("梳理极米 Z6X Pro 系统预装 57 个 com.xgimi.* 应用组件。", Verdict.Confirmed, "55 个已装 + 2 个对当前用户卸载 = 57。")
     }
 
@@ -287,7 +287,7 @@ val PropsInit = module("props-init", "系统属性与 init 服务") {
             """)
         }
         read("全部属性里搜", "getprop | grep -i <关键词>", Host.Adb) {
-            note = "型号就是这么搜出来的，见「案例：查出真实型号和芯片」。"
+            note = "型号就是这么搜出来的，见「核查：真实型号与芯片」。"
         }
     }
 
@@ -317,7 +317,7 @@ val PropsInit = module("props-init", "系统属性与 init 服务") {
             """
         }
         change("重启 adbd（ADB 卡死时）", "setprop ctl.restart adbd", Host.Ssh) {
-            note = "会断开当前所有 ADB 连接，所以要从 **SSH** 执行，几秒后重新 `adb connect`。原理见「在 SSH 里强开网络 ADB」。"
+            note = "会断开当前所有 ADB 连接，所以要从 **SSH** 执行，几秒后重新 `adb connect`。原理见「通过 SSH 启动网络 ADB」。"
         }
     }
 
@@ -350,7 +350,7 @@ val PropsInit = module("props-init", "系统属性与 init 服务") {
             "SSH 里执行 `setprop ctl.start adbd` 返回成功，ADB 当初就是这么开的；SELinux 是 Permissive，不会拦截。")
         change("旧版：强开 ADB", "setprop service.adb.tcp.port 5555 && setprop ctl.start adbd", Host.Ssh) {
             verdict = Verdict.Unverified
-            note = "前半句多余（本来就是 5555）。见「在 SSH 里强开网络 ADB」。"
+            note = "前半句多余（本来就是 5555）。见「通过 SSH 启动网络 ADB」。"
         }
     }
 

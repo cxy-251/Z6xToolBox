@@ -3,7 +3,7 @@ package z6x.content.inspect
 import z6x.framework.Host
 import z6x.framework.module
 
-val FocusWindow = module("focus-window", "屏幕上现在是谁：焦点窗口") {
+val FocusWindow = module("focus-window", "查看当前焦点窗口") {
     keywords = "dumpsys window · mCurrentFocus · input keyevent"
     overview = """
         屏幕上弹出一个不认识的窗口（广告？提示？），想知道它属于哪个 App；或者想确认按 Home 后到底回到了哪个桌面。用 `dumpsys window` 一查便知，再用 `input keyevent` 远程按键。

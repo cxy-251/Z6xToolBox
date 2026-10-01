@@ -3,7 +3,7 @@ package z6x.content.inspect
 import z6x.framework.Host
 import z6x.framework.module
 
-val AdbAutostart = module("adb-autostart", "案例：ADB 为什么开机就自动运行") {
+val AdbAutostart = module("adb-autostart", "核查：ADB 开机自动运行的原因") {
     keywords = "init.rc · persist.sys.usb.config · xgimi patch · on property"
     overview = """
         当初 ADB 是在 SSH 里用 `setprop ctl.start adbd` 手动拉起的，可重启后它自己就起来了。读系统的启动配置（init.rc）找到了原因：极米加的一段补丁，把「ADB 在运行」记成了持久化属性。
