@@ -1,7 +1,14 @@
 package z6x
 
+import androidx.compose.runtime.remember
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dadb.AdbKeyPair
@@ -9,36 +16,61 @@ import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import z6x.content.Content
+import z6x.device.DefaultAddress
+import z6x.device.DeviceShell
+import z6x.device.probes
+import z6x.ui.AppState
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 /** 桌面端实现：用 dadb 直接走 ADB 协议，不依赖 adb 可执行文件。复用 ~/.android/adbkey 作为身份。 */
 class DadbShell : DeviceShell {
     override suspend fun run(address: String, command: String): String =
         // dadb 是阻塞 IO，切到 IO 线程池执行
-        withContext(Dispatchers.IO) {
-            val (host, port) = address.split(":").let { it[0] to (it.getOrNull(1)?.toInt() ?: 5555) }
-            // use { } 结束时自动关闭连接，相当于 C# 的 using
-            Dadb.create(host, port, AdbKeyPair.readDefault()).use { it.shell(command).allOutput.trim() }
-        }
+        withContext(Dispatchers.IO) { runBlockingShell(address, command).second }
 }
 
-fun main(args: Array<String>) {
-    // 命令行模式：./gradlew :composeApp:run --args="--probe [地址]"，不开窗口，直接打印设备信息
-    if (args.firstOrNull() == "--probe") {
-        val address = args.getOrElse(1) { "192.168.0.109:5555" }
-        runBlocking {
-            for (p in probes) println("%-14s %s".format(p.label, DadbShell().run(address, p.command)))
-        }
-        return
+/** 返回 (退出码, 输出)。供界面和命令行工具共用。 */
+fun runBlockingShell(address: String, command: String): Pair<Int, String> {
+    val (host, port) = address.split(":").let { it[0] to (it.getOrNull(1)?.toInt() ?: 5555) }
+    // use { } 结束时自动关闭连接，相当于 C# 的 using
+    return Dadb.create(host, port, AdbKeyPair.readDefault()).use {
+        val r = it.shell(command)
+        r.exitCode to r.allOutput.trim()
     }
-    gui()
+}
+
+/** 用 AWT 系统剪贴板复制文本。 */
+private fun copyToClipboard(text: String) =
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+
+fun main(args: Array<String>) {
+    when (args.firstOrNull()) {
+        // ./run.sh --probe [地址]：不开窗口，直接打印设备信息
+        "--probe" -> runBlocking {
+            val address = args.getOrElse(1) { DefaultAddress }
+            for (p in probes) println("${p.label.padEnd(8, '　')} ${DadbShell().run(address, p.command)}")
+        }
+        "--check" -> kotlin.system.exitProcess(Tools.check(Content.scopes))
+        "--try-read" -> kotlin.system.exitProcess(Tools.tryRead(Content.scopes, args.drop(1)))
+        else -> gui()
+    }
 }
 
 private fun gui() = application {
+    val state = remember { AppState(Content.scopes) }
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Z6xToolBox",
-        state = rememberWindowState(width = 900.dp, height = 600.dp),
+        title = "Z6xToolBox · 极米 Z6X Pro 折腾手册",
+        state = rememberWindowState(width = 1280.dp, height = 800.dp, position = WindowPosition.Aligned(androidx.compose.ui.Alignment.Center)),
+        // Ctrl+F 聚焦搜索框
+        onPreviewKeyEvent = {
+            if (it.type == KeyEventType.KeyDown && it.isCtrlPressed && it.key == Key.F) {
+                state.searchFocus.requestFocus(); true
+            } else false
+        },
     ) {
-        App(DadbShell())
+        App(state, DadbShell(), ::copyToClipboard)
     }
 }
