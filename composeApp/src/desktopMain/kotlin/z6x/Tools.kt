@@ -23,7 +23,7 @@ object Tools {
             """|\bpm\s+(uninstall|install|disable|disable-user|enable|clear|grant|revoke|hide|unhide)\b""" +
             """|\bsettings\s+(put|delete)\b|\bam\s+(start|force-stop|kill|broadcast)\b""" +
             """|\bsvc\s+\w+\s+(enable|disable)\b|\bime\s+(enable|disable|set)\b|\binput\s+(keyevent|tap|text)\b""" +
-            """|\bwm\s+(size|density)\s+\S|\btar\s+x|\bcurl\b[^|;]*\s-o\s|(?<=\s)>>?(?!&|\s*/dev/null)\s*[~/$\w.]""",
+            """|\bwm\s+(size|density)\s+\S|\btar\s+x|\bcurl\b[^|;]*\s-o\s|(?<=\s)>>?(?!&|\s*/dev/(null|tcp/|udp/))\s*[~/$\w.]""",
     )
     private val dangerous = Regex("""\bpm\s+(uninstall|clear)\b|\brm\s+-\w*r|\breboot\b|\bdd\s|\bwipe\b|\bformat\b""")
     private val secret = Regex("""(vless|vmess|trojan|ss|hysteria2?)://""", RegexOption.IGNORE_CASE)

@@ -46,6 +46,8 @@ import z6x.content.records.GoServer
 import z6x.content.records.NativeExec
 import z6x.content.records.ProcMetrics
 import z6x.content.records.DeckHdmi
+import z6x.content.records.Emergency
+import z6x.content.records.Security
 import z6x.content.records.FindAdbEntry
 import z6x.content.records.ForceAdb
 import z6x.content.records.LanShare
@@ -78,6 +80,7 @@ object Content {
                     ),
                 ),
                 Category("开发环境", "⚙️", "在投影仪上跑自己编译的程序", listOf(NativeExec, Busybox, GoServer, ProcMetrics)),
+                Category("应急与安全", "🛟", "出事了怎么恢复；对局域网开放了什么", listOf(Emergency, Security)),
             ),
         ),
         Scope(
