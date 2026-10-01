@@ -26,7 +26,8 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
             "能用的系统能力" to "`input keyevent/text`、`am start`、`cmd notification post`、`settings get`、读 /proc 和 /sys/class/thermal、写 /dev/input/event* 和 /dev/uinput、打开 /dev/ptmx、普通身份 ICMP ping",
             "不能用的" to "绑定 <1024 端口、root、CAP_NET_RAW（抓包/原始套接字）、/dev/snd、/dev/net/tun、cgroup、/proc/kmsg",
             "重启" to "重启后 ADB 自动可用，但 hub 要由 Deck 上的工具箱重新启动",
-            "已知未验证" to "**投影仪「关机待机」时进程和 Wi-Fi 是否还在**（决定能否 24 小时服务，待实测）；视频链接没有默认播放器（`am start` 会弹选择框）",
+            "关屏时" to "**已验证（2026-10-01）**：电源菜单选「关屏」后，安卓认为屏幕仍开着（Awake、显示 ON），30 分钟内进程、Wi-Fi、ADB/SSH/8088 端口全程在线。关屏状态下 hub 可以持续服务",
+            "已知未验证" to "电源菜单里的「关机」是真断电还是深度休眠（待测；极米没有单独的「待机」选项）；视频链接没有默认播放器（`am start` 会弹选择框）",
         )
     }
 

@@ -32,7 +32,7 @@ val ReviewSummary = module("review-summary", "审核总表：109 篇提案的去
             "Go-04 大屏多联短视频与媒体画廊端到端架构" to "第三期候选",
             "Go-05 全天候低功耗音乐串流中枢" to "不纳入 hub（可单独部署）",
             "Go-06 智能家居控制桥接网关" to "hub·control（一期）",
-            "Go-07 24 小时后台常驻保障" to "hub 运行前提（待实测）",
+            "Go-07 24 小时后台常驻保障" to "hub 运行前提（关屏已验证，关机待测）",
             "Go-08 自研大屏相册服务" to "第三期候选（files 扩展）",
             "Go-09 自研掌机同步网关" to "hub·files（一期，上传接口）",
             "Go-10 自研硬件看板与系统自愈探针" to "hub·metrics（一期）",
@@ -917,8 +917,8 @@ val ReviewSystem = module("review-system", "审核：系统、运维与架构") 
 分析 Android TV 熄屏进入低功耗待机时的休眠与断网机制，提供 CPU 唤醒锁与网络保持策略，确保微服务全天候可用。
 原文说：「按下遥控器关机后，系统通常在 15 分钟后进入深度睡眠（Doze Mode），切断 Wi-Fi 芯片供电并挂起 CPU」""",
             Verdict.Unverified,
-            """**去向：hub 运行前提（待实测）**
-wifi_sleep_policy 实测已经是 2。**投影仪关机待机后进程和网络是否保留，没有验证**——这是 hub 能否「24 小时服务」的关键，第一期之前要实测。stay_on_while_plugged_in 实测是 0。
+            """**去向：hub 运行前提（关屏已验证，关机待测）**
+wifi_sleep_policy 实测已经是 2。极米电源菜单只有关屏、关机、重启、定时关机，没有「待机」。**关屏已实测**：安卓仍是 Awake、显示 ON，30 分钟内网络和所有端口在线，原文担心的「15 分钟后进入 Doze 断网」没有发生。「关机」是否真断电待测。stay_on_while_plugged_in 实测是 0。
 原文：`Z6xToolBox.App/Content/Modules/GoServices/07_NetworkKeepAliveStandbyData.cs`""",
         )
         claim(
