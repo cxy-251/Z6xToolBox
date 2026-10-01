@@ -178,9 +178,12 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             note = """
                 逐个检查停用的包有没有进程（`pidof`），有的话再看它有没有 PERSISTENT 标记。29 个里只有这 3 个，**全都是 PERSISTENT**：系统级常驻组件（以 system 身份运行，系统会保持它们一直在线）。
                 停用发生在这次开机之后（脚本写于 10-01 12:14，`dumpsys package` 里 lastDisabledCaller 是 shell），所以它们是开机时启动、停用后没被结束。
-                **待验证：** 投影仪下次重启后，它们还会不会启动。
+                **重启后验证（2026-10-01）：三个照样启动了。** 对 PERSISTENT 系统组件，`pm disable-user` 挡不住开机启动。
             """
         }
+        text("""
+            **停不掉的三个怎么办（未实施）：** 对当前用户卸载（`pm uninstall -k --user 0`）或许能阻止它们启动，但这是 system 身份的常驻组件，卸载后的影响没有把握（官方桌面也是这样处理的，没出问题）。hilink 持续占用 CPU，值得以后试一下，先只对它试，并准备好 `cmd package install-existing` 恢复。
+        """)
         text("这一组以后如果要用极米手机 App 遥控、蓝牙音箱模式或智能家居联动，需要恢复对应的包。")
     }
 
@@ -205,8 +208,8 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             """)
             note = "旧记录说 hilink「后台累计消耗 CPU 调度时间近 20 分钟」。实测 hilink 虽已停用但**仍在运行**，10-01 晚上累计 33 分钟（它在凌晨 01:14 重启过），说明它确实一直在消耗 CPU。iotserver、vcontrol 现在没有进程。"
         }
-        claim("底层生命周期特性：上述组件以 system (UID 1000) 权限运行，且部分带有 persistent 标记，停用后在下次开机重启时生效，系统将不再派发并启动其服务树。", Verdict.Confirmed,
-            "前半句**成立**：hilink 等是 system 身份、带 PERSISTENT 标记，停用后进程仍在运行（见上面两条命令）。「下次开机就不再启动」**待下次重启验证**。")
+        claim("底层生命周期特性：上述组件以 system (UID 1000) 权限运行，且部分带有 persistent 标记，停用后在下次开机重启时生效，系统将不再派发并启动其服务树。", Verdict.Disproved,
+            "前半句**成立**：hilink 等是 system 身份、带 PERSISTENT 标记，停用后进程仍在运行。后半句**不成立**：2026-10-01 重启后，这三个照样启动了。")
         claim("com.xgimi.home：GMUI 官方桌面，负责主屏渲染、顶部轮播海报与爱奇艺/芒果影视推荐流。com.xgimi.screensaver：闲置时展示壁纸与商推海报，停用后由 Projectivy 自带屏保引擎接管。skinmanager / skinconfig / skin.*：桌面主题样式的分发、配置和内置壁纸包。", Verdict.Unverified,
             "用途和包名、应用名吻合，没有逐个验证细节。")
         claim("com.xgimi.upgrade：周期性联网向官方服务器轮询新固件包、静默后台下载并弹出强制升级提示。升级可能覆写 system 分区并重置 pm disable 状态。com.xgimi.ota.accessories：常驻后台轮询检测蓝牙遥控器、3D 眼镜等硬件的新固件，产生不必要的网络请求与唤醒锁。", Verdict.Unverified,

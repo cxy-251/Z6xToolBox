@@ -66,7 +66,7 @@ val AdbBasics = module("adb-basics", "ADB 基础：连接、安装、传文件�
 
     steps("重启") {
         danger("重启投影仪", "adb reboot", Host.Deck) {
-            note = "重启后 adbd 可能不会自动运行（见「在 SSH 里强开网络 ADB」），要有从 SSH 恢复的准备。自己部署的服务也要重新启动。"
+            note = "实测（2026-10-01）重启后 adbd 会自动运行，约 1 分钟后就能重新 `adb connect`。自己部署的服务要重新启动。"
         }
         danger("重启进入 Recovery 模式", "adb reboot recovery", Host.Deck) {
             note = "Recovery 里可以恢复出厂设置（清空一切定制）。没有明确目的不要进。"

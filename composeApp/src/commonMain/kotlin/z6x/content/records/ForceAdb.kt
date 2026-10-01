@@ -74,7 +74,7 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
             """)
             note = """
                 写进去了。实验后用 `setprop debug.z6x.test ""` 清空。
-                **意外发现：** setprop 不能删除属性，只能把值清空。之后 `getprop` 列出全部属性时仍有一行 `[debug.z6x.test]: []`，要到重启才消失（debug.* 不持久化）。
+                **意外发现：** setprop 不能删除属性，只能把值清空。之后 `getprop` 列出全部属性时仍有一行 `[debug.z6x.test]: []`，要到重启才消失（debug.* 不持久化；2026-10-01 重启后确认已消失）。
                 「案例：查出真实型号和芯片」里用 `grep z6x` 搜属性时就多出了这一行，被 `--try-read` 发现了。
             """
             outcome = "证实：在这台机器上，普通 App 可以设置本该被 SELinux 拦下的属性。"
@@ -83,7 +83,7 @@ val ForceAdb = module("force-adb", "在 SSH 里强开网络 ADB") {
 
     consequences {
         text("""
-            • 断电重启后 adbd 不一定还在：需要时再从 SSH 执行一次 `setprop ctl.start adbd`。所以 SimpleSSHD **不要卸载**。
+            • **重启后 adbd 会自动运行**（2026-10-01 实测：重启后 `ro.boottime.adbd` 约 6.6 秒，ADB 直接能连）。也就是说只需要强开一次。SimpleSSHD 仍然建议保留，作为 ADB 出问题时的备用通道。
             • `ro.adb.secure=0` 意味着同一局域网里**任何人**都能连上并获得 shell 权限，不要把投影仪放在不可信的网络里。
             • 系统 OTA 升级可能把 SELinux 改回 Enforcing，这条路就会失效。深度定制里停用 OTA 也有这个考虑。
         """)
