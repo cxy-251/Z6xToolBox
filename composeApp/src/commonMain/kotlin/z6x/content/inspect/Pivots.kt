@@ -35,6 +35,9 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
             6. 代理：旧记录说 VPN 模式必崩，只能用端口代理 → 截图里看到一个不寻常的 IP 172.19.0.1 → 顺藤摸瓜查到 tun0 → **Clash 其实一直以 VPN 模式在跑**，旧结论被推翻。（代理：Clash Meta）
             7. 查端口归属：`netstat -p` 在 shell 下看不到进程 → **改读 /proc/net/tcp 里的 uid** → 设备上的 awk 没有 strtonum → **把换算搬到 Deck 上**。（案例：这个端口是谁开的）
             8. 一键脚本：恢复脚本里官方桌面入口名写错，但 `|| true` 把错误吞了，一直没发现 → 用 `dumpsys package` 查出正确入口，并在脚本结尾**加结果核对**。（一键精简与恢复脚本）
+            9. 服务保活：原提案担心服务被内存回收杀掉，要写看门狗、调 oom 分 → 先查现状，Go 服务的 oom 分已经是 -1000（从 adbd 继承）→ **问题本来不存在**，真正的问题是重启。（服务保活）
+            10. 抓包：提案要部署 tcpdump → 系统自带了，但 shell 没有抓包权限 → **换到 Deck 那一端抓**，或在服务里记日志。（在投影仪上抓包）
+            11. Go 服务源码丢了 → 按它的实际输出重写等价源码，用原来的编译命令验证能编出同样大小的程序（哈希不同，如实标注）。（Go 服务）
         """)
     }
 
@@ -72,5 +75,6 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
         "find-adb-entry", "force-adb", "ssh-permission-wall", "usb-apk1", "lan-share",
         "app-install-order", "deck-hdmi", "find-real-model", "ssh-key-login", "tv-screencap", "install-jdk",
         "projectivy-launcher", "app-store-pivot", "input-method", "clash-proxy", "port-owner", "debloat-scripts",
+        "oom-watchdog", "packet-capture", "go-server",
     )
 }

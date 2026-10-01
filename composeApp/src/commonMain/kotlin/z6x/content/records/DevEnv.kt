@@ -1,0 +1,263 @@
+package z6x.content.records
+
+import z6x.framework.Host
+import z6x.framework.module
+
+val NativeExec = module("native-exec", "不 root 也能跑自己的程序") {
+    keywords = "/data/local/tmp · noexec · 静态编译 · 32/64 位"
+    overview = """
+        有了 ADB 的 shell 身份，就能把自己编译的 Linux 程序放到 `/data/local/tmp` 里直接运行，不需要 root、不需要装 App。后面的 BusyBox 和 Go 服务都是这样跑起来的。
+    """
+    verified("2026-10-01")
+
+    why {
+        text("""
+            • 安卓的内核就是 Linux，能直接执行 ELF 格式的程序，前提是文件所在的分区允许执行（没有 `noexec`）、你对文件有执行权限。
+            • `/data/local/tmp` 是专门留给 shell 身份的目录，ADB 可以随意读写执行。
+            • 程序要**静态编译**：安卓的 C 库（bionic）和普通 Linux 的 glibc 不一样，动态链接的 Linux 程序在安卓上找不到库。静态编译把依赖全部打包进一个文件。
+        """)
+    }
+
+    steps {
+        read("/data 的挂载参数", "mount | grep ' /data '", Host.Adb) {
+            captured("2026-10-01", "/dev/block/mmcblk0p53 on /data type ext4 (rw,seclabel,nosuid,nodev,noatime,journal_checksum,noauto_da_alloc,resgid=1065,data=ordered)")
+            note = """
+                括号里是挂载选项。有 `nosuid`（setuid 程序不提权）、`nodev`（不认设备文件），**没有 `noexec`**，所以可以执行程序。
+            """
+        }
+        read("目录归属", "ls -ld /data/local/tmp", Host.Adb) {
+            varies = true
+            captured("2026-10-01", "drwxrwx--x 3 shell shell 4096 2026-10-01 12:31 /data/local/tmp")
+            note = "属于 shell 用户和组，shell 有读写执行（rwx）权限。"
+        }
+        read("系统用户空间是 32 位", "getprop ro.product.cpu.abi", Host.Adb) {
+            captured("2026-10-01", "armeabi-v7a")
+            note = "但内核是 64 位，**静态编译的 64 位程序也能跑**（Go 服务就是 arm64 的）。32 位只限制 App 的原生库，因为 App 要和系统的 32 位库链接。"
+        }
+    }
+
+    story("另外两种思路（没有采用）") {
+        text("""
+            • **Termux**：一个提供完整 Linux 软件包的 App，能 apt 安装工具。但它以 App 身份运行（权限同 SSH 那样受限），占用空间大。
+            • **PRoot 跑 Debian 等发行版**：在 App 里模拟一个完整发行版，系统调用要经过一层转换，性能和内存开销都大，不适合 3.5G 内存、还要放视频的投影仪。
+            • **自己编译静态程序放进 /data/local/tmp**（采用）：零依赖、占用最小，以 shell 身份运行，权限也比 App 高。
+        """)
+    }
+
+    consequences {
+        text("""
+            • 不能绑定 1024 以下的端口（实测 `/proc/sys/net/ipv4/ip_unprivileged_port_start` 是 1024），服务要用 8088 这类高端口。
+            • 恢复出厂设置会清空 /data/local/tmp。
+            • **重启后进程都没了**，要重新启动。没有 root 就没法注册开机自启。
+        """)
+    }
+
+    lesson("核对旧记录时发现的问题") {
+        text("""
+            • 旧版的挂载输出（设备名 by-name/userdata、带 discard）和实机不符，已换成实测。
+            • 旧版说 shell 的 SELinux 规则"禁止修改系统属性"。这台机器是 Permissive，SELinux 实际上什么都不拦，见「在 SSH 里强开网络 ADB」。
+            • 旧版给的 Termux / PRoot 开销数字（30%-60%、150-300MB）没有出处，已删除。
+        """)
+    }
+
+    related("busybox", "go-server", "force-adb")
+}
+
+val Busybox = module("busybox", "BusyBox：补齐 396 个 Linux 命令") {
+    keywords = "busybox --install · toybox · PATH"
+    overview = """
+        安卓自带的 toybox 命令很精简，缺 vi、wget 等，有的命令功能也不全（比如 awk 没有 strtonum）。放一个静态编译的 BusyBox 进去，一次补齐 396 个命令。
+    """
+    verified("2026-10-01")
+
+    steps("部署") {
+        change("推送到投影仪并加执行权限", """
+            adb push busybox /data/local/tmp/busybox
+            adb shell chmod 755 /data/local/tmp/busybox
+        """, Host.Deck) {
+            note = "busybox 文件在 shared 目录。在 Deck 上执行。"
+        }
+        change("给每个命令建一个链接", "mkdir -p /data/local/tmp/bin && /data/local/tmp/busybox --install -s /data/local/tmp/bin", Host.Adb) {
+            note = "BusyBox 是一个文件包含几百个命令，按「被叫成什么名字」决定扮演哪个命令。`--install -s` 为每个命令建一个指向它的符号链接。"
+        }
+    }
+
+    verify {
+        read("版本", "/data/local/tmp/busybox | head -1", Host.Adb) {
+            captured("2026-10-01", "BusyBox v1.31.0 (2019-06-10 15:54:51 CEST) multi-call binary.")
+        }
+        read("文件类型（在 Deck 上看）", "file busybox", Host.Deck) {
+            manual = true
+            captured("2026-10-01", "busybox:       ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), statically linked, stripped")
+            note = "在 shared 目录执行。**32 位** ARM、静态链接。32 位程序在 64 位内核上照样能跑。"
+        }
+        read("链接数量", "ls /data/local/tmp/bin | wc -l", Host.Adb) {
+            captured("2026-10-01", "396")
+        }
+        read("加进 PATH 后试用", "export PATH=/data/local/tmp/bin:\$PATH; which wget vi nc awk tar", Host.Adb) {
+            captured("2026-10-01", """
+                /data/local/tmp/bin/wget
+                /data/local/tmp/bin/vi
+                /data/local/tmp/bin/nc
+                /data/local/tmp/bin/awk
+                /data/local/tmp/bin/tar
+            """)
+            note = "`export` 只对当前这次 shell 有效，退出就没了。每次自动加载的办法见提案「Shell 环境自动加载」。"
+        }
+    }
+
+    story("补了哪些命令") {
+        facts(
+            "网络" to "nc、wget、ping、traceroute、nslookup、netstat、arp、route",
+            "文本" to "awk、sed、grep、diff、vi、head、tail、sort、uniq、cut、tr",
+            "归档压缩" to "tar、gzip、bzip2、xz、cpio、unzip",
+            "进程与系统" to "ps、top、pkill、pidof、fuser、free、uptime、iostat",
+        )
+        text("完整列表：`ls /data/local/tmp/bin`。和系统自带的同名命令（toybox）功能可能有差别，用哪个取决于 PATH 的先后顺序。")
+    }
+
+    lesson("核对旧记录时发现的问题") {
+        text("旧版说这是 ARM64（64 位）BusyBox，`file` 一查是 32 位的。功能不受影响，但描述要准确。396 个命令、1.1MB 大小都对。")
+    }
+
+    related("native-exec", "go-server", "port-owner")
+}
+
+val GoServer = module("go-server", "Go 服务：交叉编译、部署、常驻") {
+    keywords = "GOOS GOARCH · 交叉编译 · nohup · oom_score_adj"
+    overview = """
+        在 Deck 上用 Go 编译 arm64 程序，推到投影仪上后台运行，局域网能访问。一个最小的 HTTP 服务实测只占 2~4MB 内存，从 2026-10-01 中午起一直在跑。
+    """
+    verified("2026-10-01")
+
+    steps("在 Deck 上编译") {
+        read("Go 版本", "go version", Host.Deck) {
+            captured("2026-10-01", "go version go1.27.1 linux/amd64")
+        }
+        change("交叉编译成 arm64 静态程序", "cd dev/go-server && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags=\"-s -w\" -o z6x_go_server .", Host.Deck) {
+            note = """
+                • `GOOS=linux GOARCH=arm64`：目标系统和架构（Deck 是 linux/amd64，靠这两个变量编译出别的平台的程序，这就是**交叉编译**）。
+                • `CGO_ENABLED=0`：不用 C 代码，生成纯静态程序，不依赖任何系统库。
+                • `-ldflags="-s -w"`：去掉调试信息，文件更小。
+                源码在项目的 `dev/go-server/main.go`。
+            """
+            outcome = "生成 z6x_go_server，约 5.2MB，`file` 显示 ELF 64-bit LSB executable, ARM aarch64, statically linked。"
+        }
+    }
+
+    steps("部署和启动") {
+        change("推送并后台启动", """
+            adb push z6x_go_server /data/local/tmp/
+            adb shell chmod 755 /data/local/tmp/z6x_go_server
+            adb shell 'nohup /data/local/tmp/z6x_go_server > /data/local/tmp/go_server.log 2>&1 &'
+        """, Host.Deck) {
+            note = "`nohup … &` 让程序在后台运行，ADB 断开后也不退出。输出写进日志文件。"
+        }
+        read("从 Deck 访问", "curl -s -m 5 http://192.168.0.109:8088/", Host.Deck) {
+            captured("2026-10-01", """
+                Z6X Pro Native Go Server
+                OS: linux
+                Arch: arm64
+                Hostname: localhost
+                GoVersion: go1.27.1
+            """)
+        }
+        read("日志", "cat /data/local/tmp/go_server.log", Host.Adb) {
+            captured("2026-10-01", "Native Go HTTP server listening on :8088")
+        }
+        read("实际占用", "grep -E 'Name|VmRSS|VmSize|Threads' /proc/\$(pidof z6x_go_server)/status", Host.Adb) {
+            varies = true
+            captured("2026-10-01", """
+                Name:	z6x_go_server
+                VmSize:	 1263836 kB
+                VmRSS:	    1980 kB
+                Threads:	5
+            """)
+            note = """
+                **VmRSS** 是实际占用的物理内存：约 2MB（同一天早些时候测是 4.2MB，会浮动）。
+                VmSize 1.2GB 是 Go 预留的虚拟地址空间，不占真实内存，不用管。
+            """
+        }
+    }
+
+    story("会不会被系统杀掉") {
+        text("安卓内存紧张时会按 `oom_score_adj` 从高到低杀进程，-1000 表示永不被杀。查了一下：")
+        read("Go 服务的 oom 分", "cat /proc/\$(pidof z6x_go_server)/oom_score_adj", Host.Adb) {
+            captured("2026-10-01", "-1000")
+        }
+        read("对比：adbd、ADB shell、SSH", "echo adbd=\$(cat /proc/\$(pidof adbd)/oom_score_adj) self=\$(cat /proc/self/oom_score_adj)", Host.Adb) {
+            captured("2026-10-01", "adbd=-1000 self=-1000")
+            note = "从 SSH 里执行 `cat /proc/self/oom_score_adj` 得到 0。"
+        }
+        text("""
+            **结论：** 子进程继承父进程的 oom 分。adbd 是 -1000，所以**从 ADB 启动的程序天生不会被内存回收杀掉**；从 SSH（App 身份）启动的是 0，会被杀。
+            真正的问题是**重启**：重启后服务就没了，要重新用 ADB 启动。
+        """)
+    }
+
+    lesson("核对说明") {
+        text("""
+            • 原始源码没有保留（agy 的目录是空的）。`dev/go-server/main.go` 是按服务的实际输出**重写的等价版本**：编译出来大小相同（5439648 字节），但哈希不同，不是同一个文件。
+            • 旧版"4.2MB 内存"是对的（当时的测量），现在测是 2MB 左右。
+            • 旧版"比 Python/Node 节省 90%"这类对比没有实测，已删除。
+            • 旧版说"空闲时 CPU 占用接近 0"，没有测，但对一个没有请求的 HTTP 服务来说是合理的。
+        """)
+    }
+
+    related("native-exec", "proc-metrics", "oom-watchdog")
+}
+
+val ProcMetrics = module("proc-metrics", "不用 root 读系统指标") {
+    keywords = "/proc/stat · /proc/meminfo · thermal_zone"
+    overview = """
+        CPU、内存、温度这些数据，内核都以文本文件的形式放在 /proc 和 /sys 里，shell 身份直接读。工具箱的「设备」面板和以后的监控服务都靠它们。
+    """
+    verified("2026-10-01")
+
+    steps {
+        read("CPU 累计时间", "head -1 /proc/stat", Host.Adb) {
+            varies = true
+            captured("2026-10-01", "cpu  3888180 462347 4060058 25375497 6005 0 64623 0 0 0")
+            note = """
+                开机以来各种状态累计的时间（单位约 10 毫秒）：user、nice、system、**idle**（空闲）、iowait……
+                单独一次没意义；隔一秒读两次，用"非空闲时间的增量 ÷ 总增量"就是 CPU 使用率。
+            """
+        }
+        read("内存", "grep -E 'MemTotal|MemFree|MemAvailable' /proc/meminfo", Host.Adb) {
+            varies = true
+            captured("2026-10-01", """
+                MemTotal:        3630528 kB
+                MemFree:          296564 kB
+                MemAvailable:    1586348 kB
+            """)
+            note = "**看 MemAvailable，别看 MemFree。** 系统会把空闲内存拿去做缓存，MemFree 看起来很少；MemAvailable 把可回收的缓存也算进去，才是真正能用的量。"
+        }
+        read("温度", "for z in /sys/class/thermal/thermal_zone*; do echo \"\$(cat \$z/type) \$(cat \$z/temp)\"; done", Host.Adb) {
+            varies = true
+            captured("2026-10-01", """
+                cpu_thermal 54000
+                vou_thermal 61000
+            """)
+            note = "单位是千分之一摄氏度，54000 = 54℃。两个温度区：cpu_thermal 是 CPU；vou_thermal 从名字推测是视频输出相关的芯片区域，**不是**光机温度。"
+        }
+    }
+
+    story("这些数据能用来做什么") {
+        text("""
+            在投影仪上跑的轻量服务，旧记录列过这些方向（具体项目见「提案」专区）：
+            • 局域网文件共享（WebDAV、HTTP 文件服务）。
+            • 家庭自动化：接收 Home Assistant 等发来的 Webhook，控制投影仪。
+            • 网络工具：DNS 缓存、代理转发。
+            • 健康监控：定时采集 CPU、内存、温度，以 JSON 或 Prometheus 格式输出。
+        """)
+    }
+
+    lesson("核对旧记录时发现的问题") {
+        text("""
+            • 旧版的 MemTotal 写 3670016 kB，实机是 3630528 kB。
+            • 旧版说 thermal_zone 能读到"光机温度"，实际两个温度区是 cpu_thermal 和 vou_thermal，没有标明是光机的。
+        """)
+    }
+
+    related("go-server", "ssh-probe")
+}

@@ -26,3 +26,6 @@ clash.yaml
 .gradle/
 .kotlin/
 local.properties
+
+# Go 编译产物
+dev/go-server/z6x_go_server

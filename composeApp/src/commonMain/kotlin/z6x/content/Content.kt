@@ -15,7 +15,16 @@ import z6x.content.inspect.PortOwner
 import z6x.content.inspect.Pivots
 import z6x.content.inspect.SshKeyLogin
 import z6x.content.inspect.TvScreencap
+import z6x.content.proposals.DropbearShell
+import z6x.content.proposals.EnvProfile
+import z6x.content.proposals.OomWatchdog
+import z6x.content.proposals.PacketCapture
+import z6x.content.proposals.StraceDebug
 import z6x.content.records.AppInstallOrder
+import z6x.content.records.Busybox
+import z6x.content.records.GoServer
+import z6x.content.records.NativeExec
+import z6x.content.records.ProcMetrics
 import z6x.content.records.DeckHdmi
 import z6x.content.records.FindAdbEntry
 import z6x.content.records.ForceAdb
@@ -48,6 +57,7 @@ object Content {
                         InputMethodPivot, ScreenCast, SystemPackages, DebloatScripts,
                     ),
                 ),
+                Category("开发环境", "⚙️", "在投影仪上跑自己编译的程序", listOf(NativeExec, Busybox, GoServer, ProcMetrics)),
             ),
         ),
         Scope(
@@ -57,6 +67,16 @@ object Content {
                 Category("连接与查看", "📶", "ADB、SSH、截图、焦点窗口：先连上，才能查", listOf(SshKeyLogin, TvScreencap, FocusWindow)),
                 Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel, PortOwner)),
                 Category("经验", "💡", "一条路不通时怎么换", listOf(Pivots)),
+            ),
+        ),
+        Scope(
+            "proposals", "💡", "提案",
+            "想过但还没做的方案。每篇都附实机可行性审核：可行、可选还是做不到。",
+            listOf(
+                Category(
+                    "开发环境", "⚙️", "让投影仪上的开发更顺手",
+                    listOf(EnvProfile, StraceDebug, DropbearShell, OomWatchdog, PacketCapture),
+                ),
             ),
         ),
         Scope(
