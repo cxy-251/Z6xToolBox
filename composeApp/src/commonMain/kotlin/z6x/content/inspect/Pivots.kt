@@ -38,6 +38,9 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
             9. 服务保活：原提案担心服务被内存回收杀掉，要写看门狗、调 oom 分 → 先查现状，Go 服务的 oom 分已经是 -1000（从 adbd 继承）→ **问题本来不存在**，真正的问题是重启。（服务保活）
             10. 抓包：提案要部署 tcpdump → 系统自带了，但 shell 没有抓包权限 → **换到 Deck 那一端抓**，或在服务里记日志。（在投影仪上抓包）
             11. Go 服务源码丢了 → 按它的实际输出重写等价源码，用原来的编译命令验证能编出同样大小的程序（哈希不同，如实标注）。（Go 服务）
+            12. 读内核日志：`dmesg` 在 shell 下 Operation not permitted → 发现 logcat 有个 kernel 缓冲区 → **改用 `logcat -b kernel`**（注意不一定是最新的）。（日志与崩溃）
+            13. 批量验证命令时，脚本里的函数叫 `r`，结果全部报 `fc: history functions not available` → 原来 mksh 里 `r` 是内置别名（重复上一条命令）→ **改名**。教训：别用一个字母当函数名。
+            14. 想测「能不能结束系统进程」又不想真的结束它 → **用 `kill -0`**：只检查权限，不发信号。（进程、内存与信号）
         """)
     }
 
@@ -75,6 +78,6 @@ val Pivots = module("pivots", "换方案记录：一条路不通时") {
         "find-adb-entry", "force-adb", "ssh-permission-wall", "usb-apk1", "lan-share",
         "app-install-order", "deck-hdmi", "find-real-model", "ssh-key-login", "tv-screencap", "install-jdk",
         "projectivy-launcher", "app-store-pivot", "input-method", "clash-proxy", "port-owner", "debloat-scripts",
-        "oom-watchdog", "packet-capture", "go-server",
+        "oom-watchdog", "packet-capture", "go-server", "logs-crash", "process-memory",
     )
 }

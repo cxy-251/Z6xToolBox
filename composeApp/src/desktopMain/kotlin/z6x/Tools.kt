@@ -17,7 +17,9 @@ object Tools {
     // 只读步骤里不该出现的修改操作（命令位置：行首或 ; & | 之后）
     private const val CMD = """(?:^|[;&|(\n]\s*)"""
     private val modifying = Regex(
-        CMD + """(setprop|rm|mv|cp|ln|chmod|chown|touch|mkdir|dd|reboot|kill|pkill|tee)\s""" +
+        CMD + """(setprop|rm|mv|cp|ln|chmod|chown|touch|mkdir|dd|reboot|tee)\s""" +
+            // kill -l 列出信号、kill -0 只检查权限，都不改变状态
+            "|" + CMD + """(kill|pkill|killall)\s+(?!-[l0]\b)""" +
             """|\bpm\s+(uninstall|install|disable|disable-user|enable|clear|grant|revoke|hide|unhide)\b""" +
             """|\bsettings\s+(put|delete)\b|\bam\s+(start|force-stop|kill|broadcast)\b""" +
             """|\bsvc\s+\w+\s+(enable|disable)\b|\bime\s+(enable|disable|set)\b|\binput\s+(keyevent|tap|text)\b""" +

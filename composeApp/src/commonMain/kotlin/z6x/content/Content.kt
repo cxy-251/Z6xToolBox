@@ -10,6 +10,17 @@ import z6x.content.custom.ProjectivyLauncher
 import z6x.content.custom.ScreenCast
 import z6x.content.custom.SystemPackages
 import z6x.content.inspect.FindRealModel
+import z6x.content.manual.AdbBasics
+import z6x.content.manual.BackgroundCmds
+import z6x.content.manual.DumpsysSettings
+import z6x.content.manual.HardwareCmds
+import z6x.content.manual.LogsCrash
+import z6x.content.manual.NetworkCmds
+import z6x.content.manual.PmAm
+import z6x.content.manual.ProcessMemory
+import z6x.content.manual.PropsInit
+import z6x.content.manual.SelinuxCmds
+import z6x.content.manual.StoragePartitions
 import z6x.content.inspect.FocusWindow
 import z6x.content.inspect.PortOwner
 import z6x.content.inspect.Pivots
@@ -66,6 +77,13 @@ object Content {
             listOf(
                 Category("连接与查看", "📶", "ADB、SSH、截图、焦点窗口：先连上，才能查", listOf(SshKeyLogin, TvScreencap, FocusWindow)),
                 Category("核查案例", "🧪", "旧文档里的说法，实机上查一遍", listOf(FindRealModel, PortOwner)),
+                Category(
+                    "命令手册", "📚", "按主题整理的常用命令，全部在这台投影仪上跑过",
+                    listOf(
+                        AdbBasics, PmAm, PropsInit, DumpsysSettings, ProcessMemory, StoragePartitions,
+                        NetworkCmds, LogsCrash, SelinuxCmds, HardwareCmds, BackgroundCmds,
+                    ),
+                ),
                 Category("经验", "💡", "一条路不通时怎么换", listOf(Pivots)),
             ),
         ),
