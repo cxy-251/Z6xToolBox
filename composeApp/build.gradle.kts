@@ -41,3 +41,18 @@ compose.desktop {
 tasks.withType<JavaExec>().configureEach {
     workingDir = rootDir
 }
+
+// 把桌面版的运行时 classpath 写进 build/desktop.classpath，./run.sh 用它直接 `java -cp` 启动程序，
+// 不再借 Gradle 的 run 任务运行（那样窗口开着期间会一直占着一个 Gradle 守护进程）。
+val desktopMain = kotlin.targets.getByName("desktop").compilations.getByName("main")
+val desktopClasspath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles ?: files())
+val desktopClasspathFile = rootProject.layout.buildDirectory.file("desktop.classpath")
+tasks.register("writeDesktopClasspath") {
+    // 先拷到局部变量：配置缓存不允许 doLast 里引用脚本顶层的对象
+    val cp = desktopClasspath
+    val out = desktopClasspathFile
+    dependsOn(desktopMain.compileAllTaskName)
+    inputs.files(cp)
+    outputs.file(out)
+    doLast { out.get().asFile.writeText(cp.joinToString(":") { it.absolutePath }) }
+}
