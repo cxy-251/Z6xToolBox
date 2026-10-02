@@ -1,37 +1,56 @@
 //! z6x keymap --daemon：遥控器按键重映射。
 //!
-//! 读取遥控器设备节点的按键事件，**不独占设备**（不调用 EVIOCGRAB），遥控器原有功能不受影响；
-//! 识别长按与双击，执行配置中的动作。遥控器断开重连导致节点变化时，每 2 秒重新查找并绑定。
+//! 两类按键，两种读取方式：
+//!   - 普通按键（方向、确认、返回、菜单等）：读取遥控器的输入设备节点。遥控器在系统中是两个输入设备
+//!     （XGIMI RC Keyboard 与 XGIMI RC Consumer Control），同时监听名称匹配的全部设备。
+//!     **不独占设备**（不调用 EVIOCGRAB），原有功能不受影响；识别长按后执行配置中的动作。
+//!     只支持短按（极米快捷键）与长按两种触发：用户认为双击容易误触（2026-10-02），已去掉。
+//!     遥控器断开重连导致节点变化时，每 2 秒重新查找并绑定。
+//!   - 极米的四个影视快捷键（酷喵、云视听极光、奇异果、芒果）：它们不经过输入设备节点（getevent 录不到），
+//!     而是以极米自定义的按键码（2118～2121）直接进入系统，由极米改过的窗口管理拦截后交给 XRM 服务打开对应应用，
+//!     并在日志中写一行「XgimiWindowManager: do action keycode 2118 keyevent down」（2026-10-02 实测）。
+//!     守护进程读取这行日志来识别按键；对应的影视应用未安装，原来的动作什么也不会打开，不会冲突。
 //!
-//! 注意：因为不独占，触发长按的那个键在松开时仍会产生它原本的效果（例如长按返回，松开时仍会返回一次）。
+//! 注意：因为不独占，触发长按的那个普通键在松开时仍会产生它原本的效果（例如长按返回，松开时仍会返回一次）。
 
 use crate::cli::{parse_duration_ms, Args, Fail, Result};
-use crate::key::{find_device, Injector, KEYS};
+use crate::key::{find_devices, Injector, KEYS};
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::os::fd::AsRawFd;
 use std::time::{Duration, Instant};
 
-pub const HELP: &str = "z6x keymap --daemon --config <文件> [--device 名称] [--long 600ms] [--double 300ms]
+pub const HELP: &str = "z6x keymap --daemon --config <文件> [--device 名称] [--long 600ms]
 z6x keymap --check --config <文件>     只检查配置
   配置文件每行一条：<触发> = <动作>，# 开头为注释。
-    触发：long:<键名>（长按）、double:<键名>（双击）
+    触发：long:<键名>（长按普通键）、press:<极米快捷键>（短按）
+          极米快捷键：youku（酷喵）、jiguang（云视听极光）、qiyiguo（奇异果）、mango（芒果）、bilibili，或按键码 2118 等
     动作：key: <键名> [<键名>…]（注入按键）、sh: <命令>（用 /system/bin/sh 执行，不等待结束）
   示例：
-    long:back   = sh: am start -n de.szalkowski.activitylauncher/.MainActivity
-    double:home = key: menu
-  键名同 z6x key --list；遥控器上返回、确认、主页的原始按键码与通用键盘不同，这里两种都能匹配。";
+    press:youku = sh: am start -n org.smarttube.stable/com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity
+    long:back   = sh: am start -n de.szalkowski.activitylauncher/.MainActivity";
 
-/// 遥控器原始按键码与通用键名的对应（Vendor_000d_Product_3841.kl：1 为返回、28 为确认）。
-const REMOTE_ALIASES: &[(&str, u16)] = &[("back", 1), ("ok", 28), ("home", 102)];
+/// 极米影视快捷键：名称 → 极米自定义按键码（来自 XRM 服务日志中的 appName 对照表）。
+pub const XGIMI_KEYS: &[(&str, u32, &str)] = &[
+    ("youku", 2118, "酷喵（youkutv）"),
+    ("jiguang", 2119, "云视听极光（tencenttv）"),
+    ("qiyiguo", 2120, "奇异果（aiqiyitv）"),
+    ("mango", 2121, "芒果（mangotv）"),
+    ("bilibili", 2126, "哔哩哔哩（bilibilitv）"),
+];
 
 fn codes_for(name: &str) -> Vec<u16> {
     let mut v: Vec<u16> = KEYS.iter().filter(|(n, _, _)| *n == name).map(|(_, c, _)| *c).collect();
-    v.extend(REMOTE_ALIASES.iter().filter(|(n, _)| *n == name).map(|(_, c)| *c));
+    // 遥控器上报的是它自己的按键码（如返回为 1、主页为 102），与通用键名一并匹配
+    v.extend(crate::key::remote_code(name));
     if let Ok(n) = name.parse::<u16>() {
         v.push(n);
     }
     v
+}
+
+fn xgimi_code(name: &str) -> Option<u32> {
+    XGIMI_KEYS.iter().find(|(n, _, _)| *n == name).map(|(_, c, _)| *c).or_else(|| name.parse::<u32>().ok().filter(|c| *c >= 2000))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,10 +59,17 @@ pub enum Action {
     Shell(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Kind {
+    Long,
+    Press,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Rule {
-    pub long: bool, // true 为长按，false 为双击
-    pub codes: Vec<u16>,
+    pub kind: Kind,
+    pub codes: Vec<u16>, // 普通按键（长按）
+    pub xgimi: u32,      // 极米快捷键（单按），其他为 0
     pub key_name: String,
     pub action: Action,
 }
@@ -57,16 +83,19 @@ pub fn parse_config(text: &str) -> Result<Vec<Rule>> {
         }
         let bad = |m: &str| Fail::usage(format!("配置第 {} 行：{m}：{line}", no + 1));
         let (trig, act) = line.split_once('=').ok_or_else(|| bad("缺少 ="))?;
-        let (kind, key) = trig.trim().split_once(':').ok_or_else(|| bad("触发应为 long:<键名> 或 double:<键名>"))?;
-        let long = match kind {
-            "long" => true,
-            "double" => false,
-            _ => return Err(bad("触发只能是 long 或 double")),
+        let (kind, key) = trig.trim().split_once(':').ok_or_else(|| bad("触发应为 long: 或 press: 加键名"))?;
+        let key = key.trim();
+        let (kind, codes, xgimi) = match kind {
+            "long" => {
+                let c = codes_for(key);
+                if c.is_empty() {
+                    return Err(bad("未知键名"));
+                }
+                (Kind::Long, c, 0)
+            }
+            "press" => (Kind::Press, vec![], xgimi_code(key).ok_or_else(|| bad("press 只用于极米快捷键：youku、jiguang、qiyiguo、mango、bilibili"))?),
+            _ => return Err(bad("触发只能是 long（长按）或 press（极米快捷键短按）")),
         };
-        let codes = codes_for(key.trim());
-        if codes.is_empty() {
-            return Err(bad("未知键名"));
-        }
         let (ak, av) = act.trim().split_once(':').ok_or_else(|| bad("动作应为 key: … 或 sh: …"))?;
         let action = match ak.trim() {
             "key" => {
@@ -82,9 +111,19 @@ pub fn parse_config(text: &str) -> Result<Vec<Rule>> {
             "sh" if !av.trim().is_empty() => Action::Shell(av.trim().to_string()),
             _ => return Err(bad("动作应为 key: … 或 sh: …")),
         };
-        rules.push(Rule { long, codes, key_name: key.trim().to_string(), action });
+        rules.push(Rule { kind, codes, xgimi, key_name: key.to_string(), action });
     }
     Ok(rules)
+}
+
+/// 从日志行中取出极米快捷键的按键码（只认按下）。
+pub fn parse_xgimi_log(line: &str) -> Option<u32> {
+    let rest = line.split("do action keycode ").nth(1)?;
+    let (code, tail) = rest.split_once(' ')?;
+    if !tail.contains("keyevent down") {
+        return None;
+    }
+    code.trim().parse().ok()
 }
 
 fn log(msg: &str) {
@@ -92,14 +131,80 @@ fn log(msg: &str) {
     eprintln!("[{t}] {msg}");
 }
 
+/// 执行动作。注入按键时按需创建虚拟键盘并复用。
+fn fire(r: &Rule, injector: &mut Option<Injector>) {
+    let kind = match r.kind {
+        Kind::Long => "long",
+        Kind::Press => "press",
+    };
+    log(&format!("触发 {kind}:{}", r.key_name));
+    match &r.action {
+        Action::Shell(cmd) => {
+            if let Err(e) = std::process::Command::new("/system/bin/sh").arg("-c").arg(cmd).spawn() {
+                log(&format!("执行失败：{e}"));
+            }
+        }
+        Action::Keys(ks) => {
+            if injector.is_none() {
+                match Injector::uinput(Duration::from_millis(40)) {
+                    Ok(i) => *injector = Some(i),
+                    Err(f) => return log(&format!("无法创建虚拟键盘：{}", f.msg)),
+                }
+            }
+            for k in ks {
+                if let Some(i) = injector.as_mut() {
+                    let _ = i.tap(*k);
+                }
+                std::thread::sleep(Duration::from_millis(40));
+            }
+        }
+    }
+}
+
+/// 读取日志，识别极米快捷键。logcat 退出时（例如日志服务重启）5 秒后重新启动。
+fn watch_xgimi_keys(rules: std::sync::Arc<Vec<Rule>>) {
+    let mut injector = None;
+    let mut last: Option<(u32, Instant)> = None;
+    loop {
+        // -T 1：只读之后的新日志；只保留 XgimiWindowManager 的 I 级日志
+        let child = std::process::Command::new("logcat")
+            .args(["-v", "brief", "-T", "1", "XgimiWindowManager:I", "*:S"])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        let Ok(mut child) = child else {
+            log("无法启动 logcat，5 秒后重试");
+            std::thread::sleep(Duration::from_secs(5));
+            continue;
+        };
+        log("已开始读取日志，识别极米快捷键");
+        if let Some(out) = child.stdout.take() {
+            for line in BufReader::new(out).lines().map_while(|l| l.ok()) {
+                let Some(code) = parse_xgimi_log(&line) else { continue };
+                // 同一按键 300ms 内的重复日志只算一次
+                if last.is_some_and(|(c, t)| c == code && t.elapsed() < Duration::from_millis(300)) {
+                    continue;
+                }
+                last = Some((code, Instant::now()));
+                match rules.iter().find(|r| r.kind == Kind::Press && r.xgimi == code) {
+                    Some(r) => fire(r, &mut injector),
+                    None => log(&format!("极米快捷键 {code} 未配置动作")),
+                }
+            }
+        }
+        let _ = child.wait(); // 忽略 SIGCHLD 时返回错误，不影响循环
+        log("logcat 已退出，5 秒后重新启动");
+        std::thread::sleep(Duration::from_secs(5));
+    }
+}
+
 struct KeyState {
     down_at: Option<Instant>,
     long_fired: bool,
-    last_tap: Option<Instant>,
 }
 
 pub fn main(raw: &[String]) -> Result<()> {
-    let a = Args::parse(raw, &["config", "device", "long", "double"])?;
+    let a = Args::parse(raw, &["config", "device", "long"])?;
     a.reject_unknown(&["daemon", "check"])?;
     let path = a.opt("config").ok_or_else(|| Fail::usage("需要 --config <文件>"))?;
     let text = std::fs::read_to_string(path).map_err(|e| Fail::io(&format!("读取 {path}"), e))?;
@@ -107,7 +212,7 @@ pub fn main(raw: &[String]) -> Result<()> {
     if a.flag("check") || !a.flag("daemon") {
         println!("配置正确：{} 条规则", rules.len());
         for r in &rules {
-            println!("  {}:{} → {:?}", if r.long { "long" } else { "double" }, r.key_name, r.action);
+            println!("  {:?}:{} → {:?}", r.kind, r.key_name, r.action);
         }
         if !a.flag("daemon") && !a.flag("check") {
             println!("（加 --daemon 开始运行）");
@@ -115,50 +220,29 @@ pub fn main(raw: &[String]) -> Result<()> {
         return Ok(());
     }
     let long_ms = Duration::from_millis(parse_duration_ms(a.opt("long").unwrap_or("600ms"))?);
-    let double_ms = Duration::from_millis(parse_duration_ms(a.opt("double").unwrap_or("300ms"))?);
     let dev_name = a.opt("device").unwrap_or("XGIMI RC").to_string();
     // 执行 sh 动作后不等待：忽略 SIGCHLD，子进程结束后由内核自动回收，不留僵尸进程
     unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
-    let mut injector: Option<Injector> = None;
-    let fire = |r: &Rule, injector: &mut Option<Injector>| {
-        log(&format!("触发 {}:{}", if r.long { "long" } else { "double" }, r.key_name));
-        match &r.action {
-            Action::Shell(cmd) => {
-                if let Err(e) = std::process::Command::new("/system/bin/sh").arg("-c").arg(cmd).spawn() {
-                    log(&format!("执行失败：{e}"));
-                }
-            }
-            Action::Keys(ks) => {
-                if injector.is_none() {
-                    match Injector::uinput(Duration::from_millis(150)) {
-                        Ok(i) => *injector = Some(i),
-                        Err(f) => return log(&format!("无法创建虚拟键盘：{}", f.msg)),
-                    }
-                }
-                for k in ks {
-                    if let Some(i) = injector.as_mut() {
-                        let _ = i.tap(*k);
-                    }
-                    std::thread::sleep(Duration::from_millis(40));
-                }
-            }
-        }
-    };
+    let rules = std::sync::Arc::new(rules);
+    if rules.iter().any(|r| r.kind == Kind::Press) {
+        let r = rules.clone();
+        std::thread::spawn(move || watch_xgimi_keys(r));
+    }
     log(&format!("keymap 启动：{} 条规则，设备名包含「{dev_name}」", rules.len()));
+    if !rules.iter().any(|r| r.kind != Kind::Press) {
+        loop {
+            std::thread::sleep(Duration::from_secs(3600)); // 只有极米快捷键规则：不需要读设备节点
+        }
+    }
+    let mut injector: Option<Injector> = None;
     loop {
-        let Some(dev) = find_device(&dev_name) else {
+        let paths = find_devices(&dev_name);
+        let mut files: Vec<File> = paths.iter().filter_map(|p| File::open(p).ok()).collect();
+        if files.is_empty() {
             std::thread::sleep(Duration::from_secs(2));
             continue;
-        };
-        let mut f = match File::open(&dev) {
-            Ok(f) => f,
-            Err(e) => {
-                log(&format!("打开 {dev} 失败：{e}"));
-                std::thread::sleep(Duration::from_secs(2));
-                continue;
-            }
-        };
-        log(&format!("已绑定 {dev}"));
+        }
+        log(&format!("已绑定 {}", paths.join("、")));
         let mut states: std::collections::HashMap<u16, KeyState> = Default::default();
         let mut buf = [0u8; 24];
         'dev: loop {
@@ -171,15 +255,15 @@ pub fn main(raw: &[String]) -> Result<()> {
                 .min()
                 .map(|d| d.as_millis() as i32)
                 .unwrap_or(-1);
-            let mut pfd = libc::pollfd { fd: f.as_raw_fd(), events: libc::POLLIN, revents: 0 };
-            let n = unsafe { libc::poll(&mut pfd, 1, timeout) };
+            let mut pfds: Vec<libc::pollfd> = files.iter().map(|f| libc::pollfd { fd: f.as_raw_fd(), events: libc::POLLIN, revents: 0 }).collect();
+            let n = unsafe { libc::poll(pfds.as_mut_ptr(), pfds.len() as libc::nfds_t, timeout) };
             if n == 0 {
                 let now = Instant::now();
                 for (code, s) in states.iter_mut() {
                     if let Some(d) = s.down_at {
                         if !s.long_fired && now >= d + long_ms {
                             s.long_fired = true;
-                            if let Some(r) = rules.iter().find(|r| r.long && r.codes.contains(code)) {
+                            if let Some(r) = rules.iter().find(|r| r.kind == Kind::Long && r.codes.contains(code)) {
                                 fire(r, &mut injector);
                             }
                         }
@@ -187,45 +271,41 @@ pub fn main(raw: &[String]) -> Result<()> {
                 }
                 continue;
             }
-            if n < 0 || pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+            if n < 0 {
                 break 'dev;
             }
-            if f.read_exact(&mut buf).is_err() {
-                break 'dev; // 设备消失（遥控器断开）：回到外层循环重新查找
-            }
-            let typ = u16::from_ne_bytes([buf[16], buf[17]]);
-            let code = u16::from_ne_bytes([buf[18], buf[19]]);
-            let value = i32::from_ne_bytes([buf[20], buf[21], buf[22], buf[23]]);
-            if typ != 1 {
-                continue;
-            }
-            let s = states.entry(code).or_insert(KeyState { down_at: None, long_fired: false, last_tap: None });
-            match value {
-                1 => {
-                    s.down_at = Some(Instant::now());
-                    s.long_fired = false;
+            for (i, p) in pfds.iter().enumerate() {
+                if p.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 {
+                    break 'dev; // 设备消失（遥控器断开）：回到外层循环重新查找
                 }
-                0 => {
-                    let was_long = s.long_fired;
-                    s.down_at = None;
-                    s.long_fired = false;
-                    if was_long {
-                        continue;
-                    }
-                    let now = Instant::now();
-                    if let Some(r) = rules.iter().find(|r| !r.long && r.codes.contains(&code)) {
-                        if s.last_tap.is_some_and(|t| now - t <= double_ms) {
-                            s.last_tap = None;
-                            fire(r, &mut injector);
-                        } else {
-                            s.last_tap = Some(now);
-                        }
-                    }
+                if p.revents & libc::POLLIN == 0 {
+                    continue;
                 }
-                _ => {} // 2 为按住时的自动重复，忽略
+                if files[i].read_exact(&mut buf).is_err() {
+                    break 'dev;
+                }
+                let typ = u16::from_ne_bytes([buf[16], buf[17]]);
+                let code = u16::from_ne_bytes([buf[18], buf[19]]);
+                let value = i32::from_ne_bytes([buf[20], buf[21], buf[22], buf[23]]);
+                if typ != 1 {
+                    continue;
+                }
+                let s = states.entry(code).or_insert(KeyState { down_at: None, long_fired: false });
+                match value {
+                    1 => {
+                        s.down_at = Some(Instant::now());
+                        s.long_fired = false;
+                    }
+                    0 => {
+                        s.down_at = None;
+                        s.long_fired = false;
+                    }
+                    _ => {} // 2 为按住时的自动重复，忽略
+                }
             }
         }
-        log(&format!("{dev} 已断开，等待重新连接"));
+        files.clear();
+        log("遥控器已断开，等待重新连接");
         std::thread::sleep(Duration::from_secs(2));
     }
 }
@@ -236,13 +316,24 @@ mod tests {
 
     #[test]
     fn config() {
-        let r = parse_config("# 注释\nlong:back = sh: am start -n a/.B\ndouble:home = key: menu ok\n").ok().unwrap();
-        assert_eq!(r.len(), 2);
-        assert!(r[0].long && r[0].codes.contains(&158) && r[0].codes.contains(&1));
+        let r = parse_config("# 注释\nlong:back = sh: am start -n a/.B\nlong:home = key: menu ok\npress:youku = sh: echo 1\npress:2121 = key: home\n").ok().unwrap();
+        assert_eq!(r.len(), 4);
+        assert!(r[0].kind == Kind::Long && r[0].codes.contains(&158) && r[0].codes.contains(&1));
         assert_eq!(r[0].action, Action::Shell("am start -n a/.B".into()));
         assert_eq!(r[1].action, Action::Keys(vec![139, 232]));
+        assert_eq!((r[2].kind, r[2].xgimi), (Kind::Press, 2118));
+        assert_eq!(r[3].xgimi, 2121);
         assert!(parse_config("long:nokey = key: menu").is_err());
+        assert!(parse_config("press:back = key: menu").is_err());
         assert!(parse_config("tap:back = key: menu").is_err());
+        assert!(parse_config("double:back = key: menu").is_err(), "双击已去掉");
         assert!(parse_config("long:back = run: x").is_err());
+    }
+
+    #[test]
+    fn xgimi_log_line() {
+        assert_eq!(parse_xgimi_log("I/XgimiWindowManager( 3309): do action keycode 2118 keyevent down"), Some(2118));
+        assert_eq!(parse_xgimi_log("I/XgimiWindowManager( 3309): do action keycode 2118 keyevent up"), None);
+        assert_eq!(parse_xgimi_log("I/XgimiWindowManager( 3309): something else"), None);
     }
 }
