@@ -82,22 +82,42 @@ func (m *Module) upload(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) page(w http.ResponseWriter, _ *http.Request) {
 	core.Page(w, "局域网测速", `<div class="card"><p class="row"><button onclick="run()" id="go">开始测速</button></p>
-<pre id="out">测试本设备与投影仪之间的网速：延迟（20 次取中位数）、下载 100MB、上传 50MB。</pre></div>
-<p><small>结果受 Wi-Fi 信号影响较大；投影仪当前连接在 5GHz 频段。命令行测速：<code>curl -o /dev/null http://投影仪IP:8090/api/speed/download?mb=200</code>（需带 token）。</small></p>
+<pre id="out">测试本设备与投影仪之间的网速：延迟（20 次取中位数），下载和上传各测 8 秒，过程中实时显示进度。</pre></div>
+<p><small>结果受 Wi-Fi 信号和频段影响较大（2.4GHz 明显慢于 5GHz）。命令行测速：<code>curl -o /dev/null http://投影仪IP:8090/api/speed/download?mb=200</code>（需带 token）。</small></p>
 <script>
-const out=t=>document.getElementById('out').textContent=t;
-async function run(){
-  const btn=document.getElementById('go');btn.disabled=true;let log='';const add=s=>{log+=s+'\n';out(log)};
+const SECONDS=8, out=t=>document.getElementById('out').textContent=t;
+const mbps=(bytes,sec)=>(bytes*8/sec/1e6).toFixed(1)+' Mbps';
+let lines=[];const show=(cur)=>out(lines.join('\n')+(cur?'\n'+cur:''));
+async function download(){
+  const t0=performance.now();let n=0,last=0;
+  const ctrl=new AbortController();const timer=setTimeout(()=>ctrl.abort(),SECONDS*1000);
   try{
-    const rtts=[];for(let i=0;i<20;i++){const t=performance.now();await fetch('/api/speed/ping?'+i,{cache:'no-store'});rtts.push(performance.now()-t)}
-    rtts.sort((a,b)=>a-b);add('延迟：'+rtts[10].toFixed(1)+' ms（最小 '+rtts[0].toFixed(1)+' ms）');
-    add('下载测试中…');let t=performance.now();const r=await fetch('/api/speed/download?mb=100',{cache:'no-store'});
-    const reader=r.body.getReader();let n=0;for(;;){const {done,value}=await reader.read();if(done)break;n+=value.length}
-    let s=(performance.now()-t)/1000;log=log.replace('下载测试中…\n','');add('下载：'+(n*8/s/1e6).toFixed(1)+' Mbps（'+(n/1048576).toFixed(0)+' MB，'+s.toFixed(1)+' 秒）');
-    add('上传测试中…');const body=new Uint8Array(50<<20);crypto.getRandomValues(body.subarray(0,65536));
-    t=performance.now();const u=await (await fetch('/api/speed/upload',{method:'POST',body})).json();s=(performance.now()-t)/1000;
-    log=log.replace('上传测试中…\n','');add('上传：'+(u.bytes*8/s/1e6).toFixed(1)+' Mbps（'+(u.bytes/1048576).toFixed(0)+' MB，'+s.toFixed(1)+' 秒）');
-  }catch(e){add('失败：'+e.message)}
+    const r=await fetch('/api/speed/download?mb=1024',{cache:'no-store',signal:ctrl.signal});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const reader=r.body.getReader();
+    for(;;){const {done,value}=await reader.read();if(done)break;n+=value.length;
+      const now=performance.now();if(now-last>500){last=now;show('下载中… '+(n/1048576).toFixed(0)+' MB，'+mbps(n,(now-t0)/1000))}}
+  }catch(e){if(e.name!=='AbortError')throw e}finally{clearTimeout(timer)}
+  return [n,(performance.now()-t0)/1000];
+}
+async function upload(){
+  const chunk=new Uint8Array(1<<20);for(let i=0;i<chunk.length;i+=65536)crypto.getRandomValues(chunk.subarray(i,i+65536));
+  const t0=performance.now();let n=0;
+  while((performance.now()-t0)/1000<SECONDS){
+    const r=await fetch('/api/speed/upload',{method:'POST',body:chunk,cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    n+=chunk.length;show('上传中… '+(n/1048576).toFixed(0)+' MB，'+mbps(n,(performance.now()-t0)/1000));
+  }
+  return [n,(performance.now()-t0)/1000];
+}
+async function run(){
+  const btn=document.getElementById('go');btn.disabled=true;lines=[];
+  try{
+    const rtts=[];for(let i=0;i<20;i++){const t=performance.now();await fetch('/api/speed/ping?'+i,{cache:'no-store'});rtts.push(performance.now()-t);show('测量延迟… '+(i+1)+'/20')}
+    rtts.sort((a,b)=>a-b);lines.push('延迟：'+rtts[10].toFixed(1)+' ms（最小 '+rtts[0].toFixed(1)+' ms）');show();
+    let [n,s]=await download();lines.push('下载：'+mbps(n,s)+'（'+(n/1048576).toFixed(0)+' MB，'+s.toFixed(1)+' 秒）');show();
+    [n,s]=await upload();lines.push('上传：'+mbps(n,s)+'（'+(n/1048576).toFixed(0)+' MB，'+s.toFixed(1)+' 秒）');show();
+  }catch(e){lines.push('失败：'+e.message);show()}
   btn.disabled=false;
 }
 </script>`)
