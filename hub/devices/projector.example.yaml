@@ -2,6 +2,8 @@
 # devices/*.yaml 含 token，已加入 .gitignore，不要提交。
 
 name: 投影仪
+# 投影仪自己的浏览器（TV Bro）访问 hub 不需要 token；保存配置仍需要 token。
+trust_local: true
 listen: ":8090"
 token: "换成随机长字符串"
 data_dir: data

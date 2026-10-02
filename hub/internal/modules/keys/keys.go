@@ -1,5 +1,5 @@
 // Package keys 是遥控器按键设置：在网页上为遥控器的四个影视快捷键（酷喵、云视听极光、奇异果、芒果）
-// 分别设置短按和长按的功能，共 8 项。
+// 以及调焦键两侧的两个键，分别设置短按和长按的功能，共 12 项。
 //
 // 本模块只负责读写配置文件，实际识别按键、执行动作的是 z6x-tools 的 keymap 守护进程
 // （tools/src/keymap.rs）：它在配置文件被修改后 2 秒内自动重新加载。配置文件格式见 keymap 的说明。
@@ -53,6 +53,7 @@ func (m *Module) Stop(context.Context) error { return nil }
 // Buttons 是可设置的四个快捷键（keymap 中的名称与显示名称）。
 var Buttons = []struct{ ID, Label string }{
 	{"youku", "酷喵"}, {"jiguang", "云视听极光"}, {"qiyiguo", "奇异果"}, {"mango", "芒果"},
+	{"wallpaper", "壁纸键"}, {"side", "调焦键另一侧的键"},
 }
 
 // Slot 是一项设置：某个键的短按或长按对应的动作。Action 为空表示不设置。
@@ -166,7 +167,8 @@ func (m *Module) apps(ctx context.Context) []App {
 		o, _ := m.r.Run(ctx, "cmd", "package", "query-activities", "--brief", "-a", "android.intent.action.MAIN", "-c", cat)
 		for _, l := range strings.Split(o, "\n") {
 			a := strings.TrimSpace(l)
-			if !appRe.MatchString(a) {
+			// 跳过占位入口：极米设置的桌面入口为 com.xgimi.newsettings.mock.MockActivity，打开无反应（2026-10-02 用户确认）
+			if !appRe.MatchString(a) || strings.Contains(a, ".mock.") || strings.HasSuffix(a, "MockActivity") {
 				continue
 			}
 			pkg := strings.SplitN(a, "/", 2)[0]
@@ -189,6 +191,7 @@ var names = map[string]string{
 	"org.smarttube.stable": "SmartTube", "com.phlox.tvwebbrowser": "TV Bro 浏览器", "com.cxinventor.file.explorer": "CX 文件管理器",
 	"org.galexander.sshd": "SimpleSSHD", "com.github.metacubex.clash.meta": "Clash Meta", "com.spocky.projengmenu": "Projectivy 桌面",
 	"de.szalkowski.activitylauncher.oss": "Activity Launcher",
+	"com.xgimi.filemanager":              "极米文件管理", "com.xgimi.manager": "极米管家（清理与安全）", "com.xgimi.wirelessscreen": "极米无线投屏",
 }
 
 func (m *Module) Routes(r core.Router) {

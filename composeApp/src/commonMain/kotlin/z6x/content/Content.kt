@@ -7,6 +7,7 @@ import z6x.content.custom.DebloatMethod
 import z6x.content.custom.DebloatScripts
 import z6x.content.custom.InputMethodPivot
 import z6x.content.custom.ProjectivyLauncher
+import z6x.content.custom.RemoteKeys
 import z6x.content.custom.ScreenCast
 import z6x.content.custom.SystemPackages
 import z6x.content.inspect.AdbAutostart
@@ -90,10 +91,10 @@ object Content {
                     listOf(SshProbe, SshPermissionWall, FindAdbEntry, ForceAdb, AdbAutostart, SshKeyLogin),
                 ),
                 Category(
-                    "系统定制", "🧹", "精简预装、替换桌面、输入法、代理与投屏",
+                    "系统定制", "🧹", "精简预装、替换桌面、输入法、代理、投屏与遥控器按键",
                     listOf(
                         DebloatMethod, DebloatList, SystemPackages, DebloatScripts, ProjectivyLauncher,
-                        InputMethodPivot, AppStorePivot, ClashProxy, ScreenCast,
+                        InputMethodPivot, AppStorePivot, ClashProxy, ScreenCast, RemoteKeys,
                     ),
                 ),
                 Category("开发环境", "⚙️", "在投影仪上运行自编译程序", listOf(NativeExec, Busybox, GoServer, ProcMetrics)),

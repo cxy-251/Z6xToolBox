@@ -19,6 +19,8 @@ type Config struct {
 	DataDir string               `yaml:"data_dir"`
 	LogFile string               `yaml:"log_file"`
 	Modules map[string]yaml.Node `yaml:"modules"`
+	// TrustLocal 为真时，来自设备本身的请求（例如投影仪上的浏览器）不需要 token；保存配置除外。
+	TrustLocal bool `yaml:"trust_local"`
 	// Network 限定在哪个网络上对外服务，见 netguard.go。
 	Network NetworkConfig `yaml:"network"`
 }

@@ -53,6 +53,7 @@ func (h *Hub) Run(ctx context.Context) error {
 	ctx, h.stop = context.WithCancel(ctx)
 	defer h.stop()
 	h.gate = NewGate(h.cfg.Network, h.cfg.Token, h.log)
+	trustLocal = h.cfg.TrustLocal
 	mux := http.NewServeMux()
 	h.coreRoutes(mux)
 	h.stopRoute(mux)
@@ -154,7 +155,7 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	})
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		if !ValidToken(TokenFrom(r), h.cfg.Token) {
+		if !Authorized(r, h.cfg.Token) {
 			http.Redirect(w, r, "/login?next=/", http.StatusFound)
 			return
 		}

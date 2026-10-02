@@ -36,7 +36,7 @@ func unmaskToken(yamlText, token string) string {
 
 func (h *Hub) configRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/config", RequireToken(h.cfg.Token, http.HandlerFunc(h.getConfig)))
-	mux.Handle("POST /api/config", RequireToken(h.cfg.Token, http.HandlerFunc(h.saveConfig)))
+	mux.Handle("POST /api/config", RequireTokenStrict(h.cfg.Token, http.HandlerFunc(h.saveConfig)))
 	mux.Handle("GET /ui/config/{$}", RequireToken(h.cfg.Token, http.HandlerFunc(h.configPage)))
 }
 

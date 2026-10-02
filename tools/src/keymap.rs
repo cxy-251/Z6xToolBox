@@ -27,7 +27,8 @@ pub const HELP: &str = "z6x keymap --daemon --config <文件> [--device 名称] 
 z6x keymap --check --config <文件>     只检查配置
   配置文件每行一条：<触发> = <动作>，# 开头为注释。
     触发：press:<极米快捷键>（短按）、long:<极米快捷键或普通键名>（长按，默认按住 600ms）
-          极米快捷键：youku（酷喵）、jiguang（云视听极光）、qiyiguo（奇异果）、mango（芒果）、bilibili，或按键码 2118 等
+          极米快捷键：youku（酷喵）、jiguang（云视听极光）、qiyiguo（奇异果）、mango（芒果）、bilibili、
+                      wallpaper（壁纸键）、side（调焦键另一侧的键），或按键码 2118 等
     动作：key: <键名> [<键名>…]（注入按键）、sh: <命令>（用 /system/bin/sh 执行，不等待结束）
   示例：
     press:youku = sh: am start -n org.smarttube.stable/com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity
@@ -40,6 +41,9 @@ pub const XGIMI_KEYS: &[(&str, u32, &str)] = &[
     ("qiyiguo", 2120, "奇异果（aiqiyitv）"),
     ("mango", 2121, "芒果（mangotv）"),
     ("bilibili", 2126, "哔哩哔哩（bilibilitv）"),
+    // 调焦键两侧的两个键（2026-10-02 实测）：2116 原为壁纸（极米的壁纸功能已在精简时停用），2117 极米不拦截、应用也不处理
+    ("wallpaper", 2116, "壁纸键"),
+    ("side", 2117, "调焦键另一侧的键"),
 ];
 
 fn codes_for(name: &str) -> Vec<u16> {
@@ -99,7 +103,7 @@ pub fn parse_config(text: &str) -> Result<Vec<Rule>> {
                     (Kind::Long, c, 0)
                 }
             },
-            "press" => (Kind::Press, vec![], xgimi_code(key).ok_or_else(|| bad("press 只用于极米快捷键：youku、jiguang、qiyiguo、mango、bilibili"))?),
+            "press" => (Kind::Press, vec![], xgimi_code(key).ok_or_else(|| bad("press 只用于极米快捷键：youku、jiguang、qiyiguo、mango、bilibili、wallpaper、side"))?),
             _ => return Err(bad("触发只能是 long（长按）或 press（极米快捷键短按）")),
         };
         let (ak, av) = act.trim().split_once(':').ok_or_else(|| bad("动作应为 key: … 或 sh: …"))?;

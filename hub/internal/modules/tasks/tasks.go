@@ -202,6 +202,10 @@ var friendly = map[string]string{
 	"com.spocky.projengmenu":             "Projectivy 桌面",
 	"de.szalkowski.activitylauncher.oss": "Activity Launcher",
 	"com.sohu.inputmethod.sogou.tv":      "搜狗输入法",
+	"com.xgimi.filemanager":              "极米文件管理",
+	"com.xgimi.manager":                  "极米管家（清理与安全）",
+	"com.xgimi.wirelessscreen":           "极米无线投屏",
+	"com.android.newsettings":            "极米设置",
 }
 
 // stop 结束一个应用并从最近任务中移除。

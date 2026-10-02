@@ -1,6 +1,8 @@
 package core
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -122,5 +124,29 @@ func TestRecorderSupportsHijack(t *testing.T) {
 	var w http.ResponseWriter = &statusRecorder{ResponseWriter: httptest.NewRecorder()}
 	if _, ok := w.(http.Hijacker); !ok {
 		t.Fatal("statusRecorder 应实现 http.Hijacker")
+	}
+}
+
+func TestTrustLocal(t *testing.T) {
+	h := RequireToken("secret-token-123456", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	req := func(remote, local string) int {
+		r := httptest.NewRequest("GET", "/api/x", nil)
+		r.RemoteAddr = remote
+		r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP(local), Port: 8090}))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	trustLocal = false
+	if req("192.168.0.109:5000", "192.168.0.109") != 401 {
+		t.Fatal("未开启 trust_local 时本机请求也需要 token")
+	}
+	trustLocal = true
+	defer func() { trustLocal = false }()
+	if req("192.168.0.109:5000", "192.168.0.109") != 200 {
+		t.Fatal("开启后本机请求不需要 token")
+	}
+	if req("192.168.0.21:5000", "192.168.0.109") != 401 {
+		t.Fatal("其他设备的请求仍需要 token")
 	}
 }
