@@ -29,6 +29,7 @@ import (
 	"z6x/hub/internal/modules/notify"
 	"z6x/hub/internal/modules/paste"
 	"z6x/hub/internal/modules/speed"
+	"z6x/hub/internal/modules/sshd"
 	"z6x/hub/internal/modules/tasks"
 	"z6x/hub/internal/modules/webshell"
 	"z6x/hub/internal/modules/wol"
@@ -118,6 +119,7 @@ func main() {
 	h.Add(webshell.New())
 	h.Add(library.New())
 	h.Add(tasks.New(nil))
+	h.Add(sshd.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

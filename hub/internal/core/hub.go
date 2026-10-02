@@ -64,7 +64,8 @@ func (h *Hub) Run(ctx context.Context) error {
 	for _, e := range h.entries {
 		e := e
 		env := &Env{Config: h.cfg, Log: h.log.With("module", e.mod.Name()), Fail: func(err error) { e.set(StateFailed, err) },
-			Serve: func(port int, handler http.Handler) { h.gate.Add(e.mod.Name(), port, handler) }}
+			Serve:    func(port int, handler http.Handler) { h.gate.Add(e.mod.Name(), port, handler) },
+			ServeRaw: func(port int, serve func(net.Listener)) { h.gate.AddRaw(e.mod.Name(), port, serve) }}
 		if err := h.startModule(ctx, e, env); err != nil {
 			h.log.Error("模块启动失败", "module", e.mod.Name(), "err", err)
 			e.set(StateFailed, err)

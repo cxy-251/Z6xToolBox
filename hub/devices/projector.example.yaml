@@ -74,3 +74,10 @@ modules:
   tasks:
     enable: true
     protect: [com.github.metacubex.clash.meta]   # 不允许结束的应用；桌面、输入法自动受保护
+
+  # SSH：以 hub 的身份（shell，uid 2000）登录，权限与 adb shell 相同；只接受密钥登录，只在局域网地址上监听。
+  sshd:
+    enable: true
+    port: 8022
+    authorized_keys:
+      - "ecdsa-sha2-nistp256 AAAA…（Deck 的公钥，cat ~/.ssh/z6x_ecdsa.pub） deck"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"sync"
@@ -36,6 +37,8 @@ type Env struct {
 	// Serve 让模块在独立端口上提供服务（如 WebDAV）。端口由 hub 统一管理，
 	// 与主端口一起按网络状态开启或关闭。只能在 Start 中调用。
 	Serve func(port int, h http.Handler)
+	// ServeRaw 让模块在独立端口上提供普通 TCP 服务（如 SSH），同样由 hub 按网络状态开启或关闭。
+	ServeRaw func(port int, serve func(net.Listener))
 }
 
 // State 是模块的运行状态。

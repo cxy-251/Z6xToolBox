@@ -136,6 +136,9 @@ type gateSvc struct {
 	port    int
 	handler http.Handler
 	srv     *http.Server
+	// raw 不为空时为普通 TCP 服务（如 SSH）：监听后交给 raw 处理，关闭时关闭监听器
+	raw func(net.Listener)
+	ln  net.Listener
 }
 
 func NewGate(cfg NetworkConfig, token string, log *slog.Logger) *Gate {
@@ -147,6 +150,12 @@ func NewGate(cfg NetworkConfig, token string, log *slog.Logger) *Gate {
 // Add 登记一个需要监听的端口。必须在 Run 之前调用。
 func (g *Gate) Add(name string, port int, h http.Handler) {
 	g.svcs = append(g.svcs, &gateSvc{name: name, port: port, handler: h})
+}
+
+// AddRaw 登记一个普通 TCP 服务（如 SSH），与 HTTP 端口一样按网络状态开启或关闭。
+// serve 在每次开始监听时以新的监听器调用，监听器关闭时应返回。必须在 Run 之前调用。
+func (g *Gate) AddRaw(name string, port int, serve func(net.Listener)) {
+	g.svcs = append(g.svcs, &gateSvc{name: name, port: port, raw: serve})
 }
 
 // Status 返回当前监听的地址；未监听时返回空字符串和原因。
@@ -221,6 +230,11 @@ func (g *Gate) check() error {
 			g.closeLocked()
 			return fmt.Errorf("%s 端口 %d 监听失败：%w", s.name, s.port, err)
 		}
+		if s.raw != nil {
+			s.ln = ln
+			go s.raw(ln)
+			continue
+		}
 		// http.Server 关闭后不能再次使用，每次重新监听都新建一个。
 		s.srv = &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second}
 		go func(s *gateSvc, srv *http.Server) {
@@ -246,6 +260,10 @@ func (g *Gate) closeLocked() {
 		if s.srv != nil {
 			s.srv.Close()
 			s.srv = nil
+		}
+		if s.ln != nil {
+			s.ln.Close()
+			s.ln = nil
 		}
 	}
 	g.bound = ""

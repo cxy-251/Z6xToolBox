@@ -4,12 +4,13 @@ import z6x.framework.Host
 import z6x.framework.Verdict
 import z6x.framework.module
 
-val DropbearShell = module("dropbear-shell", "以 shell 身份运行 SSH 服务（Dropbear）") {
-    keywords = "dropbear · uid 2000 · scp · /data/local/tmp"
+val DropbearShell = module("dropbear-shell", "以 shell 身份运行 SSH 服务（已改由 hub 内置实现）") {
+    keywords = "dropbear · uid 2000 · x/crypto/ssh · 8022 · /data/local/tmp"
     overview = """
-        目前的 SSH 由 SimpleSSHD 提供，身份为普通应用（uid 10068），无法访问 /data/local/tmp。提案：通过 ADB 启动一个静态编译的 Dropbear，使 SSH 以 shell（uid 2000）身份登录，并可用 `scp` 将程序直接传入 /data/local/tmp。
+        原先的 SSH 由 SimpleSSHD 提供，身份为普通应用（uid 10068），无法访问 /data/local/tmp。原提案：通过 ADB 启动一个静态编译的 Dropbear，使 SSH 以 shell（uid 2000）身份登录。
+        **2026-10-02 已实现，但改用其他方式**：在 z6x-hub 中内置 SSH 服务（Go 官方的 golang.org/x/crypto/ssh），随 hub 一起部署，端口 8022。原因与实测结果见下文「实际实现」。
     """
-    proposal()
+    verified("2026-10-02")
 
     why("要解决的问题") {
         text("""
@@ -64,6 +65,33 @@ val DropbearShell = module("dropbear-shell", "以 shell 身份运行 SSH 服务�
         claim("Dropbear 是专为嵌入式 Linux 设计的超轻量 SSH 服务，支持单文件运行、ED25519/RSA 公钥认证，资源消耗仅为 OpenSSH 的五分之一；OpenSSH 移植体积超 20MB。", Verdict.Unverified,
             "是否支持 ED25519 取决于版本：SimpleSSHD 自带的 dropbear 2019.78 即不支持（实际遇到过）。体积和资源对比没有出处。")
         claim("非 Root 用户不可监听标准 TCP 22 端口，故绑定 :2222。", Verdict.Confirmed, "1024 以下的端口无法绑定；但 2222 已被 SimpleSSHD 占用，需改用其他端口。")
+    }
+
+
+    story("实际实现：hub 内置 SSH（2026-10-02）") {
+        text("""
+            • **为什么不用 Dropbear**：Dropbear 是 C 程序，需要为 aarch64 交叉编译 C 代码，而 Deck 上只有 Rust 自带的链接器，没有 C 交叉编译器（z6x-tools 的 pack 子命令因同样的原因放弃了 zstd）。
+            • **改为在 hub 中实现**：Go 官方有成熟的 SSH 库，网页终端模块已有伪终端代码可以复用；投影仪上的 hub 本来就以 shell 身份运行，内置的 SSH 自然也是 shell 身份。代码位于 `hub/internal/modules/sshd/`，伪终端代码移到了公共的 `hub/internal/pty/`。
+            • **安全**：只接受配置中列出的公钥，不支持密码；端口由网络守卫管理，只在局域网 IPv4 地址上监听；主机密钥（ed25519）首次启动时生成，保存在 hub 的数据目录中。
+            • **支持**：交互式终端（窗口大小随客户端调整）与执行单条命令（返回真实的退出码）。**不支持** sftp、scp、端口转发：文件传输用 hub 的文件管理与 WebDAV，或 `adb push`。
+        """)
+        change("登录", "ssh -i ~/.ssh/z6x_ecdsa -p 8022 192.168.0.109", Host.Deck)
+    }
+
+    verify("实测结果（2026-10-02）") {
+        facts(
+            "身份" to "✓ uid 2000（shell），工作目录 /data/local/tmp；可读取 12 个输入设备，可执行 z6x、dumpsys 等",
+            "认证" to "✓ 未授权的公钥、密码登录均被拒绝（Permission denied (publickey)）",
+            "伪终端" to "✓ 交互式会话分配到 /dev/pts/0",
+            "单元测试" to "✓ 在 Deck 上用进程内的 SSH 客户端测试：拒绝未授权公钥、命令输出与退出码正确、伪终端会话有 tty",
+            "测试中的问题" to "工作目录写死为 /data/local/tmp，在 Deck 上运行单元测试时该目录不存在，进程启动失败；改为目录存在时使用，否则使用根目录",
+        )
+    }
+
+    consequences("之后") {
+        text("""
+            SimpleSSHD 不再需要，可以卸载；遥控器芒果键目前设为打开 SimpleSSHD，卸载前应改成其他功能。与 hub 一样，投影仪重启后需要由 Deck 重新部署启动。
+        """)
     }
 
     related("ssh-key-login", "native-exec", "go-server")

@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"z6x/hub/internal/core"
+	"z6x/hub/internal/pty"
 )
 
 //go:embed assets
@@ -129,7 +130,7 @@ func (m *Module) session(ws *websocket.Conn) {
 	}
 	defer m.sessions.Add(-1)
 
-	ptmx, tty, err := openPTY()
+	ptmx, tty, err := pty.Open()
 	if err != nil {
 		websocket.Message.Send(ws, "无法打开伪终端："+err.Error()+"\r\n")
 		return
@@ -195,28 +196,6 @@ func (m *Module) session(ws *websocket.Conn) {
 }
 
 // openPTY 打开一对伪终端：主端由 hub 读写，从端交给 shell。
-func openPTY() (ptmx *os.File, tty *os.File, err error) {
-	ptmx, err = os.OpenFile("/dev/ptmx", os.O_RDWR|syscall.O_NOCTTY, 0)
-	if err != nil {
-		return nil, nil, err
-	}
-	fd := int(ptmx.Fd())
-	if err = unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil { // 解锁从端
-		ptmx.Close()
-		return nil, nil, err
-	}
-	n, err := unix.IoctlGetInt(fd, unix.TIOCGPTN) // 取得从端编号
-	if err != nil {
-		ptmx.Close()
-		return nil, nil, err
-	}
-	tty, err = os.OpenFile(fmt.Sprintf("/dev/pts/%d", n), os.O_RDWR|syscall.O_NOCTTY, 0)
-	if err != nil {
-		ptmx.Close()
-		return nil, nil, err
-	}
-	return ptmx, tty, nil
-}
 
 func (m *Module) page(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
