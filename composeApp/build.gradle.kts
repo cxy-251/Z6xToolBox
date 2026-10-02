@@ -38,7 +38,9 @@ compose.desktop {
             targetFormats(TargetFormat.Deb, TargetFormat.Msi, TargetFormat.Dmg)
             packageName = "Z6xToolBox"
             packageVersion = appVersion
-            description = "极米 Z6X Pro 与手机的实践手册和工具箱"
+            // Windows 安装包由 WiX 3 生成，默认代码页 1252 写不进中文，安装包说明改用英文
+            description = if (System.getProperty("os.name").startsWith("Windows")) "XGIMI Z6X Pro and phone toolbox"
+                else "极米 Z6X Pro 与手机的实践手册和工具箱"
             vendor = "cxy-251"
             linux {
                 packageName = "z6xtoolbox"

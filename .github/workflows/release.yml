@@ -82,6 +82,9 @@ jobs:
           mkdir -p dist
           cp composeApp/build/compose/binaries/main/msi/*.msi "dist/Z6xToolBox-$VERSION-windows-x64.msi"
           (cd composeApp/build/compose/binaries/main/app && 7z a -tzip -mx=9 "$GITHUB_WORKSPACE/dist/Z6xToolBox-$VERSION-windows-x64-portable.zip" Z6xToolBox)
+      - name: Show jpackage logs
+        if: failure()
+        run: cat composeApp/build/compose/logs/packageMsi/*.txt || true
       - uses: actions/upload-artifact@v4
         with:
           name: windows
