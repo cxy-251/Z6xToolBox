@@ -87,7 +87,7 @@ func naturalLess(a, b string) bool {
 }
 
 func (m *Module) listManga() []Manga {
-	var out []Manga
+	out := []Manga{} // 空列表也要返回 []，返回 null 会让页面脚本出错
 	for _, lib := range m.libs() {
 		base := filepath.Join(lib.Path, mediaRoot, "manga")
 		filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {

@@ -86,7 +86,7 @@ func (m *Module) listCreators() []Creator {
 
 // listClips 列出某位作者的条目，新的在前（文件名以日期开头），支持分页。
 func (m *Module) listClips(platform, creator string, offset, limit int) ([]Clip, int) {
-	var all []Clip
+	all := []Clip{}
 	for _, lib := range m.libs() {
 		rel := filepath.Join(mediaRoot, "shortvideo", platform, creator)
 		dir, err := within(lib.Path, rel)

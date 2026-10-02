@@ -119,3 +119,18 @@ func TestScanGamesAndSaveDir(t *testing.T) {
 		t.Fatalf("扫描结果不正确：%+v", got)
 	}
 }
+
+// TestEmptyListsAreArrays 防止回归：资源库为空时接口应返回 []，返回 null 会让页面停在「读取中」。
+func TestEmptyListsAreArrays(t *testing.T) {
+	m := New()
+	m.cfg = Config{Internal: t.TempDir(), Storage: t.TempDir()}
+	if got := m.listManga(); got == nil {
+		t.Error("漫画列表为空时应返回空切片而不是 nil")
+	}
+	if got := m.listCreators(); got == nil {
+		t.Error("作者列表为空时应返回空切片而不是 nil")
+	}
+	if got, _ := m.listClips("抖音", "无", 0, 10); got == nil {
+		t.Error("视频列表为空时应返回空切片而不是 nil")
+	}
+}
