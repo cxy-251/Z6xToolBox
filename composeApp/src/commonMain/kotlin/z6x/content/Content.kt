@@ -131,7 +131,7 @@ object Content {
             "proposals", "💡", "提案",
             "尚未实施的方案，均附实机可行性审核：可行、可选或不可行。",
             listOf(
-                Category("规格", "📐", "z6x-hub（Go，在本项目内实现）与 z6x-tools（Rust，暂缓）", listOf(HubSpec, ToolsSpec)),
+                Category("规格", "📐", "z6x-hub（Go，hub/）与 z6x-tools（Rust，tools/），均在本项目内实现", listOf(HubSpec, ToolsSpec)),
                 Category(
                     "小项目审核", "🗂", "109 个提案：采纳、暂缓或不可行的依据",
                     listOf(ReviewSummary, ReviewFiles, ReviewMedia, ReviewNetwork, ReviewControl, ReviewSystem),
