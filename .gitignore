@@ -28,3 +28,7 @@ dev/go-server/z6x_go_server
 
 # Python 缓存
 __pycache__/
+
+# z6x-hub：编译产物与含 token 的配置
+hub/z6x-hub
+hub/hub.yaml

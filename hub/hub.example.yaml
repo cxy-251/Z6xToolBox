@@ -1,0 +1,45 @@
+# z6x-hub 配置示例。deploy.sh 首次运行时会复制为 hub.yaml 并生成随机 token。
+# hub.yaml 含 token，已加入 .gitignore，不要提交。
+
+listen: ":8090"
+token: "换成随机长字符串"
+data_dir: data
+log_file: hub.log
+
+modules:
+  # 文件共享：WebDAV 在独立端口，HTTP 下载和上传在主端口。
+  files:
+    enable: true
+    port: 8091
+    usb: true                     # 自动共享插入的 U 盘（/storage/<卷ID>）
+    roots:
+      - { name: 内部存储, path: /storage/emulated/0 }
+
+  # 手机发送文字和链接到电视。
+  paste:
+    enable: true
+
+  # 网页遥控器与控制接口。
+  control:
+    enable: true
+    apps:
+      SmartTube: org.smarttube.stable
+      TV Bro: com.phlox.tvwebbrowser
+      Clash: com.github.metacubex.clash.meta
+    macros:
+      回到桌面并静音: { keys: [home, mute], interval_ms: 300 }
+
+  # 网络唤醒：在下面添加设备（MAC 必填，IP 用于显示在线状态）。
+  wol:
+    enable: true
+    devices: {}
+    #  书房电脑: { mac: "AA:BB:CC:DD:EE:FF", ip: 192.168.0.20 }
+
+  # 系统状态。
+  metrics:
+    enable: true
+    interval_sec: 5
+
+  # 局域网测速。
+  speed:
+    enable: true
