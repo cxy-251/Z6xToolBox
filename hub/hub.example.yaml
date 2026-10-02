@@ -45,6 +45,10 @@ modules:
     enable: true
 
   # 局域网设备扫描（SSDP）。
+  # 资源库：网页游戏、漫画、短视频（与 omni-deck 相同的目录结构，自动发现机身存储和 U 盘上的资源库）。
+  library:
+    enable: true
+
   # 发送通知到电视的通知界面（不弹出提醒）。
   notify:
     enable: true

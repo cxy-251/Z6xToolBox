@@ -23,6 +23,7 @@ import (
 	"z6x/hub/internal/modules/control"
 	"z6x/hub/internal/modules/files"
 	"z6x/hub/internal/modules/lanscan"
+	"z6x/hub/internal/modules/library"
 	"z6x/hub/internal/modules/metrics"
 	"z6x/hub/internal/modules/notify"
 	"z6x/hub/internal/modules/paste"
@@ -60,7 +61,8 @@ func main() {
 		}
 		return filepath.Join(base, p)
 	}
-	if err := os.MkdirAll(abs(cfg.DataDir), 0o755); err != nil {
+	cfg.DataDir = abs(cfg.DataDir) // 模块（如资源库的缩略图缓存）直接使用绝对路径
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, "无法创建数据目录：", err)
 		os.Exit(1)
 	}
@@ -83,6 +85,7 @@ func main() {
 	h.Add(lanscan.New())
 	h.Add(notify.New(nil))
 	h.Add(webshell.New())
+	h.Add(library.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
