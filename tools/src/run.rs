@@ -80,12 +80,13 @@ pub fn main(raw: &[String]) -> Result<()> {
         if restarts > max {
             return Err(Fail::error(format!("已重启 {max} 次，停止守护")));
         }
-        // 本次等待 delay，下次加倍；连续运行超过 60 秒说明不是启动即崩溃，间隔恢复为 1 秒
-        if ran > Duration::from_secs(60) {
+        // 本次等待 delay，下次加倍；连续运行超过 60 秒说明不是启动即崩溃，间隔恢复为 1 秒。
+        // 正常退出（退出码 0，例如 keymap 因配置修改而退出）属于计划内重启，同样不加长间隔
+        if ran > Duration::from_secs(60) || status.success() {
             backoff = Duration::from_secs(1);
         }
         let delay = backoff;
-        backoff = next_backoff(backoff, ran);
+        backoff = if status.success() { Duration::from_secs(1) } else { next_backoff(backoff, ran) };
         log(&name, &format!("{} 秒后重启（第 {restarts} 次）", delay.as_secs()));
         let until = Instant::now() + delay;
         while Instant::now() < until {

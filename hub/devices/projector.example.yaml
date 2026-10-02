@@ -81,3 +81,7 @@ modules:
     port: 8022
     authorized_keys:
       - "ecdsa-sha2-nistp256 AAAA…（Deck 的公钥，cat ~/.ssh/z6x_ecdsa.pub） deck"
+
+  # 遥控器按键：在网页上设置四个影视快捷键的短按与长按（由 z6x-tools 的 keymap 守护进程执行）。
+  keys:
+    enable: true

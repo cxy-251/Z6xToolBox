@@ -8,8 +8,11 @@
 //!     遥控器断开重连导致节点变化时，每 2 秒重新查找并绑定。
 //!   - 极米的四个影视快捷键（酷喵、云视听极光、奇异果、芒果）：它们不经过输入设备节点（getevent 录不到），
 //!     而是以极米自定义的按键码（2118～2121）直接进入系统，由极米改过的窗口管理拦截后交给 XRM 服务打开对应应用，
-//!     并在日志中写一行「XgimiWindowManager: do action keycode 2118 keyevent down」（2026-10-02 实测）。
-//!     守护进程读取这行日志来识别按键；对应的影视应用未安装，原来的动作什么也不会打开，不会冲突。
+//!     系统的 WindowManager 在日志中完整记录按键过程（2026-10-02 实测）：
+//!       按下「interceptKeyTi keyCode=2118 down=true repeatCount=0」，按住约 0.4 秒后每 50ms 一条
+//!       repeatCount=1、2、3…，松开「down=false」。
+//!     守护进程读取这些日志：按住达到长按时长即执行长按动作，在此之前松开则执行短按动作。
+//!     对应的影视应用未安装，原来的动作什么也不会打开，不会冲突。
 //!
 //! 注意：因为不独占，触发长按的那个普通键在松开时仍会产生它原本的效果（例如长按返回，松开时仍会返回一次）。
 
@@ -23,7 +26,7 @@ use std::time::{Duration, Instant};
 pub const HELP: &str = "z6x keymap --daemon --config <文件> [--device 名称] [--long 600ms]
 z6x keymap --check --config <文件>     只检查配置
   配置文件每行一条：<触发> = <动作>，# 开头为注释。
-    触发：long:<键名>（长按普通键）、press:<极米快捷键>（短按）
+    触发：press:<极米快捷键>（短按）、long:<极米快捷键或普通键名>（长按，默认按住 600ms）
           极米快捷键：youku（酷喵）、jiguang（云视听极光）、qiyiguo（奇异果）、mango（芒果）、bilibili，或按键码 2118 等
     动作：key: <键名> [<键名>…]（注入按键）、sh: <命令>（用 /system/bin/sh 执行，不等待结束）
   示例：
@@ -86,13 +89,16 @@ pub fn parse_config(text: &str) -> Result<Vec<Rule>> {
         let (kind, key) = trig.trim().split_once(':').ok_or_else(|| bad("触发应为 long: 或 press: 加键名"))?;
         let key = key.trim();
         let (kind, codes, xgimi) = match kind {
-            "long" => {
-                let c = codes_for(key);
-                if c.is_empty() {
-                    return Err(bad("未知键名"));
+            "long" => match xgimi_code(key) {
+                Some(x) => (Kind::Long, vec![], x), // 极米快捷键的长按（从日志识别）
+                None => {
+                    let c = codes_for(key);
+                    if c.is_empty() {
+                        return Err(bad("未知键名"));
+                    }
+                    (Kind::Long, c, 0)
                 }
-                (Kind::Long, c, 0)
-            }
+            },
             "press" => (Kind::Press, vec![], xgimi_code(key).ok_or_else(|| bad("press 只用于极米快捷键：youku、jiguang、qiyiguo、mango、bilibili"))?),
             _ => return Err(bad("触发只能是 long（长按）或 press（极米快捷键短按）")),
         };
@@ -116,14 +122,13 @@ pub fn parse_config(text: &str) -> Result<Vec<Rule>> {
     Ok(rules)
 }
 
-/// 从日志行中取出极米快捷键的按键码（只认按下）。
-pub fn parse_xgimi_log(line: &str) -> Option<u32> {
-    let rest = line.split("do action keycode ").nth(1)?;
-    let (code, tail) = rest.split_once(' ')?;
-    if !tail.contains("keyevent down") {
-        return None;
-    }
-    code.trim().parse().ok()
+/// 解析 WindowManager 的按键日志：(按键码, 是否按下, 重复次数)。
+pub fn parse_key_log(line: &str) -> Option<(u32, bool, u32)> {
+    let rest = line.split("interceptKeyTi keyCode=").nth(1)?;
+    let (code, rest) = rest.split_once(' ')?;
+    let down = rest.strip_prefix("down=")?.starts_with("true");
+    let rep = rest.split("repeatCount=").nth(1)?.split_whitespace().next()?;
+    Some((code.parse().ok()?, down, rep.parse().ok()?))
 }
 
 fn log(msg: &str) {
@@ -161,14 +166,16 @@ fn fire(r: &Rule, injector: &mut Option<Injector>) {
     }
 }
 
-/// 读取日志，识别极米快捷键。logcat 退出时（例如日志服务重启）5 秒后重新启动。
-fn watch_xgimi_keys(rules: std::sync::Arc<Vec<Rule>>) {
+/// 读取 WindowManager 日志，识别极米快捷键的短按与长按。logcat 退出时 5 秒后重新启动。
+fn watch_xgimi_keys(rules: std::sync::Arc<Vec<Rule>>, long_ms: Duration) {
     let mut injector = None;
-    let mut last: Option<(u32, Instant)> = None;
+    let xgimi: Vec<u32> = rules.iter().filter(|r| r.xgimi > 0).map(|r| r.xgimi).collect();
+    // 每个键：按下时刻、长按是否已触发
+    let mut held: std::collections::HashMap<u32, (Instant, bool)> = Default::default();
     loop {
-        // -T 1：只读之后的新日志；只保留 XgimiWindowManager 的 I 级日志
+        // -T 1：只读之后的新日志；只保留 WindowManager 的 D 级日志（含按键过程）
         let child = std::process::Command::new("logcat")
-            .args(["-v", "brief", "-T", "1", "XgimiWindowManager:I", "*:S"])
+            .args(["-v", "brief", "-T", "1", "WindowManager:D", "*:S"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn();
@@ -180,15 +187,38 @@ fn watch_xgimi_keys(rules: std::sync::Arc<Vec<Rule>>) {
         log("已开始读取日志，识别极米快捷键");
         if let Some(out) = child.stdout.take() {
             for line in BufReader::new(out).lines().map_while(|l| l.ok()) {
-                let Some(code) = parse_xgimi_log(&line) else { continue };
-                // 同一按键 300ms 内的重复日志只算一次
-                if last.is_some_and(|(c, t)| c == code && t.elapsed() < Duration::from_millis(300)) {
+                let Some((code, down, rep)) = parse_key_log(&line) else { continue };
+                if !xgimi.contains(&code) {
                     continue;
                 }
-                last = Some((code, Instant::now()));
-                match rules.iter().find(|r| r.kind == Kind::Press && r.xgimi == code) {
-                    Some(r) => fire(r, &mut injector),
-                    None => log(&format!("极米快捷键 {code} 未配置动作")),
+                let find = |k: Kind| rules.iter().find(|r| r.kind == k && r.xgimi == code);
+                match (down, rep) {
+                    (true, 0) => {
+                        held.insert(code, (Instant::now(), false));
+                    }
+                    (true, _) => {
+                        // 按住时的重复：达到长按时长且尚未触发时，执行长按动作
+                        if let Some((t, fired)) = held.get_mut(&code) {
+                            if !*fired && t.elapsed() >= long_ms {
+                                *fired = true;
+                                match find(Kind::Long) {
+                                    Some(r) => fire(r, &mut injector),
+                                    None => log(&format!("极米快捷键 {code} 长按未配置动作")),
+                                }
+                            }
+                        }
+                    }
+                    (false, _) => {
+                        // 松开：长按未触发过即为短按
+                        if let Some((_, fired)) = held.remove(&code) {
+                            if !fired {
+                                match find(Kind::Press) {
+                                    Some(r) => fire(r, &mut injector),
+                                    None => log(&format!("极米快捷键 {code} 短按未配置动作")),
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -223,13 +253,24 @@ pub fn main(raw: &[String]) -> Result<()> {
     let dev_name = a.opt("device").unwrap_or("XGIMI RC").to_string();
     // 执行 sh 动作后不等待：忽略 SIGCHLD，子进程结束后由内核自动回收，不留僵尸进程
     unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
+    // 配置文件被修改（例如在 hub 的「遥控器按键」页面保存）时正常退出，由 z6x run 立即重新启动以读入新配置
+    let cfg_path = path.to_string();
+    let mtime = |p: &str| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let start_mtime = mtime(&cfg_path);
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(2));
+        if mtime(&cfg_path) != start_mtime {
+            log("配置文件已修改，退出以重新加载");
+            std::process::exit(0);
+        }
+    });
     let rules = std::sync::Arc::new(rules);
-    if rules.iter().any(|r| r.kind == Kind::Press) {
+    if rules.iter().any(|r| r.xgimi > 0) {
         let r = rules.clone();
-        std::thread::spawn(move || watch_xgimi_keys(r));
+        std::thread::spawn(move || watch_xgimi_keys(r, long_ms));
     }
     log(&format!("keymap 启动：{} 条规则，设备名包含「{dev_name}」", rules.len()));
-    if !rules.iter().any(|r| r.kind != Kind::Press) {
+    if !rules.iter().any(|r| r.xgimi == 0) {
         loop {
             std::thread::sleep(Duration::from_secs(3600)); // 只有极米快捷键规则：不需要读设备节点
         }
@@ -263,7 +304,7 @@ pub fn main(raw: &[String]) -> Result<()> {
                     if let Some(d) = s.down_at {
                         if !s.long_fired && now >= d + long_ms {
                             s.long_fired = true;
-                            if let Some(r) = rules.iter().find(|r| r.kind == Kind::Long && r.codes.contains(code)) {
+                            if let Some(r) = rules.iter().find(|r| r.kind == Kind::Long && r.xgimi == 0 && r.codes.contains(code)) {
                                 fire(r, &mut injector);
                             }
                         }
@@ -331,9 +372,12 @@ mod tests {
     }
 
     #[test]
-    fn xgimi_log_line() {
-        assert_eq!(parse_xgimi_log("I/XgimiWindowManager( 3309): do action keycode 2118 keyevent down"), Some(2118));
-        assert_eq!(parse_xgimi_log("I/XgimiWindowManager( 3309): do action keycode 2118 keyevent up"), None);
-        assert_eq!(parse_xgimi_log("I/XgimiWindowManager( 3309): something else"), None);
+    fn key_log_line() {
+        let l = "D/WindowManager( 3309): interceptKeyTi keyCode=2118 down=true repeatCount=3 keyguardOn=false canceled=false";
+        assert_eq!(parse_key_log(l), Some((2118, true, 3)));
+        assert_eq!(parse_key_log("D/WindowManager( 3309): interceptKeyTi keyCode=2118 down=false repeatCount=0 keyguardOn=false"), Some((2118, false, 0)));
+        assert_eq!(parse_key_log("D/WindowManager( 3309): something else"), None);
+        let r = parse_config("long:youku = key: home\npress:youku = key: back\n").ok().unwrap();
+        assert_eq!((r[0].kind, r[0].xgimi), (Kind::Long, 2118));
     }
 }

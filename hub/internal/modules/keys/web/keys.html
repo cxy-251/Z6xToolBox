@@ -1,0 +1,48 @@
+<style>
+#grid{width:100%;border-collapse:collapse}#grid th,#grid td{padding:8px 6px;border-bottom:1px solid rgba(127,127,127,.3);text-align:left;vertical-align:top}
+#grid select,#grid input{width:100%;margin-top:4px}
+</style>
+<div class="card"><p>为遥控器上的四个影视快捷键设置功能：<b>短按</b>与<b>长按</b>（按住约 0.6 秒）各一个，共 8 项。保存后约 2 秒生效。</p>
+<table id="grid"><thead><tr><th>按键</th><th>短按</th><th>长按</th></tr></thead><tbody></tbody></table>
+<p class="row"><button id="save">保存</button><span class="msg" id="msg"></span></p>
+<p><small>「任务管理」会在电视浏览器（TV Bro）中打开任务管理页，浏览器需先登录过一次 hub。「自定义命令」以 shell 身份执行，请谨慎填写。<br>配置文件：<code id="file"></code></small></p></div>
+<script>
+const $=id=>document.getElementById(id);
+const el=(t,x)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;return e};
+const KEYS=[['home','主页'],['back','返回'],['mute','静音'],['playpause','播放 / 暂停'],['volup','音量加'],['voldown','音量减']];
+let data;
+function selectFor(slot){
+  const wrap=el('div'), sel=el('select'), extra=el('input');extra.placeholder='命令，例如 am start -n 包名/Activity';
+  const add=(v,t,g)=>{const o=el('option',t);o.value=v;(g||sel).append(o);return o};
+  add('','（不设置）');
+  const ga=el('optgroup');ga.label='打开应用';data.apps.forEach(a=>add('app:'+a.activity,a.name,ga));sel.append(ga);
+  const gt=el('optgroup');gt.label='功能';add('tasks','任务管理',gt);sel.append(gt);
+  const gk=el('optgroup');gk.label='按键';KEYS.forEach(([k,t])=>add('key:'+k,t,gk));sel.append(gk);
+  add('sh:','自定义命令…');
+  let v=slot.action||'';
+  if(v.startsWith('sh:')){sel.value='sh:';extra.value=v.slice(3).trim()}
+  else{ if(v&&![...sel.options].some(o=>o.value===v))add(v,v);sel.value=v }
+  const upd=()=>extra.style.display=sel.value==='sh:'?'':'none';sel.onchange=upd;upd();
+  wrap.append(sel,extra);
+  wrap.value=()=>sel.value==='sh:'?(extra.value.trim()?'sh:'+extra.value.trim():''):sel.value;
+  return wrap;
+}
+async function load(){
+  data=await (await fetch('/api/keys/')).json();$('file').textContent=data.file;
+  const tb=$('grid').querySelector('tbody');tb.replaceChildren();
+  for(const b of data.buttons){
+    const tr=el('tr');tr.append(el('td',b.label));
+    for(const long of [false,true]){
+      const s=data.slots.find(x=>x.button===b.id&&x.long===long)||{button:b.id,long,action:''};
+      const td=el('td'),w=selectFor(s);w.dataset.button=b.id;w.dataset.long=long;td.append(w);tr.append(td);
+    }
+    tb.append(tr);
+  }
+}
+$('save').onclick=async()=>{
+  const slots=[...document.querySelectorAll('#grid td div')].map(w=>({button:w.dataset.button,long:w.dataset.long==='true',action:w.value()}));
+  const r=await fetch('/api/keys/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(slots)});
+  $('msg').textContent=r.ok?'已保存，约 2 秒后生效':'保存失败：'+(await r.json()).error;
+};
+load();
+</script>
