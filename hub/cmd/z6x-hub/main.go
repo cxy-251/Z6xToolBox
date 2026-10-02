@@ -24,6 +24,7 @@ import (
 	"z6x/hub/internal/modules/files"
 	"z6x/hub/internal/modules/lanscan"
 	"z6x/hub/internal/modules/metrics"
+	"z6x/hub/internal/modules/notify"
 	"z6x/hub/internal/modules/paste"
 	"z6x/hub/internal/modules/speed"
 	"z6x/hub/internal/modules/webshell"
@@ -80,6 +81,7 @@ func main() {
 	h.Add(metrics.New())
 	h.Add(speed.New())
 	h.Add(lanscan.New())
+	h.Add(notify.New(nil))
 	h.Add(webshell.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

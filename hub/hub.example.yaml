@@ -45,6 +45,10 @@ modules:
     enable: true
 
   # 局域网设备扫描（SSDP）。
+  # 发送通知到电视的通知界面（不弹出提醒）。
+  notify:
+    enable: true
+
   lanscan:
     enable: true
     timeout_sec: 3
