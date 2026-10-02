@@ -50,6 +50,9 @@ fi
 # 先传到临时文件再改名：运行中的程序文件不能直接覆盖，改名则不受影响
 put z6x-hub "$RDIR/z6x-hub.new"
 rsh "mv $RDIR/z6x-hub.new $RDIR/z6x-hub && chmod 755 $RDIR/z6x-hub && chmod 600 $RDIR/hub.yaml && $RDIR/z6x-hub -c $RDIR/hub.yaml -check"
+if [ "$MODE" = adb ]; then
+  put adb-boot.sh /data/local/tmp/z6x-boot.sh  # 开机自启脚本（由 Termux:Boot 经本机 ADB 调用）
+fi
 if [ "$MODE" = termux ]; then
   put termux/hub.sh "$RDIR/hub.sh"
   rsh "chmod 755 $RDIR/hub.sh; grep -q 'alias hub=' ~/.bashrc 2>/dev/null || echo 'alias hub=~/$RDIR/hub.sh' >> ~/.bashrc"

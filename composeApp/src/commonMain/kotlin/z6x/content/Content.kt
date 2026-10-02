@@ -52,6 +52,7 @@ import z6x.content.proposals.OomWatchdog
 import z6x.content.proposals.PacketCapture
 import z6x.content.proposals.StraceDebug
 import z6x.content.records.AppInstallOrder
+import z6x.content.records.ProjectorAutostart
 import z6x.content.records.Busybox
 import z6x.content.records.GoServer
 import z6x.content.records.NativeExec
@@ -97,7 +98,7 @@ object Content {
                         InputMethodPivot, AppStorePivot, ClashProxy, ScreenCast, RemoteKeys,
                     ),
                 ),
-                Category("开发环境", "⚙️", "在投影仪上运行自编译程序", listOf(NativeExec, Busybox, GoServer, ProcMetrics)),
+                Category("开发环境", "⚙️", "在投影仪上运行自编译程序与开机自启", listOf(NativeExec, Busybox, GoServer, ProcMetrics, ProjectorAutostart)),
                 Category("应急与安全", "🛟", "故障恢复与局域网暴露面", listOf(Emergency, Security)),
             ),
         ),
