@@ -1,0 +1,48 @@
+<div class="tabs" id="tabs">
+<button data-t="games">游戏</button><button data-t="manga">漫画</button><button data-t="videos">短视频</button><button onclick="location.href='/ui/library/matrix/'">📺 多联放映</button><button onclick="location.href='/ui/library/audio/'">🎧 音声</button><button onclick="location.href='/ui/library/novels/'">📚 小说</button><button data-t="libs">存储与转移</button></div>
+<div class="row" style="margin-bottom:10px"><input id="q" placeholder="按名称筛选" style="max-width:320px"><span class="msg" id="msg"></span></div>
+<div id="out"></div>
+<script>
+const $=id=>document.getElementById(id), enc=encodeURIComponent;
+const size=n=>n>1073741824?(n/1073741824).toFixed(1)+' GB':(n/1048576).toFixed(0)+' MB';
+let tab=localStorage.getItem('z6x-lib-tab')||'games', data=[];
+function card(href,img,name,cls,blank){const a=document.createElement('a');a.href=href;if(blank)a.target='_blank';if(cls)a.className=cls;
+  const i=document.createElement('img');i.loading='lazy';i.src=img;i.onerror=()=>i.style.visibility='hidden';const s=document.createElement('span');s.textContent=name;s.title=name;a.append(i,s);return a}
+function render(){const q=$('q').value.trim().toLowerCase(),out=$('out');out.innerHTML='';
+  const list=data.filter(x=>!q||(x.name||x.Name||'').toLowerCase().includes(q));
+  if(tab==='libs')return renderLibs();
+  $('msg').textContent='共 '+list.length+' 项';
+  const box=document.createElement('div');box.className='cards';
+  for(const x of list){
+    if(tab==='games')box.append(card('/game/'+enc(x.id)+'/'+x.entry.split('/').map(enc).join('/'),'/icon/'+enc(x.id),x.name,'icon',true));
+    else if(tab==='manga')box.append(card('/ui/library/read?id='+x.id,'/api/library/manga/thumb?id='+x.id,x.name));
+    else box.append(card('/ui/library/clips?platform='+enc(x.platform)+'&creator='+enc(x.name),'data:,',x.platform+' · '+x.name+'（'+x.count+'）'));
+  }
+  if(!list.length)out.innerHTML='<p class="muted">没有内容。资源库为空时，请在「存储与转移」中建立资源库并放入内容。</p>';else out.append(box);
+}
+async function renderLibs(){const out=$('out');$('msg').textContent='';
+  const libs=await (await fetch('/api/library/libs')).json(), vols=await (await fetch('/api/library/volumes')).json();
+  let h='<div class="card"><b>当前资源库</b><ul class="list" style="margin-top:8px">';
+  if(!libs.length)h+='<li>尚未建立资源库</li>';
+  for(const l of libs)h+='<li><b></b> <small>'+l.location+' · 剩余 '+size(l.free_bytes)+' / '+size(l.total_bytes)+'</small><br><small><code></code> · id <code></code></small></li>';
+  h+='</ul></div><div class="card"><b>可建立资源库的位置</b><ul class="list" style="margin-top:8px" id="vols"></ul></div>'+
+    '<div class="card"><b>如何转移</b><p><small>① 大批量（手机）：用数据线连接 Deck，执行 <code>adb push</code> 把文件夹放进 omni_library 的对应目录；或在 Deck 的文件管理器中打开 <code>webdav://设备IP:8091</code>（需启用文件共享模块），直接拷贝进去。<br>'+
+    '② 大批量（投影仪）：把 U 盘插到 Deck，在 omni-deck「存储与游戏库」中把它添加为资源库，用 omni-deck 把游戏或媒体移过去；再把 U 盘插到投影仪，几秒内即出现在这里。<br>'+
+    '③ 少量：在 Deck 上用 <code>./hub/library-import.sh</code> 通过网络导入一个游戏文件夹（受 Wi-Fi 速度限制）。存档随游戏目录一起转移。<br>④ 网页游戏（RPG Maker、SLG）、CBZ 漫画、MP4 短视频可在浏览器中直接使用；复古游戏和 Ren\'Py 桌面版暂不支持。</small></p></div>';
+  out.innerHTML=h;
+  const items=out.querySelectorAll('.list')[0].querySelectorAll('li');
+  libs.forEach((l,i)=>{const b=items[i].querySelector('b'),c=items[i].querySelectorAll('code');b.textContent=l.label;c[0].textContent=l.path;c[1].textContent=l.id});
+  const ul=$('vols');for(const v of vols){const li=document.createElement('li');li.textContent=v.label+'（剩余 '+size(v.free_bytes)+'）';
+    if(v.has_library){const s=document.createElement('small');s.textContent='  已有资源库';li.append(s)}
+    else{const b=document.createElement('button');b.textContent='在此建立资源库';b.style.marginLeft='8px';
+      b.onclick=async()=>{const r=await fetch('/api/library/init?target='+enc(v.target),{method:'POST'});alert(r.ok?'已建立':(await r.json()).error);renderLibs()};li.append(b)}
+    ul.append(li)}
+}
+async function load(t){tab=t;localStorage.setItem('z6x-lib-tab',t);
+  document.querySelectorAll('#tabs button').forEach(b=>b.className=b.dataset.t===t?'on':'');
+  $('msg').textContent='读取中…';
+  const url={games:'/api/library/games',manga:'/api/library/manga',videos:'/api/library/videos'}[t];
+  data=url?await (await fetch(url)).json():[];render()}
+document.querySelectorAll('#tabs button[data-t]').forEach(b=>b.onclick=()=>load(b.dataset.t));
+$('q').oninput=render;load(tab);
+</script>

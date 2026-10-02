@@ -1,0 +1,116 @@
+<title>小说</title><style>
+#shelf{padding:8px 12px 40px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.bk{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;cursor:pointer}
+.bk .t{font-weight:600;word-break:break-all}.bk .m{font-size:12px;color:var(--muted);margin-top:4px}
+#reader{display:none;min-height:100vh}
+#reader header{justify-content:space-between}
+#rtitle{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#content{max-width:760px;margin:0 auto;padding:16px 18px 80px;line-height:var(--lh,1.9);font-size:var(--fs,18px)}
+#content p{margin:0 0 .9em;text-indent:2em}#content h2{font-size:1.2em;text-indent:0;margin:.5em 0 1em}
+#content.doc{font-size:calc(var(--fs,18px) - 2px);line-height:1.7}#content.doc p{text-indent:0}
+#content h3,#content h4{margin:1.2em 0 .6em}#content pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;font:13px/1.5 ui-monospace,monospace;white-space:pre}
+#content blockquote{margin:0 0 .9em;padding-left:12px;border-left:3px solid var(--line);color:var(--muted)}#content ul{margin:0 0 .9em;padding-left:1.4em}
+.bk .s{font-size:12px;color:var(--muted);word-break:break-all}
+.nav{display:flex;justify-content:space-between;gap:8px;max-width:760px;margin:0 auto;padding:0 18px 40px}
+body.sepia{--bg:#f4ecd8;--card:#ebe1c8;--fg:#3b3226;--line:#d6c9a8;--muted:#7a6a50}
+body.light{--bg:#fafafa;--card:#eee;--fg:#222;--line:#ddd;--muted:#666}
+#toc{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:4}
+#toc .box{background:var(--card);width:min(420px,90vw);height:100%;overflow:auto;padding:12px}
+#toc .c{padding:8px;border-bottom:1px solid var(--line);cursor:pointer}#toc .c.on{color:var(--accent)}
+</style></head><body>
+<div id="shelfView">
+<header><h1>📚 小说</h1><button data-s="standard" class="on">常规</button><button data-s="nsfw">NSFW</button><button data-s="docs">技术文档</button>
+<input type="search" id="q" placeholder="按书名筛选"><span class="muted" id="count"></span><span style="flex:1"></span><a href="/ui/library/">返回资源库</a></header>
+<div class="chips" id="cats"></div><div id="shelf">读取中…</div></div>
+<div id="reader">
+<header><button id="close">← 书架</button><span id="rtitle"></span><button id="tocBtn">目录</button>
+<button id="fsm">A-</button><button id="fsp">A+</button><button id="theme">🌓</button></header>
+<div id="content"></div><div class="nav"><button id="prevC">上一章</button><span class="muted" id="pos"></span><button id="nextC">下一章</button></div></div>
+<div id="toc"><div class="box" id="tocBox"></div></div>
+<script>
+const $=id=>document.getElementById(id), enc=encodeURIComponent;
+const el=(t,x,c)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e};
+const size=n=>n>1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(0)+' KB';
+let source='standard', books=[], docNav={}, cat='', book=null, toc=[], chap=0, saveTimer=0;
+let fs=+localStorage.getItem('z6x-nv-fs')||18, theme=localStorage.getItem('z6x-nv-theme')||'dark';
+const applyStyle=()=>{document.documentElement.style.setProperty('--fs',fs+'px');document.body.className=theme==='dark'?'':theme};
+
+async function loadShelf(){
+  $('shelf').textContent='读取中…';
+  books=await (await fetch('/api/library/novels?source='+source)).json();
+  const counts={};books.forEach(b=>counts[b.category]=(counts[b.category]||0)+1);
+  const box=$('cats');box.replaceChildren();cat='';
+  const chip=(n,l)=>{const b=el('button',l);b.onclick=()=>{cat=n;[...box.children].forEach(x=>x.className='');b.className='on';render()};return b};
+  const c0=chip('','全部 ('+books.length+')');c0.className='on';box.append(c0);
+  Object.keys(counts).sort().forEach(n=>box.append(chip(n,n+' ('+counts[n]+')')));
+  render();
+}
+function render(){
+  const q=$('q').value.trim().toLowerCase(), box=$('shelf');box.replaceChildren();
+  const list=books.filter(b=>(!cat||b.category===cat)&&(!q||b.title.toLowerCase().includes(q)||(b.sub||'').toLowerCase().includes(q)));
+  $('count').textContent=list.length+' 本';
+  for(const b of list.slice(0,600)){const d=el('div',null,'bk');d.append(el('div',b.title,'t'));if(b.sub)d.append(el('div',b.sub,'s'));
+    d.append(el('div',b.category+' · '+b.ext.toUpperCase()+' · '+size(b.size),'m'));d.onclick=()=>openBook(b);box.append(d)}
+  if(list.length>600)box.append(el('div','只显示前 600 本，请用搜索缩小范围','muted'));
+  if(!books.length)box.textContent=source==='docs'?'没有文档。Markdown、RST 文件放在资源库的 media_library/docs 下。':'没有小说。EPUB、TXT 等文件放在资源库的 media_library/novels/standard 或 nsfw 下，第一级子目录为分类。';
+}
+async function openBook(b){
+  book=b;$('shelfView').style.display='none';$('reader').style.display='block';$('content').textContent='打开中…';
+  let r;try{r=await (await fetch('/api/library/novels/toc?id='+enc(b.id))).json()}catch(e){$('content').textContent='无法打开';return}
+  if(r.error){$('content').textContent=r.error;return}
+  toc=r.chapters;docNav={prev:r.prev_doc,next:r.next_doc};book.title=book.title||r.title;
+  $('content').className=(r.ext==='md'||r.ext==='markdown'||r.ext==='rst')?'doc':'';
+  $('rtitle').textContent=r.title+(r.author?' · '+r.author:'');
+  let p=null;try{p=await (await fetch('/api/library/novels/progress?key='+enc(b.id))).json()}catch(e){}
+  await showChapter(p&&p.chapter<toc.length?p.chapter:0,p?p.ratio:0);
+}
+async function showChapter(n,ratio){
+  if(!toc.length){$('content').textContent='这本书没有可显示的正文';return}
+  chap=Math.max(0,Math.min(n,toc.length-1));
+  const c=await (await fetch('/api/library/novels/chapter?id='+enc(book.id)+'&n='+chap)).json();
+  const box=$('content');box.replaceChildren();
+  if(c.blocks){   // MD、RST：按块显示
+    let ul=null;
+    for(const b of c.blocks){
+      if(b.k!=='li')ul=null;
+      if(b.k==='h')box.append(el('h'+Math.min(4,Math.max(2,b.l+1)),b.t));
+      else if(b.k==='code')box.append(el('pre',b.t));
+      else if(b.k==='quote')box.append(el('blockquote',b.t));
+      else if(b.k==='hr')box.append(el('hr'));
+      else if(b.k==='li'){if(!ul){ul=el('ul');box.append(ul)}ul.append(el('li',b.t))}
+      else box.append(el('p',b.t));
+    }
+  }else{
+    box.append(el('h2',c.title));
+    (c.paras||[]).forEach((t,i)=>{if(i===0&&t===c.title)return;box.append(el('p',t))});
+  }
+  $('pos').textContent=(chap+1)+' / '+toc.length;
+  // 第一章之前、最后一章之后：技术文档可接着读同一目录的上一篇、下一篇
+  $('prevC').textContent=chap===0&&docNav.prev?'上一篇':'上一章';$('nextC').textContent=chap===toc.length-1&&docNav.next?'下一篇':'下一章';
+  $('prevC').disabled=chap===0&&!docNav.prev;$('nextC').disabled=chap===toc.length-1&&!docNav.next;
+  requestAnimationFrame(()=>window.scrollTo(0,ratio?ratio*(document.documentElement.scrollHeight-innerHeight):0));
+  save();
+}
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{if(!book)return;const h=document.documentElement.scrollHeight-innerHeight;
+    fetch('/api/library/novels/progress',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({key:book.id,value:{chapter:chap,ratio:h>0?scrollY/h:0,title:book.title,at:Math.floor(Date.now()/1000)}})}).catch(()=>{})},800);
+}
+window.addEventListener('scroll',()=>{if(book)save()},{passive:true});
+$('prevC').onclick=()=>chap===0&&docNav.prev?openBook({id:docNav.prev,title:''}):showChapter(chap-1,0);
+$('nextC').onclick=()=>chap===toc.length-1&&docNav.next?openBook({id:docNav.next,title:''}):showChapter(chap+1,0);
+$('close').onclick=()=>{save();book=null;$('reader').style.display='none';$('shelfView').style.display='block'};
+$('tocBtn').onclick=()=>{const b=$('tocBox');b.replaceChildren();toc.forEach((t,i)=>{const r=el('div',t,'c');if(i===chap)r.classList.add('on');
+  r.onclick=()=>{$('toc').style.display='none';showChapter(i,0)};b.append(r)});$('toc').style.display='block';
+  const on=b.querySelector('.on');if(on)on.scrollIntoView({block:'center'})};
+$('toc').onclick=e=>{if(e.target.id==='toc')$('toc').style.display='none'};
+$('fsm').onclick=()=>{fs=Math.max(12,fs-1);localStorage.setItem('z6x-nv-fs',fs);applyStyle()};
+$('fsp').onclick=()=>{fs=Math.min(32,fs+1);localStorage.setItem('z6x-nv-fs',fs);applyStyle()};
+$('theme').onclick=()=>{theme={dark:'sepia',sepia:'light',light:'dark'}[theme];localStorage.setItem('z6x-nv-theme',theme);applyStyle()};
+document.addEventListener('keydown',e=>{if(!book||e.target.tagName==='INPUT')return;if(e.key==='ArrowRight')$('nextC').click();else if(e.key==='ArrowLeft')$('prevC').click()});
+$('q').oninput=render;
+document.querySelectorAll('#shelfView header button[data-s]').forEach(b=>b.onclick=()=>{source=b.dataset.s;
+  document.querySelectorAll('#shelfView header button[data-s]').forEach(x=>x.className=x===b?'on':'');loadShelf()});
+applyStyle();loadShelf();
+</script></body></html>

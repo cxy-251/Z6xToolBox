@@ -1,0 +1,20 @@
+<style>main{max-width:960px;padding:0}#pages img{display:block;width:100%;min-height:200px;background:#0001}
+#bar{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:8px 12px;z-index:2}</style>
+<div id="bar" class="row"><a href="/ui/library/">返回资源库</a><b id="title"></b><span class="muted" id="pos"></span></div>
+<div id="pages"></div>
+<script>
+const id=new URLSearchParams(location.search).get('id');
+(async()=>{const r=await fetch('/api/library/manga/pages?id='+id);if(!r.ok){document.getElementById('title').textContent='无法打开';return}
+  const info=await r.json();document.title=info.name;document.getElementById('title').textContent=info.name;
+  const box=document.getElementById('pages');
+  // 图片进入视野前不加载，长漫画也不会一次占满内存和网络
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.src=e.target.dataset.src;io.unobserve(e.target)}}),{rootMargin:'1500px'});
+  for(let i=0;i<info.count;i++){const img=document.createElement('img');img.dataset.src='/api/library/manga/page?id='+id+'&n='+i;img.alt='第 '+(i+1)+' 页';box.append(img);io.observe(img)}
+  const pos=document.getElementById('pos');
+  const posIO=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)pos.textContent=e.target.alt+' / 共 '+info.count+' 页'}),{threshold:0.5});
+  box.querySelectorAll('img').forEach(i=>posIO.observe(i));
+  // 遥控器上下键翻屏
+  document.addEventListener('keydown',e=>{if(e.key==='ArrowDown'||e.key==='ArrowRight'){scrollBy(0,innerHeight*0.9);e.preventDefault()}
+    if(e.key==='ArrowUp'||e.key==='ArrowLeft'){scrollBy(0,-innerHeight*0.9);e.preventDefault()}});
+})();
+</script>
