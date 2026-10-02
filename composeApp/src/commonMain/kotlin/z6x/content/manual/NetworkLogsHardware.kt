@@ -179,7 +179,7 @@ val LogsCrash = module("logs-crash", "日志与崩溃") {
             """)
             note = """
                 `-d` 表示输出后即退出（不加则持续等待新日志）；grep 只保留崩溃的标题、进程和根本原因。无输出说明最近没有应用崩溃。
-                **2026-10-02 查到两次真实崩溃**，见「停用清单」中的「xrmservice 在开关屏时崩溃」：两次都是 xrmservice 接收开关屏广播时，调用的声音接口 IGimiSound 为 null。
+                **2026-10-01 查到两次真实崩溃**：都是 xrmservice 接收开关屏广播时，调用的声音接口 IGimiSound 为 null。后续实验见「停用清单」中的「xrmservice 在开关屏时崩溃」。
             """
         }
         read("实时查看错误级别及以上的日志", "adb logcat -v time '*:E' | grep -iE 'AndroidRuntime|FATAL|Exception'", Host.Deck) {

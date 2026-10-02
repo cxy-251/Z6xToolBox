@@ -104,7 +104,7 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
     }
     story("冗余内容") {
         group(listOf(
-            "com.xgimi.doubanfm" to "豆瓣 FM。**不只是电台**：包内还有音效模式（SoundModeService）、Wi-Fi 音箱、蓝牙模式、氛围灯等组件，见下方「xrmservice 在开关屏时崩溃」",
+            "com.xgimi.doubanfm" to "豆瓣 FM。**不只是电台**：包内还有音效模式（SoundModeService）、Wi-Fi 音箱、蓝牙模式、氛围灯等组件。曾怀疑它与 xrmservice 崩溃有关，实验已排除，见下方「xrmservice 在开关屏时崩溃」",
             "com.xgimi.agilewall" to "动态壁纸 / 灵动墙（推测）",
             "com.xgimi.atmosphere" to "氛围模式（推测）",
             "com.xgimi.instruction30" to "电子说明书",
@@ -187,7 +187,7 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
         text("今后如需使用极米手机 App 遥控、蓝牙音箱模式或智能家居联动，需要恢复本组中对应的包。")
     }
 
-    story("xrmservice 在开关屏时崩溃（2026-10-02 发现，原因待验证）") {
+    story("xrmservice 在开关屏时崩溃（2026-10-02 发现）") {
         text("""
             重新检查崩溃日志时发现：资源管理组件 com.xgimi.xrmservice 在「关机」（屏幕关闭）和开机（屏幕开启）时各崩溃了一次，原因都是它调用的声音接口 **IGimiSound 为 null**。系统随后自动重启了该进程，用户层面没有察觉到异常。
         """)
@@ -208,9 +208,24 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             note = "dumpsys 中的 Action 是组件对外登记的意图名称。该包除电台外，还提供音效模式服务、Wi-Fi 音箱、蓝牙模式和氛围灯。"
         }
         text("""
-            **推测（未验证）：** IGimiSound 可能由豆瓣 FM 包中的 SoundModeService 提供，停用该包后，xrmservice 获取不到这个接口，于是在开关屏时崩溃。
-            验证方法：用 `pm enable com.xgimi.doubanfm` 临时恢复，执行一次关屏、开屏，再查崩溃日志是否还有新的记录；不论结果如何，都可以用 `pm disable-user --user 0 com.xgimi.doubanfm` 恢复停用。此实验会修改系统状态，尚未进行。
+            **最初的推测：** IGimiSound 由豆瓣 FM 包中的 SoundModeService 提供，停用该包导致 xrmservice 取不到接口。
+            **实验（2026-10-02，经同意后进行）：** 临时恢复豆瓣 FM，在电视上执行一次「关机」和开机，再查崩溃日志，最后停用回去。
         """)
+        change("实验步骤（已完成并恢复）", """
+            pm enable com.xgimi.doubanfm
+            # 在电视上选「关机」，等待约 30 秒后按开机键
+            logcat -b crash -d | grep -c "FATAL EXCEPTION"
+            pm disable-user --user 0 com.xgimi.doubanfm
+        """, Host.Adb) {
+            note = "恢复前崩溃记录为 2 次；恢复豆瓣 FM 后执行关机、开机，崩溃记录变为 4 次，新增的两次（09:37:48 关机、09:39:27 开机）原因与之前完全相同。实验结束后已重新停用，停用总数仍为 29。"
+        }
+        facts(
+            "结论" to "**推测不成立**：恢复豆瓣 FM 后，xrmservice 在开关屏时照样崩溃",
+            "排除缓存因素" to "开机时崩溃的进程（PID 6987）是在恢复豆瓣 FM 之后才启动的，并非沿用旧进程",
+            "接口提供者" to "`service list` 中没有与 IGimiSound 对应的系统服务；要确定由谁提供，需要反编译 xrmservice，目前未进行",
+            "影响" to "崩溃后系统会立即重启 xrmservice，使用中未察觉异常；该组件在开关屏时应完成的工作可能没有完成",
+            "尚未排除" to "其他被停用的组件（如音箱模式 soundermodeservice）或极米固件本身的缺陷。若要彻底排除精简的影响，需要运行恢复脚本还原全部组件后再测试一次",
+        )
     }
 
     verify {
