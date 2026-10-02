@@ -4,13 +4,12 @@ import z6x.framework.Host
 import z6x.framework.module
 
 /*
- * z6x-tools（Rust）的规格。2026-10-02 决定暂缓：Deck 上无法完成 Rust 编译。
- * 规格保留在此，日后若恢复实现，以本页为准。
+ * z6x-tools（Rust）的规格与实现状态。代码位于仓库的 tools/ 目录。
  */
-val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集，暂缓）") {
+val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集）") {
     keywords = "Rust · BusyBox 式 · 子命令 · musl 静态 · 验收"
     overview = """
-        **状态：暂缓。** Deck 上无法完成 Rust 编译，因此暂不实施；其中的按键注入、系统指标等需求，优先在 z6x-hub（Go）中实现。
+        **状态（2026-10-02）：第一期 7 个子命令与第二期的 iobench、run 已实现；pack 不实现（原因见下文）。** 曾因 Deck 空间不足暂缓，后由用户清理空间后恢复；编译参数专门为 Deck 调整过。
         z6x-tools 设计为 Rust 编写的命令集，形式与 BusyBox 相同：一个静态二进制 `z6x`，以子命令区分功能（`z6x sys`、`z6x ports` 等），执行完毕即退出。
         只有极少数子命令带 `--daemon` 常驻。它负责底层操作：读取 /proc、写入输入设备、计算哈希。网络服务归 z6x-hub（Go）负责。
     """
@@ -57,6 +56,38 @@ val ToolsSpec = module("spec-tools", "规格：z6x-tools（Rust 命令集，暂�
             • `z6x pack`（「快速压缩归档」「LZ4 解压」）：用 zstd 打包和解包目录（tar + zstd），用于备份存档和日志。
             • `z6x run`（「进程守护」「进程看门狗」）：极简的进程守护：启动一个命令，崩溃后按退避间隔重启，并记录退出原因。用于守护 hub。
         """)
+    }
+
+    why("在 Deck 上编译（已实测）") {
+        facts(
+            "命令" to "`./tools/build.sh test`（单元测试）、`release`（日常）、`dist`（开启链接时优化，CI 使用）、`deploy <设备名>`（编译并推送）",
+            "为 Deck 做的设置" to "以最低优先级编译（nice 19、ionice idle），编译时 Deck 仍可流畅使用；并行数限制为 4（4 核 8 线程留一半）；开发编译不生成调试信息、不做增量编译",
+            "依赖" to "只依赖 libc。命令行解析、JSON 输出、xxHash64 均为自行实现，无需下载或编译其他依赖",
+            "结果" to "首次 release 编译 8 秒、之后增量约 2 秒；release 640KB、dist 532KB，均为静态链接的 aarch64 程序（规格要求小于 2MB）；整个 target 目录 29MB；12 个单元测试全部通过",
+            "musl 与 glibc 的差别" to "ioctl 的请求号参数在 glibc 中为 unsigned long、在 musl 中为 int，在 Deck 上测试通过而交叉编译失败；调用处改为 `as _` 适配两者",
+        )
+    }
+
+    verify("实测结果（2026-10-02，投影仪）") {
+        facts(
+            "sys" to "✓ 可用内存 1.6GB，与 /proc/meminfo 一致；--json 输出可正常解析",
+            "ports" to "✓ 5555 为 shell、7890 为 Clash、8090/8091 为 hub。系统 uid 1000 由约 50 个系统包共用，最初全部列出导致无法阅读，改为系统 uid 只显示固定名称（system、mdnsr 等）。2222 未出现，因当时 SimpleSSHD 未运行",
+            "ping" to "✓ 对路由器 5 次：平均 22.8ms，系统 ping 为 26.4ms，处于同一量级",
+            "hash" to "✓ 三个 300KB 文件中两个完全相同、一个仅中间 1 字节不同（首尾采样相同），只报告真正重复的两个；不删除任何文件",
+            "watch" to "✓ 每个写入的文件只报告一次；开始监听后新建的子目录自动加入；移入的文件报告为 moved_to",
+            "run" to "✓ 记录退出码，重启间隔 1、2、4 秒（最初为 2 秒起，已修正），达到 --max-restarts 后停止",
+            "key、keymap、iobench" to "**待测**：前两项会在电视上产生按键，iobench 会大量读写存储；当时用户正在观看视频，留待用户同意后再测",
+            "测试中的问题" to "结束后台 watch 时用了 `pkill -f \"z6x watch\"`，模式同时匹配到执行测试的 shell，把它也结束了（退出码 143）。这是第三次因 pkill -f 误杀自身，改为一律按 PID 结束（见「方案调整记录」）",
+        )
+    }
+
+    consequences("与规格的差异") {
+        facts(
+            "hash 的哈希算法" to "规格写 xxh3，实现用同系列的 xxHash64：可以自行实现、不引入依赖，碰撞概率同样可忽略（已用官方已知值校验）",
+            "ping" to "只接受 IP 地址：静态程序在安卓上无法解析域名（安卓没有 /etc/resolv.conf，域名解析走 netd）",
+            "key 的方式" to "默认用 /dev/uinput 创建虚拟键盘（安卓按 Generic.kl 解释按键）；--via event 直接写遥控器节点（按遥控器自己的按键表解释，主页等键可能无效）。哪种被系统接受待实测",
+            "pack" to "不实现：zstd 的 Rust 库需要 C 编译器交叉编译，而 Deck 上只有 Rust 自带的链接器；需求已由 hub 文件管理的「打包下载」（zip，支持 Zip64）覆盖",
+        )
     }
 
     verify("验收") {
