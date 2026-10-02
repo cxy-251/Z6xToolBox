@@ -19,6 +19,7 @@ import z6x.content.phone.PhoneFacts
 import z6x.content.phone.PhoneHub
 import z6x.content.phone.PhoneParams
 import z6x.content.phone.PhoneTermux
+import z6x.content.phone.PhoneTransfer
 import z6x.content.manual.BackgroundCmds
 import z6x.content.manual.DumpsysSettings
 import z6x.content.manual.HardwareCmds
@@ -121,7 +122,7 @@ object Content {
             "Redmi Note 12 Turbo：按开发设备改造，并作为 hub 的资源库。设备信息、环境配置、精简与实测记录。",
             listOf(
                 Category("设备信息", "📋", "型号、系统、安全状态与常用查询命令", listOf(PhoneFacts, PhoneParams)),
-                Category("环境配置", "⚙️", "无线调试、Termux 与 SSH、hub 的运行方式", listOf(PhoneAdb, PhoneTermux, PhoneHub)),
+                Category("环境配置", "⚙️", "无线调试、Termux 与 SSH、hub 的运行方式、大量文件传输", listOf(PhoneAdb, PhoneTermux, PhoneHub, PhoneTransfer)),
                 Category("系统精简", "🧹", "两个空间分别移除预装，替换文件管理、相册与浏览器", listOf(PhoneDebloat)),
                 Category("游戏移植原理", "🎮", "以本机安装的游戏为样本，分析电脑游戏如何做成手机游戏", listOf(GamePorts)),
             ),

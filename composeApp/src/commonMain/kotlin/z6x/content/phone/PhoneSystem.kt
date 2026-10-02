@@ -93,6 +93,16 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
         change("在 Deck 上开关", "./hub/ctl.sh phone start | stop | status | trust", Host.Deck)
     }
 
+    why("Termux 会被冻结或结束：两次实测") {
+        facts(
+            "被冻结（17:20 左右）" to "Termux 退到后台一段时间后，整个进程组被系统冻结（`/sys/fs/cgroup/uid_10639/pid_<pid>/cgroup.freeze` 为 1）：进程仍在、端口仍可建立连接，但 sshd 和 hub 都不回应，网页一直转圈。用 ADB 已加入的省电白名单（deviceidle）和后台运行许可（appops）都无效，这是 HyperOS 自己的冻结机制。把 Termux 调回前台即解除",
+            "解决" to "在手机上把 Termux 的「省电策略」改为「无限制」，并打开「自启动」（设置 → 应用设置 → 应用管理 → Termux）。改后在后台观察 10 分钟（17:48～17:57），未再冻结",
+            "被结束（17:32）" to "日志：`Force stopping com.termux ... from process:com.miui.securitycenter`，8 秒后 `Powerkeeper ... NoRestrictAppsList add: com.termux`。即修改省电策略的那一刻，手机管家会先强制停止该应用，不是后台清理所致，此后不会反复发生。需重新打开一次 Termux",
+            "打开 Termux 自动启动" to "`~/.bashrc` 中检查：sshd 或 hub 未运行则启动。`hub status` 在未运行时返回退出码 1，供此判断（最初返回 0，导致自动启动不生效）",
+            "手机重启后" to "需要打开一次 Termux。若要开机自动启动，需另装 Termux:Boot 插件（尚未安装）",
+        )
+    }
+
     verify("实测结果（2026-10-02）") {
         facts(
             "运行身份" to "uid 10639（Termux），内存 13MB",

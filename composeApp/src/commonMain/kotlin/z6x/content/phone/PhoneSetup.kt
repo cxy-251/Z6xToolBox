@@ -87,3 +87,38 @@ val PhoneTermux = module("phone-termux", "Termux：升级、国内镜像与 SSH"
     }
     related("phone-adb", "phone-hub")
 }
+
+val PhoneTransfer = module("phone-transfer", "向手机传输大量文件") {
+    keywords = "MTP · adb push · .nomedia · 媒体库扫描 · USB 2.0"
+    overview = """
+        用户曾从电脑向手机传输数万首音乐，一次传输大概率卡死，只能分批进行；在手机上直接解压 50GB 以上的压缩包也失败了。本节说明原因与更可靠的做法。
+    """
+    partial("2026-10-02")
+
+    why("卡死的原因（分析，未专门测试）") {
+        facts(
+            "MTP 协议" to "电脑经数据线访问手机存储默认使用 MTP：一次只传一个文件，每个文件都有多次往返确认，文件数以万计时开销巨大，电脑端（尤其是 Windows）与手机端都容易卡住或断开。分批传输能成功也符合这一特点",
+            "媒体库扫描" to "每写入一个音频或视频，系统都要读取标签、封面并写入媒体数据库。实测媒体库中收录了 24671 条音频，与该目录中的 mp3 数量基本一致；连续写入数万个文件时，后台扫描持续占用处理器和存储",
+            "手机上解压超大压缩包" to "超过 4GB 或 65535 个文件的压缩包需要 Zip64 格式，手机上的解压工具不一定支持；解压还需要再占用同样大小的空间",
+        )
+    }
+
+    steps("推荐做法") {
+        change("先放 .nomedia，阻止媒体库扫描该目录", "adb -d shell touch /storage/emulated/0/omni_library/.nomedia", Host.Deck) {
+            note = "`-d` 表示「经数据线连接的设备」，无需输入设备序列号。hub 直接读取文件，不受 .nomedia 影响；附带效果是这些视频、音频不出现在相册和音乐应用中。"
+        }
+        change("用 adb push 传输整个目录", "adb -d push <Deck 上的目录> /storage/emulated/0/omni_library/media_library/<分区>/", Host.Deck) {
+            note = "`adb push` 使用 ADB 自己的传输协议，可连续发送整个目录，不存在 MTP 的逐个确认问题。需先在开发者选项中打开「USB 调试」（与无线调试是两个开关）。这款手机按公开规格为 USB 2.0（未实测），实际约 30～40MB/s，300GB 约需 2.5～3 小时；同期 Wi-Fi 只有约 1MB/s。"
+        }
+        change("在手机上解压大压缩包", "pkg install unzip && unzip <文件>.zip -d <目标目录>", Host.Termux) {
+            note = "Termux 的 unzip 支持 Zip64。"
+        }
+    }
+
+    consequences("不能传到第二空间") {
+        text("""
+            从 ADB 访问第二空间的存储 `/storage/emulated/10` 被拒绝（Permission denied，2026-10-02 实测）；hub 运行在主空间的 Termux 中，也读不到第二空间的文件。媒体资源因此放在主空间。切换空间不改变手机的 IP（Wi-Fi 为整机共用），但会使无线调试关闭，重新开启后端口改变。
+        """)
+    }
+    related("phone-hub", "phone-adb")
+}
