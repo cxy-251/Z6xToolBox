@@ -69,3 +69,21 @@ func TestFingerprintDependsOnToken(t *testing.T) {
 		t.Error("不同 token 应得到不同指纹，防止反推硬件地址")
 	}
 }
+
+func TestLoginCodeSingleUse(t *testing.T) {
+	var l loginCodes
+	c := l.issue()
+	if !l.redeem(c) {
+		t.Fatal("新登录码应当有效")
+	}
+	if l.redeem(c) {
+		t.Fatal("登录码只能使用一次")
+	}
+	l.codes[c] = time.Now().Add(-time.Second)
+	if l.redeem(c) {
+		t.Fatal("过期的登录码应当无效")
+	}
+	if l.redeem("") {
+		t.Fatal("空登录码应当无效")
+	}
+}

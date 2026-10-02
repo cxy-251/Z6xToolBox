@@ -1,4 +1,4 @@
-# 设备名  ADB 地址
-# 手机的无线调试端口每次开启都会变化，只写 IP：deploy.sh 会从 `adb devices` 中找到该 IP 当前已连接的端口。
+# 设备名  地址  运行方式（adb 或 termux，默认 adb，说明见 ../lib.sh）
+# adb 方式下手机的无线调试端口每次开启都会变化，只写 IP：脚本会从 `adb devices` 中找到当前端口。
 projector 192.168.0.109:5555
-phone     192.168.0.104
+phone     192.168.0.104  termux

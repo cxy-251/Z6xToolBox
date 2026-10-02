@@ -28,6 +28,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import z6x.device.hostOf
+import z6x.device.knownDevices
 import z6x.device.DeviceShell
 import z6x.device.HubControl
 import z6x.framework.Module
@@ -39,7 +43,7 @@ fun AppShell(state: AppState, shell: DeviceShell, hub: HubControl, onCopy: (Stri
     val copy: (String) -> Unit = { onCopy(it); state.toast = "已复制到剪贴板" }
 
     Column(Modifier.fillMaxSize().background(Palette.Bg0)) {
-        TopBar(state)
+        TopBar(state, hub)
         Row(Modifier.weight(1f)) {
             Sidebar(state, Modifier.width(320.dp).fillMaxHeight())
             Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -64,7 +68,8 @@ fun AppShell(state: AppState, shell: DeviceShell, hub: HubControl, onCopy: (Stri
 }
 
 @Composable
-private fun TopBar(state: AppState) {
+private fun TopBar(state: AppState, hub: HubControl) {
+    val scope = rememberCoroutineScope()
     Row(
         Modifier.fillMaxWidth().background(Palette.Bg1).padding(horizontal = 18.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -74,7 +79,7 @@ private fun TopBar(state: AppState) {
         }
         Column(Modifier.padding(start = 10.dp)) {
             Text("Z6xToolBox", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Palette.TextStrong)
-            Text("极米 Z6X Pro 实践手册", fontSize = 11.sp, color = Palette.TextMuted)
+            Text("极米 Z6X Pro 与手机实践手册", fontSize = 11.sp, color = Palette.TextMuted)
         }
         Spacer(Modifier.weight(1f))
         Row(
@@ -86,6 +91,15 @@ private fun TopBar(state: AppState) {
             }
         }
         Spacer(Modifier.weight(1f))
+        // 一键打开各设备 hub 的网页并自动登录
+        for (d in knownDevices) {
+            Tab("🛰 ${d.name} hub", active = false) {
+                scope.launch {
+                    runCatching { hub.openInBrowser(hostOf(d.address)) }
+                        .onFailure { state.toast = "打开${d.name} hub 失败：${it.message}" }
+                }
+            }
+        }
         Tab("📡 设备", active = state.showDevice) { state.showDevice = true }
         Text("${state.moduleCount} 个模块", Modifier.padding(start = 12.dp), fontSize = 12.sp, color = Palette.TextMuted)
     }

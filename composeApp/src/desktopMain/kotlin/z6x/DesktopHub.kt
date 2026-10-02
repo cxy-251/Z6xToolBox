@@ -40,8 +40,26 @@ class DesktopHub(private val projectDir: File = File(".").absoluteFile) : HubCon
         proc.waitFor()
     }
 
-    override fun openInBrowser(host: String) {
-        val uri = URI("http://$host:$HubPort/")
+    override suspend fun openInBrowser(host: String) {
+        val code = withContext(Dispatchers.IO) { runCatching { loginCode(host) }.getOrNull() }
+        browse(URI(if (code != null) "http://$host:$HubPort/login/code?c=$code" else "http://$host:$HubPort/"))
+    }
+
+    /** 按 hub/devices/devices.txt 找到该地址对应的设备，读取其配置中的 token，申请一次性登录码。 */
+    private fun loginCode(host: String): String? {
+        val name = File(projectDir, "hub/devices/devices.txt").readLines()
+            .map { it.trim().split(Regex("\\s+")) }
+            .firstOrNull { it.size >= 2 && !it[0].startsWith("#") && it[1].substringBefore(':') == host }?.get(0) ?: return null
+        val token = File(projectDir, "hub/devices/$name.yaml").readLines()
+            .firstOrNull { it.startsWith("token:") }?.substringAfter(':')?.trim()?.trim('"') ?: return null
+        val req = HttpRequest.newBuilder(URI("http://$host:$HubPort/api/login-code")).timeout(Duration.ofSeconds(5))
+            .header("Authorization", "Bearer $token").POST(HttpRequest.BodyPublishers.noBody()).build()
+        val res = http.send(req, HttpResponse.BodyHandlers.ofString())
+        if (res.statusCode() != 200) return null
+        return Regex("\"code\"\\s*:\\s*\"([0-9a-f]+)\"").find(res.body())?.groupValues?.get(1)
+    }
+
+    private fun browse(uri: URI) {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             Desktop.getDesktop().browse(uri)
         } else {

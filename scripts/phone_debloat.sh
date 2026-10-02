@@ -1,9 +1,11 @@
 #!/bin/bash
-# 手机（Redmi Note 12 Turbo，HyperOS 3）精简脚本：停用不使用的系统预装。只作用于主空间（用户 0），不碰安全空间。
+# 手机（Redmi Note 12 Turbo，HyperOS 3）精简脚本：停用不使用的系统预装，每个空间分别处理。
 # 用法：./scripts/phone_debloat.sh <apply|restore|status> [ADB 地址，默认按 hub/devices/devices.txt 查找手机]
+#   主空间（用户 0）：直接执行；第二空间（用户 10）：GROUP=space2 USERID=10 ./scripts/phone_debloat.sh apply
+#   相册（装好 Fossify Gallery 后）：GROUP=gallery ./scripts/phone_debloat.sh apply
 #
 # 先「停用」（pm disable-user）。HyperOS 禁止 shell 停用系统应用（SecurityException: Cannot disable system packages，
-# 2026-10-02 实测），此时改为「为主空间卸载」（pm uninstall -k --user 0）：安装包仍在系统分区，
+# 2026-10-02 实测），此时改为「为主空间卸载」（pm uninstall -k --user $USERID）：安装包仍在系统分区，
 # 用 cmd package install-existing 即可装回，数据保留（-k）。两种方式 restore 均可完全恢复。以下类别一律不动：
 #   电话、短信、SIM 卡（含黄页的来电识别、AI 通话）；支付与银行（钱包、银联、NFC 卡包、指纹支付）；
 #   手机管家本体 securitycenter（负责权限弹窗、自启动管理与安装，停用可能无法开机）；
@@ -38,7 +40,7 @@ PACKAGES=(
   com.mfashiongallery.emag       # 锁屏画报
   com.xiaomi.minigame            # 小米小游戏
   # 手机管家附属（本体保留）
-  com.miui.guardprovider         # 病毒扫描
+  # com.miui.guardprovider 病毒扫描：不可卸载，HyperOS 通过 ADB 安装应用前要用它扫描，缺少时安装失败（Invalid apk）
   com.miui.cleanmaster           # 清理
   com.miui.greenguard            # 家长守护（未成年人模式）
   com.miui.carlink               # 车载互联
@@ -48,6 +50,15 @@ PACKAGES=(
 )
 # 相册：装好替代品（Fossify Gallery）后再停用，单独列出
 GALLERY=(com.miui.gallery com.miui.mediaeditor)
+# 第二空间：用户要求卸载全部系统自带应用。保留相机、联系人、短信、设置、Play 商店、系统文件选择器、
+# 手机管家、桌面和当前输入法（Gboard），否则第二空间无法正常使用。
+SPACE2=(
+  com.miui.miservice             # 服务与反馈
+  com.android.calendar com.android.deskclock com.android.soundrecorder
+  com.miui.calculator com.miui.compass com.miui.notes com.miui.weather2
+  com.baidu.input_mi com.iflytek.inputmethod.miui   # 预装输入法（当前使用 Gboard）
+)
+USERID="${USERID:-0}"
 
 ACTION="${1:-status}"
 ADDR="${2:-}"
@@ -61,6 +72,7 @@ ADB="adb -s $ADDR"
 list() {
   case "${GROUP:-main}" in
     gallery) printf '%s\n' "${GALLERY[@]}" ;;
+    space2) printf '%s\n' "${PACKAGES[@]}" "${SPACE2[@]}" "${GALLERY[@]}" ;;
     *) printf '%s\n' "${PACKAGES[@]}" ;;
   esac
 }
@@ -70,12 +82,12 @@ case "$ACTION" in
     ok=0; fail=0
     for p in $(list); do
       if ! $ADB shell pm list packages -a "$p" | grep -qx "package:$p"; then echo "  跳过（本机没有）$p"; continue; fi
-      if ! $ADB shell pm list packages --user 0 "$p" | grep -qx "package:$p"; then continue; fi  # 已为主空间卸载
-      out=$($ADB shell pm disable-user --user 0 "$p" 2>&1 || true)
+      if ! $ADB shell pm list packages --user $USERID "$p" | grep -qx "package:$p"; then continue; fi  # 已为主空间卸载
+      out=$($ADB shell pm disable-user --user $USERID "$p" 2>&1 || true)
       if [[ "$out" == *disabled-user* ]]; then
         ok=$((ok + 1))
-      elif [[ "$out" == *"Cannot disable system packages"* ]] && [ "$($ADB shell pm uninstall -k --user 0 "$p" 2>&1 | tail -1)" = "Success" ]; then
-        echo "  为主空间卸载 $p"; ok=$((ok + 1))
+      elif [[ "$out" == *"Cannot disable system packages"* ]] && [ "$($ADB shell pm uninstall -k --user $USERID "$p" 2>&1 | tail -1)" = "Success" ]; then
+        echo "  为用户 $USERID 卸载 $p"; ok=$((ok + 1))
       else
         echo "  ✗ $p：$(echo "$out" | grep -m1 -E "Exception|Error" || echo "$out" | head -1)"; fail=$((fail + 1))
       fi
@@ -83,17 +95,17 @@ case "$ACTION" in
     echo "== 已停用 $ok 个，失败 $fail 个" ;;
   restore)
     for p in $(list); do
-      if ! $ADB shell pm list packages --user 0 "$p" | grep -qx "package:$p"; then
-        $ADB shell cmd package install-existing --user 0 "$p" >/dev/null 2>&1 && echo "  已装回 $p" || echo "  ✗ 装回失败 $p"
+      if ! $ADB shell pm list packages --user $USERID "$p" | grep -qx "package:$p"; then
+        $ADB shell cmd package install-existing --user $USERID "$p" >/dev/null 2>&1 && echo "  已装回 $p" || echo "  ✗ 装回失败 $p"
       fi
-      $ADB shell pm enable --user 0 "$p" >/dev/null 2>&1 || true
+      $ADB shell pm enable --user $USERID "$p" >/dev/null 2>&1 || true
     done
     echo "== 已恢复" ;;
   status)
-    disabled=$($ADB shell pm list packages -d --user 0 | cut -d: -f2)
-    present=$($ADB shell pm list packages --user 0 | cut -d: -f2)
+    disabled=$($ADB shell pm list packages -d --user $USERID | cut -d: -f2)
+    present=$($ADB shell pm list packages --user $USERID | cut -d: -f2)
     for p in $(list); do
-      if ! grep -qx "$p" <<<"$present"; then echo "  已为主空间卸载 $p"
+      if ! grep -qx "$p" <<<"$present"; then echo "  已为用户 $USERID 卸载 $p"
       elif grep -qx "$p" <<<"$disabled"; then echo "  已停用 $p"
       else echo "  启用中 $p"; fi
     done ;;

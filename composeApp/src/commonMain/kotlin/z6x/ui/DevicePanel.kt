@@ -212,7 +212,7 @@ private fun HubSection(hub: HubControl, address: String, onOpen: (String) -> Uni
                 }
             },
         ) { Text(if (deploying) "部署中…" else if (status == null) "部署并启动" else "重新部署") }
-        TextButton(enabled = status != null, onClick = { hub.openInBrowser(hostOf(address)) }) { Text("在浏览器中打开") }
+        TextButton(enabled = status != null, onClick = { scope.launch { hub.openInBrowser(hostOf(address)) } }) { Text("在浏览器中打开") }
         TextButton(onClick = { onOpen("spec-hub") }) { Text("说明") }
     }
     if (!hub.canDeploy) Text("当前平台无法部署：需要项目源码中的 hub/deploy.sh 和 Go 工具链。", fontSize = 12.sp, color = Palette.TextMuted)

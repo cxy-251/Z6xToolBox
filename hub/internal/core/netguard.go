@@ -7,11 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -47,12 +50,20 @@ func fingerprint(token, mac string) string {
 }
 
 // ProbeNetwork 读取网卡的 IPv4 地址和当前网络的指纹。
-// 安卓限制普通程序读取路由和邻居表的方式各不相同，这里统一调用 ip 命令，shell 身份可以执行。
+//
+// 以 shell 身份（ADB 启动）运行时调用 ip 命令：地址取自网卡，指纹取自网关的硬件地址。
+// 以普通应用身份（Termux）运行时，安卓禁止应用使用 netlink（ip 命令报 Permission denied），
+// 改用 probeAsApp：地址由系统路由选择得出，指纹取自路由器的 UPnP 设备标识。
 func ProbeNetwork(iface, token string) (NetState, error) {
 	var st NetState
+	// 普通应用身份（uid ≥ 10000，如 Termux）下不能调用外部程序查找：安卓应用的 seccomp 过滤
+	// 不允许 faccessat2，Go 的 exec.LookPath 会因此收到 SIGSYS 而直接退出（2026-10-02 实测）。
+	if os.Getuid() >= 10000 {
+		return probeAsApp(token)
+	}
 	out, err := run("ip", "-4", "-o", "addr", "show", "dev", iface)
 	if err != nil {
-		return st, err
+		return probeAsApp(token)
 	}
 	// 2: wlan0    inet 192.168.0.104/24 brd ... scope global wlan0
 	if f := strings.Fields(out); len(f) >= 4 && f[2] == "inet" {
@@ -291,4 +302,84 @@ func mapChild(m *yaml.Node, key string) *yaml.Node {
 	v := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	m.Content = append(m.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, v)
 	return v
+}
+
+// probeAsApp 是普通应用身份下的网络检查，不需要任何特殊权限：
+//   - 地址：向公网地址建立 UDP「连接」（不发送数据），系统按路由选出的本机地址即当前网络的地址；
+//     只接受私有地址（局域网），移动数据网络的公网地址视为未连接 Wi-Fi；
+//   - 指纹：用 SSDP 查找局域网中的路由器（InternetGatewayDevice），读取其描述文件中的 UDN
+//     （每台设备唯一的 uuid）。路由器关闭 UPnP 时取不到指纹，hub 不会对外服务。
+func probeAsApp(token string) (NetState, error) {
+	var st NetState
+	c, err := net.Dial("udp4", "223.5.5.5:53")
+	if err != nil {
+		return st, nil // 没有可用网络
+	}
+	ip := c.LocalAddr().(*net.UDPAddr).IP
+	c.Close()
+	if !ip.IsPrivate() {
+		return st, nil
+	}
+	st.IP = ip.String()
+	if udn := gatewayUDN(ip, 2*time.Second); udn != "" {
+		st.Fingerprint = fingerprint(token, "upnp:"+udn)
+	}
+	return st, nil
+}
+
+// gatewayUDN 用 SSDP 查找与 local 同网段的路由器，返回其 UDN。
+func gatewayUDN(local net.IP, wait time.Duration) string {
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: local})
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	msg := "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n" +
+		"ST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n\r\n"
+	if _, err := conn.WriteToUDP([]byte(msg), &net.UDPAddr{IP: net.IPv4(239, 255, 255, 250), Port: 1900}); err != nil {
+		return ""
+	}
+	conn.SetReadDeadline(time.Now().Add(wait))
+	buf := make([]byte, 2048)
+	for {
+		n, from, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			return ""
+		}
+		loc := ""
+		for _, line := range strings.Split(string(buf[:n]), "\r\n") {
+			if k, v, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(k), "location") {
+				loc = strings.TrimSpace(v)
+			}
+		}
+		// 只读取回复者自己的描述地址，并且必须在同一网段，避免被引导访问其他主机
+		u, err := url.Parse(loc)
+		if err != nil || u.Hostname() != from.IP.String() || !sameSubnet24(from.IP, local) {
+			continue
+		}
+		if udn := fetchUDN(loc); udn != "" {
+			return udn
+		}
+	}
+}
+
+func sameSubnet24(a, b net.IP) bool {
+	a4, b4 := a.To4(), b.To4()
+	return a4 != nil && b4 != nil && a4[0] == b4[0] && a4[1] == b4[1] && a4[2] == b4[2]
+}
+
+var udnRe = regexp.MustCompile(`<UDN>\s*(uuid:[^<\s]+)\s*</UDN>`)
+
+func fetchUDN(loc string) string {
+	cl := &http.Client{Timeout: 2 * time.Second}
+	resp, err := cl.Get(loc)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if m := udnRe.FindSubmatch(body); m != nil {
+		return strings.ToLower(string(m[1]))
+	}
+	return ""
 }

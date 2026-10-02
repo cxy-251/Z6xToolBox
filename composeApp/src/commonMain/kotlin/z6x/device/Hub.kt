@@ -43,6 +43,9 @@ interface HubControl {
     /** 编译并部署 hub，每输出一行就回调一次，返回退出码。 */
     suspend fun deploy(address: String, onLine: (String) -> Unit): Int
 
-    /** 用系统浏览器打开 hub 首页。 */
-    fun openInBrowser(host: String)
+    /**
+     * 用系统浏览器打开 hub 首页，并自动登录：先用本机配置中的 token 向 hub 申请一次性登录码，
+     * 再打开带登录码的地址。token 不出现在网址中；取不到 token 时打开登录页。
+     */
+    suspend fun openInBrowser(host: String)
 }

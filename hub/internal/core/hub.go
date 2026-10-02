@@ -31,6 +31,7 @@ type Hub struct {
 	started time.Time
 	cfgPath string
 	gate    *Gate
+	codes   loginCodes
 	stop    context.CancelFunc
 }
 
@@ -55,6 +56,7 @@ func (h *Hub) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 	h.coreRoutes(mux)
 	h.stopRoute(mux)
+	h.loginLinkRoutes(mux)
 	if h.cfgPath != "" {
 		h.configRoutes(mux)
 	}

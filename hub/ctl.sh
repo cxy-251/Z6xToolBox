@@ -5,7 +5,8 @@
 #   stop     停止
 #   status   查看是否运行、当前网络是否可信、各模块状态
 #   trust    把设备当前连接的 Wi-Fi 加入可信网络（在家里执行一次即可），然后重启 hub
-# 手机需先用 adb connect 连上；网页首页的「停止 hub」按钮也可以停止。
+# Termux 方式的设备（手机）经 SSH 控制；在手机的 Termux 中也可直接执行 hub start / hub stop。
+# 网页首页的「停止 hub」按钮也可以停止。
 set -euo pipefail
 cd "$(dirname "$0")"
 source ./lib.sh
@@ -16,18 +17,22 @@ case "$2" in
   start)
     start_hub ;;
   stop)
-    adb -s "$ADDR" shell 'pid=$(pidof z6x-hub) && kill $pid && echo "== 已停止（PID $pid）" || echo "== hub 本来就没有运行"' ;;
+    if [ "$MODE" = termux ]; then rsh "$RDIR/hub.sh stop"
+    else rsh 'pid=$(pidof z6x-hub) && kill $pid && echo "== 已停止（PID $pid）" || echo "== hub 本来就没有运行"'; fi ;;
   status)
-    pid=$(adb -s "$ADDR" shell pidof z6x-hub || true)
-    if [ -z "$pid" ]; then echo "$NAME：hub 未运行"; exit 0; fi
-    echo "$NAME：hub 运行中（PID $pid）"
-    adb -s "$ADDR" shell "cd $DIR && ./z6x-hub -c hub.yaml -network"
-    h=$(curl -s -m 5 "http://${ADDR%%:*}:8090/api/health") && echo "$h" | grep -oE '"name": "[^"]*"|"state": "[^"]*"' | paste - - | sed 's/"name": //; s/"state": //; s/"//g; s/^/  /' \
-      || echo "  对外服务：未监听（不在可信网络上）"
+    if [ "$MODE" = termux ]; then rsh "$RDIR/hub.sh status"
+    else
+      pid=$(rsh pidof z6x-hub || true)
+      if [ -z "$pid" ]; then echo "$NAME：hub 未运行"; exit 0; fi
+      echo "$NAME：hub 运行中（PID $pid）"
+      rsh "cd $RDIR && ./z6x-hub -c hub.yaml -network"
+    fi
+    h=$(curl -s -m 5 "http://$HOST:8090/api/health") && echo "$h" | grep -oE '"name": "[^"]*"|"state": "[^"]*"' | paste - - | sed 's/"name": //; s/"state": //; s/"//g; s/^/  /' \
+      || echo "  对外服务：未监听（未运行，或不在可信网络上）"
     ;;
   trust)
-    adb -s "$ADDR" shell "cd $DIR && ./z6x-hub -c hub.yaml -trust"
-    adb -s "$ADDR" pull "$DIR/hub.yaml" "$CFG" >/dev/null && chmod 600 "$CFG"
+    rsh "cd $RDIR && ./z6x-hub -c hub.yaml -trust"
+    get "$RDIR/hub.yaml" "$CFG" && chmod 600 "$CFG"
     echo "== 已同步到本机 $CFG"
     start_hub ;;
   *)

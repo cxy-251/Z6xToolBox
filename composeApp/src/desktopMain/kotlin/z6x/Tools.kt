@@ -1,6 +1,8 @@
 package z6x
 
 import z6x.device.DefaultAddress
+import z6x.device.hostOf
+import z6x.device.knownDevices
 import z6x.framework.Host
 import z6x.framework.Item
 import z6x.framework.Module
@@ -113,7 +115,7 @@ object Tools {
     private fun skipReason(s: Step): String? = when {
         s.risk != Risk.Read -> "不是只读步骤"
         s.manual -> "标记为手动执行"
-        s.host !in setOf(Host.Adb, Host.Deck, Host.Ssh) -> "执行位置是 ${s.host.label}"
+        s.host !in setOf(Host.Adb, Host.Deck, Host.Ssh, Host.PhoneAdb, Host.Termux) -> "执行位置是 ${s.host.label}"
         Regex("""<[^<>\s]+>""").containsMatchIn(s.command) -> "含占位符"
         else -> null
     }
@@ -122,8 +124,18 @@ object Tools {
         Host.Adb -> runBlockingShell(DefaultAddress, s.command)
         // SSH 步骤：用 ~/.ssh/config 里的 z6x 别名免密登录（见「SSH 免密登录 SimpleSSHD」）；BatchMode 防止卡在密码提示
         Host.Ssh -> process(listOf("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "z6x", s.command))
+        // 手机：无线调试使用 TLS 连接，dadb 不支持，改用系统的 adb 命令；端口从 adb devices 中按 IP 查找
+        Host.PhoneAdb -> phoneAdb()?.let { process(listOf("adb", "-s", it, "shell", s.command)) } ?: (-1 to "手机未通过 ADB 连接")
+        Host.Termux -> process(listOf("ssh", "-i", "${System.getProperty("user.home")}/.ssh/phone_ed25519", "-p", "8022",
+            "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", phoneHost, s.command))
         else -> process(listOf("bash", "-c", s.command))
     }
+
+    private val phoneHost = hostOf(knownDevices.first { it.name == "手机" }.address)
+
+    private fun phoneAdb(): String? = process(listOf("adb", "devices")).second.lines()
+        .map { it.split(Regex("\\s+")) }
+        .firstOrNull { it.size >= 2 && it[1] == "device" && it[0].startsWith("$phoneHost:") }?.get(0)
 
     private fun process(cmd: List<String>): Pair<Int, String> {
         val p = ProcessBuilder(cmd).redirectErrorStream(true).start()

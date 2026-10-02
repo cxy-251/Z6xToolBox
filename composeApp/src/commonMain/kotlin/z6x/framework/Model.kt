@@ -19,6 +19,9 @@ enum class Host(val label: String, val hint: String) {
     Adb("ADB shell", "先 adb connect 连上投影仪，再在 adb shell 里执行（uid 2000，shell 身份）"),
     Ssh("SSH · App 权限", "在 SimpleSSHD 的 SSH 会话里执行（uid 10068，普通 App 身份）"),
     Tv("电视界面", "在投影仪上用遥控器操作，不是命令"),
+    PhoneAdb("手机 ADB", "先在手机「无线调试」中查看端口并 adb connect，再在 adb shell 里执行（uid 2000，shell 身份）"),
+    Termux("Termux", "在手机的 Termux 中执行，或在 Deck 上 ssh -i ~/.ssh/phone_ed25519 -p 8022 <手机IP> 登录后执行（普通应用身份）"),
+    Phone("手机界面", "在手机上手动操作，不是命令"),
     Windows("Windows", "在 Windows 电脑的 CMD 或 PowerShell 里执行"),
     Remote("其他", "见说明"),
 }
