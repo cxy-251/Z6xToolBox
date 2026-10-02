@@ -18,7 +18,7 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
     why("设备分工") {
         facts(
             "投影仪" to "专门放电影，并提供遥控类功能：files、paste、control、wol、metrics、speed、notify、lanscan（8 个模块）。资源库模块关闭：漫画、短视频这类需要大量读取小文件的内容不适合放在投影仪上",
-            "手机" to "Redmi Note 12 Turbo，机身存储 1TB，作为资源库：library、files、metrics、speed（4 个模块）。遥控、发送文字、网络唤醒只对电视有意义，不启用",
+            "手机" to "Redmi Note 12 Turbo，机身存储 1TB，作为资源库：library、files、metrics、speed（4 个模块），在 Termux 中运行。遥控、发送文字、网络唤醒只对电视有意义，不启用",
             "配置" to "每台设备一份配置 `hub/devices/<设备名>.yaml`，各有独立的 token（不入库）；模板为同目录下的 `<设备名>.example.yaml`；设备名与 ADB 地址的对应关系在 `hub/devices/devices.txt` 中。顶层 `name` 为设备的显示名称，用于首页标题和资源库名称",
         )
     }
@@ -166,7 +166,7 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
             "手机 · 功能" to "✓ 4 个模块均为 running；在机身存储建库（剩余约 400GB）；导入 111MB 的 SLG 游戏；游戏页面、图标、存档写入/读取/删除均正常；日志中无权限错误。SELinux Enforcing 并未妨碍 hub 的任何功能",
             "手机 · 网速偏慢" to "导入 111MB 用时 2 分 45 秒（约 0.7MB/s），下载测速 1.4MB/s。**最初判断为手机灭屏进入深度休眠（Doze）所致，复测后推翻**：手机亮屏后下载仍只有 0.6～0.9MB/s、上传 0.5MB/s，同时投影仪也从 5.3MB/s 降到 0.7～1.0MB/s。两台设备同时变慢，瓶颈在 Deck 一侧：Deck 连在 2.4GHz（11 信道）上，链路速率由 108Mbps 降到 27Mbps，到路由器的延迟在 3～110ms 之间波动，发送失败 4143 次。手机同样连在 2.4GHz 上，投影仪为 5GHz。教训：只测一台设备就下结论不可靠，应同时测一台对照设备。大批量转移建议让 Deck 和手机都连 5GHz，或改用数据线（`adb push`）",
             "手机 · 温度" to "手机有 83 个温区，其中部分读数不是真实温度（如 bcl-warn 为 -273）。metrics 已过滤 -40～150 ℃ 以外的读数",
-            "手机 · 注意" to "无线调试在重启或切换 Wi-Fi 后会关闭，端口每次都不同，需要重新开启后 `adb connect`；手机重启后 hub 需重新部署。建议在路由器中为手机绑定固定 IP",
+            "手机 · 运行方式" to "最初与投影仪一样从 ADB 启动，但无线调试一关闭（Wi-Fi 断开、切换空间、重启）hub 就随 adbd 一起被结束，后改为在 Termux 中运行，经 SSH 部署，手机上可用 hub start / hub stop 开关，详见「手机 → 环境配置 → hub 改在 Termux 中运行」",
         )
     }
 
