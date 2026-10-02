@@ -195,6 +195,7 @@ func (m *Module) list(ctx context.Context) []App {
 // friendly 是常见应用的显示名称（shell 读不到应用名，只能内置）。
 var friendly = map[string]string{
 	"org.smarttube.stable":               "SmartTube",
+	"org.xbmc.kodi":                      "Kodi",
 	"com.phlox.tvwebbrowser":             "TV Bro 浏览器",
 	"com.cxinventor.file.explorer":       "CX 文件管理器",
 	"org.galexander.sshd":                "SimpleSSHD",

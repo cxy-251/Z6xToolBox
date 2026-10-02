@@ -202,7 +202,8 @@ func (m *Module) apps(ctx context.Context) []App {
 var hidden = map[string]bool{"com.android.newsettings": true}
 
 var names = map[string]string{
-	"org.smarttube.stable": "SmartTube", "com.phlox.tvwebbrowser": "TV Bro 浏览器", "com.cxinventor.file.explorer": "CX 文件管理器",
+	"org.smarttube.stable": "SmartTube",
+	"org.xbmc.kodi":        "Kodi", "com.phlox.tvwebbrowser": "TV Bro 浏览器", "com.cxinventor.file.explorer": "CX 文件管理器",
 	"org.galexander.sshd": "SimpleSSHD", "com.github.metacubex.clash.meta": "Clash Meta", "com.spocky.projengmenu": "Projectivy 桌面",
 	"de.szalkowski.activitylauncher.oss": "Activity Launcher",
 	"com.xgimi.filemanager":              "极米文件管理", "com.xgimi.manager": "极米管家（清理与安全）", "com.xgimi.wirelessscreen": "极米无线投屏",
