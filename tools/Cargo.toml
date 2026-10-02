@@ -1,0 +1,31 @@
+[package]
+name = "z6x-tools"
+version = "0.1.0"
+edition = "2024"
+description = "z6x：运行在极米 Z6X Pro 上的命令集，用子命令区分功能，执行完毕即退出（keymap 守护除外）"
+
+[[bin]]
+name = "z6x"
+path = "src/main.rs"
+
+# 依赖保持最少：减少编译时间、中间产物和内存占用，也便于阅读。
+[dependencies]
+libc = "0.2"
+
+# 开发编译：不生成调试信息、不做增量编译，target 目录明显变小。
+[profile.dev]
+debug = false
+incremental = false
+
+# 日常发布编译：体积优先，但不开链接时优化，编译快、占内存少（Deck 上使用）。
+[profile.release]
+opt-level = "z"
+strip = true
+panic = "abort"
+codegen-units = 16
+
+# 正式发布（GitHub Actions 使用）：再开启链接时优化、单一代码生成单元，程序更小，但编译更慢、更占内存。
+[profile.dist]
+inherits = "release"
+lto = true
+codegen-units = 1

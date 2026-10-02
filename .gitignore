@@ -32,3 +32,6 @@ __pycache__/
 # z6x-hub：编译产物与含 token 的配置
 hub/z6x-hub
 hub/hub.yaml
+
+# z6x-tools（Rust）编译产物
+tools/target/
