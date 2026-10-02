@@ -1,12 +1,14 @@
 package core
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"sort"
@@ -28,6 +30,7 @@ type Hub struct {
 	log     *slog.Logger
 	entries []*entry
 	started time.Time
+	cfgPath string
 }
 
 func New(cfg *Config, log *slog.Logger) *Hub {
@@ -47,6 +50,9 @@ func (h *Hub) Run(ctx context.Context) error {
 	h.started = time.Now()
 	mux := http.NewServeMux()
 	h.coreRoutes(mux)
+	if h.cfgPath != "" {
+		h.configRoutes(mux)
+	}
 
 	for _, e := range h.entries {
 		e := e
@@ -156,6 +162,9 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 			b.WriteString("</li>")
 		}
 		b.WriteString("</ul>")
+		if h.cfgPath != "" {
+			b.WriteString(`<p><a href="/ui/config/">编辑配置</a></p>`)
+		}
 		fmt.Fprintf(&b, "<p><small>版本 %s · 已运行 %s</small></p>", Version, time.Since(h.started).Round(time.Second))
 		Page(w, "z6x-hub", b.String())
 	})
@@ -192,6 +201,19 @@ type statusRecorder struct {
 }
 
 func (s *statusRecorder) WriteHeader(c int) { s.code = c; s.ResponseWriter.WriteHeader(c) }
+
+// Hijack 让 WebSocket 等需要接管底层连接的处理函数在包装后仍能工作。
+func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := s.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("底层连接不支持接管")
+	}
+	s.code = http.StatusSwitchingProtocols
+	return h.Hijack()
+}
+
+// Unwrap 供 http.ResponseController 取得原始的 ResponseWriter。
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 // Flush 让测速等流式响应在包装后仍能及时发送。
 func (s *statusRecorder) Flush() {

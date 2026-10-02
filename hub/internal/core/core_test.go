@@ -116,3 +116,11 @@ func TestRotatingFile(t *testing.T) {
 		t.Errorf("当前日志不应超过上限，实际 %d 字节", fi.Size())
 	}
 }
+
+// TestRecorderSupportsHijack 防止回归：日志包装层必须支持 Hijack，否则 WebSocket 握手会 panic。
+func TestRecorderSupportsHijack(t *testing.T) {
+	var w http.ResponseWriter = &statusRecorder{ResponseWriter: httptest.NewRecorder()}
+	if _, ok := w.(http.Hijacker); !ok {
+		t.Fatal("statusRecorder 应实现 http.Hijacker")
+	}
+}

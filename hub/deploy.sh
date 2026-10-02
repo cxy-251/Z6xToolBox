@@ -1,9 +1,21 @@
 #!/bin/bash
-# 编译 z6x-hub 并部署到投影仪，然后启动。用法：./deploy.sh [投影仪地址，默认 192.168.0.109:5555]
+# 编译 z6x-hub 并部署到投影仪，然后启动。
+# 用法：./deploy.sh [投影仪地址，默认 192.168.0.109:5555] [--push-config]
 # 需要从 ADB 启动：这样 hub 以 shell 身份运行（uid 2000），并继承 adbd 的 oom 分值 -1000。
+#
+# 配置以投影仪上的 hub.yaml 为准（可能已在网页配置页中修改过）：
+#   - 投影仪上已有配置时，先把它拉回本机，覆盖本机的 hub.yaml，不会覆盖网页上的修改；
+#   - 投影仪上没有配置（首次部署），或指定 --push-config 时，才把本机的 hub.yaml 推送过去。
 set -euo pipefail
 cd "$(dirname "$0")"
-DEV="${1:-192.168.0.109:5555}"
+DEV="192.168.0.109:5555"
+PUSH_CONFIG=0
+for a in "$@"; do
+  case "$a" in
+    --push-config) PUSH_CONFIG=1 ;;
+    *) DEV="$a" ;;
+  esac
+done
 DIR=/data/local/tmp/z6x-hub
 export PATH="$HOME/.local/go/bin:$PATH"
 
@@ -21,7 +33,15 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath \
 
 echo "== 部署到 $DEV"
 adb -s "$DEV" shell "mkdir -p $DIR"
-adb -s "$DEV" push z6x-hub hub.yaml "$DIR/" >/dev/null
+if [ "$PUSH_CONFIG" = 0 ] && adb -s "$DEV" shell "test -f $DIR/hub.yaml"; then
+  adb -s "$DEV" pull "$DIR/hub.yaml" hub.yaml >/dev/null
+  chmod 600 hub.yaml
+  echo "== 使用投影仪上的现有配置（已同步到本机 hub.yaml）"
+else
+  adb -s "$DEV" push hub.yaml "$DIR/" >/dev/null
+  echo "== 已推送本机的 hub.yaml"
+fi
+adb -s "$DEV" push z6x-hub "$DIR/" >/dev/null
 adb -s "$DEV" shell "chmod 755 $DIR/z6x-hub && chmod 600 $DIR/hub.yaml && $DIR/z6x-hub -c $DIR/hub.yaml -check"
 
 echo "== 重启 hub"

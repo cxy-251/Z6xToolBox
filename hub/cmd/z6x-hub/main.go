@@ -22,9 +22,11 @@ import (
 	"z6x/hub/internal/core"
 	"z6x/hub/internal/modules/control"
 	"z6x/hub/internal/modules/files"
+	"z6x/hub/internal/modules/lanscan"
 	"z6x/hub/internal/modules/metrics"
 	"z6x/hub/internal/modules/paste"
 	"z6x/hub/internal/modules/speed"
+	"z6x/hub/internal/modules/webshell"
 	"z6x/hub/internal/modules/wol"
 )
 
@@ -70,12 +72,15 @@ func main() {
 	log := slog.New(slog.NewTextHandler(io.MultiWriter(logFile, os.Stderr), nil))
 
 	h := core.New(cfg, log)
+	h.SetConfigPath(abs(filepath.Base(*cfgPath)))
 	h.Add(files.New())
 	h.Add(paste.New(nil))
 	h.Add(control.New(nil))
 	h.Add(wol.New())
 	h.Add(metrics.New())
 	h.Add(speed.New())
+	h.Add(lanscan.New())
+	h.Add(webshell.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

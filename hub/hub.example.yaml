@@ -43,3 +43,15 @@ modules:
   # 局域网测速。
   speed:
     enable: true
+
+  # 局域网设备扫描（SSDP）。
+  lanscan:
+    enable: true
+    timeout_sec: 3
+
+  # 网页终端：相当于把 shell 权限开放给网页，默认关闭。
+  # 启用时必须在 allow_from 中列出允许访问的 IP 或网段。
+  webshell:
+    enable: false
+    allow_from: []          # 例如 [192.168.0.21]
+    max_sessions: 3
