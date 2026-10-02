@@ -98,6 +98,24 @@ val AppInstallOrder = module("app-install-order", "应用的安装顺序与兼�
             6. **仅含 64 位库的应用**：安装器报错 `INSTALL_FAILED_NO_MATCHING_ABIS`。原因明确：系统只有 32 位运行库。
             7. **Projectivy Launcher、SmartTube**：分别用于替换桌面和观看视频。运行正常。
         """)
+        text("""
+            之后有了 ADB，改为在 Deck 上下载、核对校验值后用 `adb install` 安装：
+            8. **Termux、Termux:Boot**（2026-10-02）：用于投影仪开机自动启动 hub 与 keymap，见「开机自动启动 hub 与 keymap」。
+            9. **Kodi 21.3**（2026-10-02）：从官方镜像 mirrors.kodi.tv 下载 armeabi-v7a 版（`kodi-21.3-Omega-armeabi-v7a.apk`），与官方提供的 sha256 一致后安装。运行正常，可从桌面启动；已加入 hub「遥控器按键」与「任务管理」的应用名称表。
+        """)
+    }
+
+    steps("Kodi 的安装与核对") {
+        change("安装", "adb -s 192.168.0.109:5555 install kodi-21.3-Omega-armeabi-v7a.apk", Host.Deck) {
+            note = "必须选 armeabi-v7a（arm 目录）版本；arm64 目录的版本在这台投影仪上无法安装（见下文 abilist64 为空）。安装前用 `sha256sum` 与官方同名 .sha256 文件对比。"
+        }
+        read("确认架构、版本与桌面入口", "dumpsys package org.xbmc.kodi | grep -m2 -oE 'versionName=[^ ]+|primaryCpuAbi=[^ ]+'; cmd package resolve-activity --brief -c android.intent.category.LEANBACK_LAUNCHER org.xbmc.kodi | tail -1", Host.Adb) {
+            captured("2026-10-02", """
+                primaryCpuAbi=armeabi-v7a
+                versionName=21.3
+                org.xbmc.kodi/.Splash
+            """)
+        }
     }
 
     steps("安装前检查 APK 支持的架构") {
