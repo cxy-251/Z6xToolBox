@@ -1,0 +1,11 @@
+## 下载
+
+**桌面工具箱**（极米 Z6X Pro 与手机的实践手册，自带 Java 运行时）
+- Linux x86_64（含 Steam Deck）：`.deb` 安装包，或 `.tar.gz` 解压后运行 `Z6xToolBox/bin/Z6xToolBox`
+- Windows：`.msi` 安装程序（不需要管理员权限），或 `-portable.zip` 解压即用
+- macOS（Apple Silicon）：`.dmg`。未经 Apple 公证，首次打开需在「系统设置 → 隐私与安全性」中允许
+
+**安卓端程序**（静态链接，arm64 适用于大多数设备，arm 为 32 位用户空间的设备）
+- `z6x-android-<架构>.tar.gz`：z6x-hub（Go 常驻服务）、z6x（Rust 命令集）、配置示例与启动脚本，用法见包内 README.txt
+
+SHA256SUMS.txt 为全部文件的校验值。

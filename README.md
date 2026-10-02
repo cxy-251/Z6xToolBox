@@ -1,93 +1,95 @@
-# Z6xToolBox
+# 📽 Z6xToolBox
 
-极米 Z6X Pro 投影仪的工具箱：一个桌面程序，汇集接管这台投影仪的全部经验、命令和实测结果，并能直接连接投影仪进行检查。
+极米 Z6X Pro 投影仪与安卓手机的实践手册和工具箱。整个项目由三部分组成：
 
-- 每条命令都标明**执行位置**（Deck 终端 / ADB / SSH / 电视界面）和**风险等级**（只读 / 可撤销的修改 / 难以撤销），可一键复制。
+| 部分 | 语言 | 作用 |
+| --- | --- | --- |
+| 🧰 桌面工具箱（`composeApp/`） | Kotlin + Compose Multiplatform | 汇集接管投影仪、改造手机的全部经验、命令和实测结果；可直接连接设备读取信息、一键体检、部署 hub |
+| 🛰 z6x-hub（`hub/`） | Go | 运行在投影仪和手机上的常驻服务：文件管理与 WebDAV、资源库（网页游戏、漫画、多联放映、音声、小说）、任务管理、遥控器按键、SSH 等 |
+| 🔧 z6x-tools（`tools/`） | Rust | BusyBox 式命令集 `z6x`：系统指标、端口所属、按键注入、遥控器重映射守护、查重、目录监听、ping、存储测速、进程守护 |
+
+知识库的原则：
+
+- 每条命令都标明**执行位置**（Deck 终端 / 投影仪 ADB / 手机 ADB / Termux / 电视界面）和**风险等级**（只读 / 可撤销的修改 / 难以撤销），可一键复制。
 - 命令的输出均来自真机实际运行，并注明日期，没有编造的「预期输出」。
-- 网上流传或旧记录中的说法，逐条在真机上核对，标注为 ✓ 成立、? 未验证或 ✗ 不成立，并附实测结果。
-- 可通过局域网 ADB 直接读取投影仪信息，进行一键体检。
+- 网上流传或旧记录中的说法，逐条在真机上核对，标注为 ✓ 成立、? 未验证或 ✗ 不成立，并附实测结果；走过的弯路与失误也如实记录。
 
-## 内容
-
-左侧按「专区 → 分类」浏览，各专区内容如下：
+## 内容结构
 
 | 专区 | 分类 |
-|---|---|
-| 📖 实践记录 | 设备接入（外接显示、U 盘安装应用、局域网传输）· 获取权限（SSH、网络 ADB、公钥登录）· 系统定制（精简预装、替换桌面、输入法、代理、投屏）· 开发环境 · 应急与安全 |
-| 🔍 设备查询 | 原理（SSH 与 ADB 的权限差异）· 查看工具（截图、焦点窗口）· 命令手册 · 核查案例 · 经验（方案调整记录） |
-| 💡 提案 | 规格（z6x-hub、z6x-tools）· 小项目审核（109 个提案的技术栈、原理与发展方向）· 开发辅助 |
-| 🛠 本项目技术栈 | 环境搭建（JDK、Gradle）· 代码解读（Kotlin、Compose）· 项目维护（目录结构、Git、问题记录） |
+| --- | --- |
+| 📖 实践记录 | 设备接入 · 获取权限（SSH、网络 ADB）· 系统定制（精简预装、桌面、输入法、代理、投屏、遥控器按键重映射）· 开发环境（自编译程序、开机自启）· 应急与安全 |
+| 🔍 设备查询 | 原理（权限模型）· 查看工具 · 命令手册 · 核查案例 · 经验（方案调整记录） |
+| 📱 手机 | 设备信息与参数获取 · 环境配置（无线调试、Termux、hub 运行方式、大量文件传输）· 系统精简（两个空间）· 游戏移植原理 |
+| 💡 提案 | 规格（z6x-hub、z6x-tools）· 小项目审核（109 个提案）· 开发辅助 |
+| 🛠 本项目技术栈 | 环境搭建（JDK、Gradle）· 代码解读（Kotlin、Compose）· 项目维护 |
 
-## 运行环境
+## 下载
 
-- Linux 桌面（在 Steam Deck 桌面模式下开发和测试）。Windows / macOS 版今后由 GitHub Actions 构建。
-- **JDK 21**，位于 `~/Applications/jdk`（无需 root，不修改系统分区）。安装步骤见程序中「本项目技术栈 → 在 Deck 上安装 JDK」。
-- 连接投影仪的前提：投影仪与电脑处于同一局域网，且投影仪的网络 ADB（5555 端口）已开启。开启方法见「实践记录 → 获取权限」。
-- 首次连接前，在终端执行一次 `adb connect 投影仪IP:5555`。工具箱复用 adb 生成的密钥 `~/.android/adbkey`，本身不依赖 adb 命令。
+在 [Releases](https://github.com/cxy-251/Z6xToolBox/releases) 页面下载：
 
-## 使用
+- **桌面工具箱**（自带 Java 运行时）：Linux / Steam Deck 用 `.deb` 或 `.tar.gz`；Windows 用 `.msi`（不需要管理员权限）或 `-portable.zip`；macOS（Apple Silicon）用 `.dmg`，未经 Apple 公证，首次打开需在「系统设置 → 隐私与安全性」中允许。
+- **安卓端程序**：`z6x-android-arm64.tar.gz`（多数设备）或 `z6x-android-arm.tar.gz`（32 位用户空间），内含 z6x-hub、z6x、配置示例与启动脚本，用法见包内 README.txt。
+
+部署 hub、改键、连接设备等功能需要从源码运行（依赖仓库中的脚本与 Go 工具链）；下载的安装包可以完整阅读知识库。
+
+## 从源码运行
 
 ```bash
 ./run.sh                 # 打开工具箱
-./run.sh --health        # 不打开窗口，在命令行中体检（必检项异常时退出码为 1）
-./run.sh --probe         # 不打开窗口，输出设备基本信息
+./run.sh --health        # 不打开窗口，在命令行中体检投影仪（必检项异常时退出码为 1）
 ./run.sh --device        # 启动后直接打开「📡 设备」页
-./run.sh --hub           # 查询投影仪上 z6x-hub 的运行状态
-./run.sh --hub-deploy    # 编译并部署 z6x-hub（与设备页的部署按钮相同）
+./run.sh --check         # 知识库静态检查：风险标注、格式、是否泄露敏感信息
+./run.sh --try-read      # 在真机上重新运行只读命令，与记录的输出对比
 ```
 
-默认连接 `192.168.0.109:5555`。地址不同时，可在窗口的「📡 设备」页修改，或在命令后附加地址：`./run.sh --health 192.168.1.20:5555`。
+需要 JDK 21（Deck 上放在 `~/Applications/jdk`，见「本项目技术栈 → 在 Deck 上安装 JDK」）。首次运行会下载 Gradle 和依赖。
 
-首次运行会下载 Gradle 和依赖，需要几分钟；此后只编译改动的部分。
+窗口顶栏的「🛰 投影仪 hub」「🛰 手机 hub」可一键打开两台设备的 hub 网页并自动登录。
 
-窗口中：
+## z6x-hub
 
-- 左侧按专区和分类浏览。
-- 每条命令右侧可复制；颜色表示风险等级。执行**高危**命令前务必读完说明。
-- 「📡 设备」页：读取设备信息；查看 z6x-hub 状态并一键部署；一键体检，异常项可点击「查看」跳转到相关说明。
+投影仪与手机运行同一个程序，按各自的配置（`hub/devices/<设备名>.yaml`，含 token，不入库）启用不同模块：
+
+- **投影仪**（ADB 方式，shell 身份）：文件共享、发送文字、遥控、网络唤醒、系统状态、测速、通知、局域网扫描、任务管理、遥控器按键、SSH（8022）。投影仪本机的浏览器访问免 token。
+- **手机**（Termux 方式，普通应用身份）：资源库（与 omni-deck 的资源库目录结构兼容）、文件共享、系统状态、测速；只在家里的 Wi-Fi 上对外服务。
+
+```bash
+./hub/deploy.sh projector              # 编译并部署（首次部署时生成配置与随机 token）
+./hub/ctl.sh phone start|stop|status   # 开关
+./hub/library-import.sh <文件夹> games.slg   # 向手机资源库导入一个游戏
+```
+
+**投影仪重启后自动恢复**：Termux:Boot 经本机 ADB（127.0.0.1:5555）以 shell 身份启动 hub 与 keymap，开机约 70 秒后可用，不需要 Deck。详见「实践记录 → 开发环境 → 开机自动启动 hub 与 keymap」与「提案 → 规格 → 规格：z6x-hub」。
+
+## z6x-tools
+
+```bash
+./tools/build.sh test                  # 单元测试
+./tools/build.sh deploy projector      # 编译并推送到投影仪
+./tools/keymap.sh projector            # 推送遥控器按键配置并启动 keymap 守护进程
+```
+
+编译参数为 Steam Deck 调整过：最低优先级（nice 19、ionice idle）、并行数 4、只依赖 libc，首次编译约 8 秒，程序约 650KB。遥控器的四个影视快捷键与调焦键两侧的两个键可在 hub 的「遥控器按键」页面设置短按与长按（共 12 项），原理见「实践记录 → 系统定制 → 遥控器按键重映射」。
+
+## 发布新版本
+
+1. 修改仓库根目录的 `VERSION`（工具箱、hub、z6x-tools 都使用它）。**只有第二位变化（x.Y.0）才发布**，第三位的修订不发布。
+2. 提交后打标签并推送：`git tag v<版本号> && git push origin main --tags`。
+
+推送标签后由 GitHub Actions 在 Linux、Windows、macOS 上构建工具箱，在 Linux 上交叉编译安卓端程序，生成校验值并创建 Release。平时推送代码不触发任何构建。
 
 ## 故障排查
 
 | 现象 | 参考 |
-|---|---|
-| ADB 无法连接 | 「实践记录 → 应急与安全 → 应急恢复手册」；先确认投影仪不处于「关机」状态（实为睡眠，网络已断开） |
-| 投影仪重启后自行部署的服务消失 | 属正常现象：没有 root 无法开机自启。ADB 会自动运行，从 Deck 重新启动服务即可 |
-| 精简系统后需要恢复 | `scripts/z6x_debloat_restore.sh`，说明见「实践记录 → 系统定制 → 一键精简与恢复脚本」 |
-| 后台 Java 进程占用大量内存 | 「本项目技术栈 → 项目维护 → 问题记录：后台 Java 进程内存持续增长」；执行 `./gradlew --stop` 可立即释放 |
-
-## z6x-hub
-
-运行在投影仪和手机上的常驻服务，源码位于 `hub/`。两台设备运行同一个程序，按各自的配置启用不同模块：投影仪负责文件共享、发送文字、网页遥控、网络唤醒、系统状态、测速等；手机作为资源库（网页游戏、漫画、短视频，与 omni-deck 的目录结构兼容）。部署方式任选其一：
-
-- 工具箱「📡 设备」页中选择设备，点击「部署并启动」；
-- 命令行执行 `./hub/deploy.sh projector` 或 `./hub/deploy.sh phone`（需要 Go 工具链，位于 `~/.local/go`；手机需先 `adb connect`）。
-
-每台设备的配置为 `hub/devices/<设备名>.yaml`，首次部署时由同目录的 `.example.yaml` 生成并写入随机 token，不会提交到仓库。部署后用浏览器打开 `http://设备IP:8090`，输入 token 登录（`grep token hub/devices/<设备名>.yaml`）。开关：`./hub/ctl.sh phone start|stop|status`，或网页首页的「停止 hub」。手机上的 hub 只在家里的 Wi-Fi 上对外服务（首次在家执行 `./hub/ctl.sh phone trust`），离开后自动停止，回来后自动恢复。向手机资源库导入游戏：`./hub/library-import.sh <文件夹> games.slg`。详见程序中「提案 → 规格 → 规格：z6x-hub」。
-
-## z6x-tools
-
-Rust 编写的命令集（源码位于 `tools/`），形式与 BusyBox 相同：一个约 640KB 的静态 aarch64 程序 `z6x`，以子命令区分功能——`sys`（系统指标）、`ports`（端口所属）、`key`（注入按键）、`keymap`（遥控器重映射守护）、`hash`（查找重复文件，只报告）、`watch`（目录变化）、`ping`、`iobench`（存储测速）、`run`（进程守护）。每个子命令支持 `--json`。
-
-```bash
-./tools/build.sh test                 # 单元测试
-./tools/build.sh deploy projector     # 低优先级编译（适合在 Steam Deck 上进行）并推送到投影仪
-adb shell /data/local/tmp/z6x-tools/z6x sys
-```
-
-详见程序中「提案 → 规格 → 规格：z6x-tools」。
-
-## 修改内容
-
-内容直接写在 Kotlin 代码中（`composeApp/src/commonMain/kotlin/z6x/content/`），而非 Markdown。修改后运行：
-
-```bash
-./run.sh --check                 # 静态检查：风险标注、格式、是否泄露敏感信息
-./run.sh --try-read [模块id…]     # 在真机上重新运行只读命令，与记录的输出对比
-```
-
-目录结构和新增内容的步骤见程序中「本项目技术栈 → 项目维护 → 项目结构与日常操作」。
+| --- | --- |
+| ADB 无法连接 | 「实践记录 → 应急与安全 → 应急恢复手册」：重启投影仪即可（开机脚本会先启动 adbd），或在 Termux 中执行 `/system/bin/setprop ctl.start adbd` |
+| 精简系统后需要恢复 | 投影仪：`scripts/z6x_debloat_restore.sh`；手机：`scripts/phone_debloat.sh restore` |
+| 手机 hub 被系统结束或冻结 | 「手机 → 环境配置 → hub 改在 Termux 中运行」：省电策略设为「无限制」，不持有唤醒锁 |
+| 后台 Java 进程占用大量内存 | 「本项目技术栈 → 项目维护 → 问题记录」；执行 `./gradlew --stop` 可立即释放 |
 
 ## 其他
 
 - 最初的 Avalonia（C#）版本已删除，其内容均已整理进来；如有需要，可从 git 标签 `avalonia-baseline` 取回。
-- 不要将代理节点、订阅链接、序列号、MAC 地址等个人信息写入仓库；`--check` 会检查常见的几类。
+- 网页终端内嵌的 xterm.js 以 MIT 许可证发布，见 `hub/internal/modules/webshell/assets/LICENSE-xterm.txt`。
+- 不要将 token、代理节点、订阅链接、序列号、MAC 地址等个人信息写入仓库；`--check` 会检查常见的几类。

@@ -17,7 +17,7 @@ val PhoneAdb = module("phone-adb", "无线调试：连接、开关与自动关�
         }
         read("查找当前端口", "adb mdns services", Host.Deck) {
             varies = true
-            captured("2026-10-02", "adb-3255e642-X3mb5O\t_adb-tls-connect._tcp\t192.168.0.104:41857")
+            captured("2026-10-02", "adb-<序列号>-<随机串>\t_adb-tls-connect._tcp\t192.168.0.104:41857")
             note = "无需到手机上查看端口：已配对的手机会通过 mDNS 广播当前端口。记录可能过时（关闭后旧端口仍会显示一段时间），连接被拒绝时以最新一条为准。"
         }
         change("连接", "adb connect 192.168.0.104:<端口>", Host.Deck)

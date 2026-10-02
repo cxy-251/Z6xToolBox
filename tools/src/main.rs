@@ -35,11 +35,13 @@ const HELP: &str = "z6x —— 极米 Z6X Pro 命令集
 
 退出码：0 成功，1 一般错误，2 参数错误，3 权限不足。";
 
+const SUBCOMMANDS: &[&str] = &["sys", "ports", "key", "keymap", "hash", "watch", "ping", "iobench", "run", "http"];
+
 fn main() {
     let mut args: Vec<String> = std::env::args().collect();
     let prog = std::path::Path::new(&args[0]).file_name().and_then(|s| s.to_str()).unwrap_or("z6x").to_string();
-    // 以 z6x-<子命令> 的名字调用时，等同于 z6x <子命令>
-    let sub = if let Some(s) = prog.strip_prefix("z6x-") {
+    // 以 z6x-<子命令> 的名字调用时，等同于 z6x <子命令>；后缀不是子命令名时（如下载的 z6x-arm64）按普通方式处理
+    let sub = if let Some(s) = prog.strip_prefix("z6x-").filter(|s| SUBCOMMANDS.contains(s)) {
         s.to_string()
     } else if args.len() > 1 {
         args.remove(1)

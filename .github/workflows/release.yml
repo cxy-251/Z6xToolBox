@@ -1,0 +1,181 @@
+# 推送 v* 标签（如 v0.2.0）时，构建桌面工具箱（Linux、Windows、macOS）与安卓端程序（z6x-hub、z6x），并创建 GitHub Release。
+# 也可以在 Actions 页面手动运行（只构建、上传构件，不创建 Release）。平时推送代码不触发任何构建。
+#
+# 版本规则：版本号来自仓库根目录的 VERSION 文件；只有第二位变化（x.Y.0）才发布，
+# 第三位的修订（如 v0.1.1）不发布，check 会直接拒绝这类标签。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+              echo "::error::标签 $GITHUB_REF_NAME 与 VERSION 中的 $version 不一致"; exit 1
+            fi
+            if [[ "${version##*.}" != 0 ]]; then
+              echo "::error::只有第二位变化（x.Y.0）才发布，$version 是修订版本"; exit 1
+            fi
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Content check
+        run: ./run.sh --check
+
+  linux:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Package
+        run: |
+          ./gradlew --no-daemon :composeApp:packageDeb :composeApp:createDistributable
+          mkdir -p dist
+          cp composeApp/build/compose/binaries/main/deb/*.deb "dist/Z6xToolBox-$VERSION-linux-x64.deb"
+          tar -C composeApp/build/compose/binaries/main/app -czf "dist/Z6xToolBox-$VERSION-linux-x64.tar.gz" Z6xToolBox
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Package
+        run: |
+          ./gradlew --no-daemon :composeApp:packageMsi :composeApp:createDistributable
+          mkdir -p dist
+          cp composeApp/build/compose/binaries/main/msi/*.msi "dist/Z6xToolBox-$VERSION-windows-x64.msi"
+          (cd composeApp/build/compose/binaries/main/app && 7z a -tzip -mx=9 "$GITHUB_WORKSPACE/dist/Z6xToolBox-$VERSION-windows-x64-portable.zip" Z6xToolBox)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  macos:
+    needs: check
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Package
+        run: |
+          ./gradlew --no-daemon :composeApp:createDistributable
+          app=composeApp/build/compose/binaries/main/app/Z6xToolBox.app
+          # 未经 Apple 公证，只做临时签名（ad-hoc），Apple Silicon 要求可执行文件至少有临时签名
+          codesign --force --deep --sign - "$app"
+          mkdir -p dmg dist
+          cp -R "$app" dmg/
+          ln -s /Applications dmg/Applications
+          # runner 上 hdiutil 偶尔报 "Resource busy"（系统仍在扫描刚写入的文件），失败后重试
+          for attempt in 1 2 3 4 5; do
+            hdiutil create -volname Z6xToolBox -srcfolder dmg -ov -format UDZO "dist/Z6xToolBox-$VERSION-macos-arm64.dmg" && break
+            [ $attempt = 5 ] && exit 1
+            sleep $((attempt * 5))
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: hub/go.mod
+      - name: Test hub
+        run: cd hub && go vet ./... && go test ./...
+      - name: Rust toolchain
+        run: |
+          rustup target add aarch64-unknown-linux-musl armv7-unknown-linux-musleabihf
+          cd tools && cargo test --quiet
+      - name: Build
+        run: |
+          mkdir -p dist
+          # 静态链接的 Linux 程序，在安卓上以 ADB（shell 身份）或 Termux 中运行
+          for arch in arm64 arm; do
+            case $arch in
+              arm64) goarch="GOARCH=arm64"; rust=aarch64-unknown-linux-musl ;;
+              arm)   goarch="GOARCH=arm GOARM=7"; rust=armv7-unknown-linux-musleabihf ;;
+            esac
+            out="out/z6x-android-$arch-$VERSION"
+            mkdir -p "$out"
+            (cd hub && env CGO_ENABLED=0 GOOS=linux $goarch go build -trimpath \
+              -ldflags="-s -w -X z6x/hub/internal/core.Version=$VERSION" -o "../$out/z6x-hub" ./cmd/z6x-hub)
+            (cd tools && cargo build --quiet --profile dist --target $rust && cp target/$rust/dist/z6x "../$out/z6x")
+            cp hub/devices/*.example.yaml hub/adb-boot.sh hub/termux/hub.sh hub/termux/projector-boot.sh "$out/"
+            cp packaging/android-README.txt "$out/README.txt"
+            tar -C out -czf "dist/z6x-android-$arch-$VERSION.tar.gz" "z6x-android-$arch-$VERSION"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*
+
+  release:
+    needs: [check, linux, windows, macos, android]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Z6xToolBox $GITHUB_REF_NAME" \
+            --notes-file packaging/release-notes.txt \
+            --generate-notes

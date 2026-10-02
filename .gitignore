@@ -37,3 +37,9 @@ hub/devices/*.yaml
 
 # z6x-tools（Rust）编译产物
 tools/target/
+
+# 发布流程与本地临时产物
+out/
+*.log
+*.bak
+hub/devices/*.yaml.tmp

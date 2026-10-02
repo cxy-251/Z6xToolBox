@@ -6,3 +6,8 @@ rustflags = ["-C", "link-self-contained=yes", "-C", "target-feature=+crt-static"
 [build]
 # 限制并行编译数，避免 Deck 内存紧张。CI 上可用 CARGO_BUILD_JOBS 覆盖。
 jobs = 4
+
+# 32 位 ARM（投影仪的用户空间为 armeabi-v7a；64 位程序在其 64 位内核上同样可以运行，两者都提供）
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
+rustflags = ["-C", "link-self-contained=yes", "-C", "target-feature=+crt-static"]
