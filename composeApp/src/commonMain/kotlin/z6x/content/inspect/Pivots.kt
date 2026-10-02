@@ -64,6 +64,9 @@ val Pivots = module("pivots", "方案调整记录") {
             5. 将权限实验命令标为「只读」→ `--check` 指出它们实际上是修改操作（只是预期会被拒绝）→ 按真实风险标注。
             6. 后台 Java 进程合计占用约 3GB → 用 `jps -l` 查看后发现并非工具箱泄漏，而是 Gradle 守护进程越积越多（窗口在守护进程中运行并占用它，下次编译只能新起一个）→ 改为 Gradle 只负责编译、由 java 直接启动窗口，并降低内存上限、缩短空闲时间。见「问题记录：后台 Java 进程内存持续增长」。
             7. 检查声卡时执行 `ls -l /dev/snd | head -4`，只看到 `total 0`，便写成「shell 看不到声卡设备」→ `--try-read` 重新执行 `ls /dev/snd | wc -l` 得到 8，前后矛盾 → 原来 `total 0` 只是磁盘块数（设备文件均为 0），真正的设备行被 `head` 截掉了。结论（无法使用声卡）不变，但原因应改为「设备属于 audio 组，shell 不在该组中」。**被截断的输出不能作为证据**。
+            8. 部署 hub 时，`adb shell "nohup ./z6x-hub … &"` 一直不返回 → 加上 `< /dev/null` 仍然卡住 → 改用 `setsid` 让进程脱离 adb shell 的会话，命令 1 秒内返回。见「规格：z6x-hub」。
+            9. 为结束卡住的部署脚本执行了 `pkill -f 'hub/deploy.sh'`，结果连执行这条命令的 shell 也一并结束——与第 3 条是同一个错误，已有记录却再次发生。**结束进程一律先查进程号，再按进程号 kill**。
+            10. hub 上传 1GB 用了近 8 分钟，看起来像是程序性能问题 → 分别测量：不写盘的上传 17Mbps、投影仪本地写盘 92MB/s、`adb push` 同样只有 4.4MB/s → 瓶颈在 Deck 的 2.4GHz 无线连接（链路 108Mbps），与 hub 无关。**先分段测量，再下结论**。
         """)
     }
 
@@ -81,6 +84,6 @@ val Pivots = module("pivots", "方案调整记录") {
         "find-adb-entry", "force-adb", "ssh-permission-wall", "usb-apk1", "lan-share",
         "app-install-order", "deck-hdmi", "find-real-model", "ssh-key-login", "tv-screencap", "install-jdk",
         "projectivy-launcher", "app-store-pivot", "input-method", "clash-proxy", "port-owner", "debloat-scripts",
-        "oom-watchdog", "packet-capture", "go-server", "logs-crash", "process-memory", "java-memory", "perm-model",
+        "oom-watchdog", "packet-capture", "go-server", "logs-crash", "process-memory", "java-memory", "perm-model", "spec-hub",
     )
 }

@@ -208,6 +208,7 @@ val ProjectLayout = module("project-layout", "项目结构与日常操作") {
             "…/z6x/content" to "全部内容；Content.kt 为目录，records / inspect / manual / custom / proposals / stack 分别存放各专区的内容",
             "composeApp/src/desktopMain" to "桌面入口 Main.kt、命令行工具 Tools.kt",
             "scripts/" to "一键精简与恢复脚本",
+            "hub/" to "z6x-hub（Go 常驻服务）的源码、配置示例与部署脚本 deploy.sh，见「规格：z6x-hub」",
             "dev/go-server/" to "Go 测试服务的源码",
             "notes/" to "环境搭建记录、提案审核数据与生成脚本",
         )

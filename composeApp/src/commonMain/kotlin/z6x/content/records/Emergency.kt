@@ -76,7 +76,7 @@ val Emergency = module("emergency", "应急恢复手册") {
         text("""
             • ADB：自动可用，无需处理（开机约 1 分钟后）。
             • SSH：在电视上打开 SimpleSSHD 并点击 Start。
-            • 自行部署的服务（Go 测试服务、z6x-hub）：需要通过 ADB 重新启动。
+            • 自行部署的服务需要通过 ADB 重新启动：z6x-hub 在 Deck 上执行 `./hub/deploy.sh` 即可（见「规格：z6x-hub」）。
             • 已停用的 3 个常驻组件（hilink 等）仍会启动，属于已知问题，见「停用清单」。
         """)
         change("重新启动 Go 测试服务", "adb shell 'nohup /data/local/tmp/z6x_go_server > /data/local/tmp/go_server.log 2>&1 &'", Host.Deck)
