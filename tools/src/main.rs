@@ -6,6 +6,7 @@
 
 mod cli;
 mod hash;
+mod http;
 mod iobench;
 mod key;
 mod keymap;
@@ -30,6 +31,7 @@ const HELP: &str = "z6x —— 极米 Z6X Pro 命令集
   ping      ICMP 延迟、抖动与丢包：z6x ping <IP> [--count 10]
   iobench   存储读写测速：z6x iobench <目录> [--size 256]
   run       进程守护：崩溃后按退避间隔重启：z6x run [--name 名称] -- <命令> [参数]
+  http      调用 HTTP 接口：z6x http POST http://IP:端口/路径（供按键动作调用本机 hub）
 
 退出码：0 成功，1 一般错误，2 参数错误，3 权限不足。";
 
@@ -60,6 +62,7 @@ fn main() {
         "ping" => ping::main(rest),
         "iobench" => iobench::main(rest),
         "run" => run::main(rest),
+        "http" => http::main(rest),
         "help" | "--help" | "-h" => {
             println!("{HELP}");
             Ok(())

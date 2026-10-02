@@ -24,6 +24,8 @@ import (
 type Config struct {
 	// File 是 keymap 守护进程读取的配置文件。
 	File string `yaml:"file"`
+	// Z6x 是 z6x 程序的位置，「一键清理」等动作用它调用本机 hub 的接口。
+	Z6x string `yaml:"z6x"`
 }
 
 type Module struct {
@@ -44,7 +46,7 @@ func (m *Module) Title() string { return "遥控器按键" }
 
 func (m *Module) Start(_ context.Context, env *core.Env) error {
 	m.env = env
-	m.cfg = Config{File: "/data/local/tmp/z6x-tools/keymap.conf"}
+	m.cfg = Config{File: "/data/local/tmp/z6x-tools/keymap.conf", Z6x: "/data/local/tmp/z6x-tools/z6x"}
 	return env.Config.Decode("keys", &m.cfg)
 }
 
@@ -57,7 +59,7 @@ var Buttons = []struct{ ID, Label string }{
 }
 
 // Slot 是一项设置：某个键的短按或长按对应的动作。Action 为空表示不设置。
-// 动作的写法：app:<包名/Activity>、tasks、key:<键名>、sh:<命令>。
+// 动作的写法：app:<包名/Activity>、tasks、clean、key:<键名>、sh:<命令>。
 type Slot struct {
 	Button string `json:"button"`
 	Long   bool   `json:"long"`
@@ -88,6 +90,8 @@ func (m *Module) parse(text string) []Slot {
 				action = "app:" + a
 			} else if strings.Contains(cmd, "/ui/tasks/") {
 				action = "tasks"
+			} else if strings.Contains(cmd, "/api/tasks/clean") {
+				action = "clean"
 			}
 		}
 		for i := range out {
@@ -136,6 +140,9 @@ func (m *Module) render(slots []Slot, lanIP string) (string, error) {
 		case "tasks":
 			// 在电视浏览器中打开任务管理页（浏览器需登录过一次 hub）
 			act = fmt.Sprintf("sh: am start -a android.intent.action.VIEW -d http://%s/ui/tasks/ -n com.phlox.tvwebbrowser/.activity.main.MainActivity", lanIP)
+		case "clean":
+			// 由 z6x 在本机调用 hub 的一键清理接口（hub 开启 trust_local，本机请求无需 token）
+			act = fmt.Sprintf("sh: %s http POST http://%s/api/tasks/clean", m.cfg.Z6x, lanIP)
 		case "key":
 			if !keyRe.MatchString(val) {
 				return "", fmt.Errorf("键名不正确：%s", val)
@@ -167,11 +174,15 @@ func (m *Module) apps(ctx context.Context) []App {
 		o, _ := m.r.Run(ctx, "cmd", "package", "query-activities", "--brief", "-a", "android.intent.action.MAIN", "-c", cat)
 		for _, l := range strings.Split(o, "\n") {
 			a := strings.TrimSpace(l)
-			// 跳过占位入口：极米设置的桌面入口为 com.xgimi.newsettings.mock.MockActivity，打开无反应（2026-10-02 用户确认）
+			// 跳过占位入口与打不开的应用：极米设置（com.android.newsettings）的两个桌面入口
+			// MockActivity、StyleFilterActivity 都打不开（2026-10-02 用户确认）
 			if !appRe.MatchString(a) || strings.Contains(a, ".mock.") || strings.HasSuffix(a, "MockActivity") {
 				continue
 			}
 			pkg := strings.SplitN(a, "/", 2)[0]
+			if hidden[pkg] {
+				continue
+			}
 			if seen[pkg] {
 				continue
 			}
@@ -186,6 +197,9 @@ func (m *Module) apps(ctx context.Context) []App {
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
+
+// hidden 是不在列表中显示的应用（无法从桌面打开）。
+var hidden = map[string]bool{"com.android.newsettings": true}
 
 var names = map[string]string{
 	"org.smarttube.stable": "SmartTube", "com.phlox.tvwebbrowser": "TV Bro 浏览器", "com.cxinventor.file.explorer": "CX 文件管理器",
@@ -205,7 +219,11 @@ func (m *Module) Routes(r core.Router) {
 		for i, b := range Buttons {
 			btns[i] = map[string]string{"id": b.ID, "label": b.Label}
 		}
-		core.WriteJSON(w, map[string]any{"buttons": btns, "slots": m.parse(string(raw)), "apps": m.apps(req.Context()), "file": m.cfg.File})
+		actions := []map[string]string{
+			{"value": "tasks", "label": "任务管理（在电视浏览器中打开）"},
+			{"value": "clean", "label": "一键清理后台（结束除前台与受保护应用外的全部应用）"},
+		}
+		core.WriteJSON(w, map[string]any{"buttons": btns, "slots": m.parse(string(raw)), "apps": m.apps(req.Context()), "actions": actions, "file": m.cfg.File})
 	})
 	r.HandleFunc("POST /api/keys/", func(w http.ResponseWriter, req *http.Request) {
 		var slots []Slot

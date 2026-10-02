@@ -1,31 +1,56 @@
 <style>
 #grid{width:100%;border-collapse:collapse}#grid th,#grid td{padding:8px 6px;border-bottom:1px solid rgba(127,127,127,.3);text-align:left;vertical-align:top}
-#grid select,#grid input{width:100%;margin-top:4px}
+#grid input{width:100%;margin-top:4px}
+#grid .pick{width:100%;text-align:left;white-space:normal}
+#picker{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;z-index:9;align-items:center;justify-content:center}
+#picker .box{background:var(--card,#161b22);border-radius:10px;width:min(560px,94vw);max-height:86vh;overflow:auto;padding:12px}
+#picker h3{margin:4px 0 8px}#picker .grp{opacity:.7;font-size:13px;margin:10px 0 4px}
+#picker button{display:block;width:100%;text-align:left;margin:4px 0}
+button:focus{outline:3px solid #2f81f7;outline-offset:2px}
 </style>
+<div id="picker"><div class="box" id="pbox"></div></div>
 <div class="card"><p>为遥控器上的四个影视快捷键和调焦键两侧的两个键设置功能：<b>短按</b>与<b>长按</b>（按住约 0.6 秒）各一个，共 12 项。保存后约 2 秒生效。</p>
 <table id="grid"><thead><tr><th>按键</th><th>短按</th><th>长按</th></tr></thead><tbody></tbody></table>
 <p class="row"><button id="save">保存</button><span class="msg" id="msg"></span></p>
 <p><small>「任务管理」会在电视浏览器（TV Bro）中打开任务管理页，浏览器需先登录过一次 hub。「自定义命令」以 shell 身份执行，请谨慎填写。<br>配置文件：<code id="file"></code></small></p></div>
 <script>
 const $=id=>document.getElementById(id);
-const el=(t,x)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;return e};
-const KEYS=[['home','主页'],['back','返回'],['mute','静音'],['playpause','播放 / 暂停'],['volup','音量加'],['voldown','音量减']];
+const el=(t,x,c)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e};
+const KEYS=[['home','主页'],['back','返回'],['mute','静音'],['playpause','播放 / 暂停'],['volup','音量加'],['voldown','音量减'],['next','下一个'],['prev','上一个']];
+document.addEventListener('keydown',e=>{if(e.key==='Escape'||e.key==='GoBack'||e.keyCode===4){$('picker').style.display='none'}});
 let data;
-function selectFor(slot){
-  const wrap=el('div'), sel=el('select'), extra=el('input');extra.placeholder='命令，例如 am start -n 包名/Activity';
-  const add=(v,t,g)=>{const o=el('option',t);o.value=v;(g||sel).append(o);return o};
-  add('','（不设置）');
-  const ga=el('optgroup');ga.label='打开应用';data.apps.forEach(a=>add('app:'+a.activity,a.name,ga));sel.append(ga);
-  const gt=el('optgroup');gt.label='功能';add('tasks','任务管理',gt);sel.append(gt);
-  const gk=el('optgroup');gk.label='按键';KEYS.forEach(([k,t])=>add('key:'+k,t,gk));sel.append(gk);
-  add('sh:','自定义命令…');
+// 选项：[值, 显示文字, 分组]。用全屏列表代替系统下拉菜单：在电视浏览器中，靠近页面底部的下拉菜单会超出屏幕。
+function options(){
+  const o=[['','（不设置）','']];
+  data.apps.forEach(a=>o.push(['app:'+a.activity,a.name,'打开应用']));
+  data.actions.forEach(a=>o.push([a.value,a.label,'功能']));
+  KEYS.forEach(([k,t])=>o.push(['key:'+k,t,'按键']));
+  o.push(['sh:','自定义命令…','高级']);
+  return o;
+}
+function labelOf(v){if(v.startsWith('sh:')&&v.length>3)return '命令：'+v.slice(3).trim();const f=options().find(x=>x[0]===v);return f?f[1]:(v||'（不设置）')}
+function selectFor(slot,title){
+  const wrap=el('div'), btn=el('button',null,'ghost pick'), extra=el('input');
+  extra.placeholder='命令，例如 am start -n 包名/Activity';
   let v=slot.action||'';
-  if(v.startsWith('sh:')){sel.value='sh:';extra.value=v.slice(3).trim()}
-  else{ if(v&&![...sel.options].some(o=>o.value===v))add(v,v);sel.value=v }
-  const upd=()=>extra.style.display=sel.value==='sh:'?'':'none';sel.onchange=upd;upd();
-  wrap.append(sel,extra);
-  wrap.value=()=>sel.value==='sh:'?(extra.value.trim()?'sh:'+extra.value.trim():''):sel.value;
+  const show=()=>{btn.textContent=labelOf(v);extra.style.display=v.startsWith('sh:')?'':'none';if(v.startsWith('sh:'))extra.value=v.slice(3).trim()};
+  btn.onclick=()=>openPicker(title,v,nv=>{v=nv;show();if(nv==='sh:')extra.focus()});
+  extra.oninput=()=>{v='sh:'+extra.value};
+  show();wrap.append(btn,extra);
+  wrap.value=()=>v.startsWith('sh:')?(v.slice(3).trim()?'sh:'+v.slice(3).trim():''):v;
   return wrap;
+}
+function openPicker(title,cur,done){
+  const box=$('pbox');box.replaceChildren(el('h3',title));
+  let grp=null,focus=null;
+  for(const [v,t,g] of options()){
+    if(g!==grp){grp=g;if(g)box.append(el('div',g,'grp'))}
+    const b=el('button',(v===cur?'✓ ':'')+t,v===cur?'':'ghost');
+    b.onclick=()=>{$('picker').style.display='none';done(v)};
+    box.append(b);if(v===cur)focus=b;
+  }
+  const c=el('button','取消','ghost');c.onclick=()=>$('picker').style.display='none';box.append(c);
+  $('picker').style.display='flex';(focus||box.querySelector('button')).focus();
 }
 async function load(){
   data=await (await fetch('/api/keys/')).json();$('file').textContent=data.file;
@@ -34,7 +59,7 @@ async function load(){
     const tr=el('tr');tr.append(el('td',b.label));
     for(const long of [false,true]){
       const s=data.slots.find(x=>x.button===b.id&&x.long===long)||{button:b.id,long,action:''};
-      const td=el('td'),w=selectFor(s);w.dataset.button=b.id;w.dataset.long=long;td.append(w);tr.append(td);
+      const td=el('td'),w=selectFor(s,b.label+(long?' · 长按':' · 短按'));w.dataset.button=b.id;w.dataset.long=long;td.append(w);tr.append(td);
     }
     tb.append(tr);
   }
