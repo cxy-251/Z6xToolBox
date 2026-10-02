@@ -36,14 +36,23 @@ type Module struct {
 	gameCache map[string]*Game
 	gameAt    time.Time
 	pageCache map[string]pageIndex
+
+	mediaIx mediaIndex // 短视频与音声的扫描结果（media.go）
+	likes   likeStore
+
+	audioProgress progressStore // 音声续听（与 omni-deck 的 audio_progress.json 同格式）
+	novelProgress progressStore // 小说阅读进度
+	novelCache    novelCache
 }
 
 func New() *Module {
 	return &Module{thumbSem: make(chan struct{}, 2), pageCache: map[string]pageIndex{}}
 }
 
-func (m *Module) Name() string  { return "library" }
-func (m *Module) Title() string { return "资源库：游戏、漫画、短视频" }
+func (m *Module) Name() string { return "library" }
+func (m *Module) Title() string {
+	return "资源库：游戏、漫画、短视频、多联放映、音声、小说"
+}
 
 func (m *Module) Start(_ context.Context, env *core.Env) error {
 	m.env = env
@@ -52,6 +61,13 @@ func (m *Module) Start(_ context.Context, env *core.Env) error {
 		return err
 	}
 	m.thumbDir = filepath.Join(env.Config.DataDir, "library", "thumbs")
+	m.likes.path = filepath.Join(env.Config.DataDir, "library", "shortvideo_likes.json")
+	m.likes.load()
+	m.audioProgress.path = filepath.Join(env.Config.DataDir, "library", "audio_progress.json")
+	m.audioProgress.load()
+	m.novelProgress.path = filepath.Join(env.Config.DataDir, "library", "novels_progress.json")
+	m.novelProgress.load()
+	go m.media() // 启动时在后台完成首次扫描，第一次打开页面不必等待
 	libs := m.libs()
 	env.Log.Info("资源库", "count", len(libs))
 	return nil
@@ -63,6 +79,9 @@ func (m *Module) Routes(r core.Router) {
 	m.gameRoutes(r)
 	m.mangaRoutes(r)
 	m.videoRoutes(r)
+	m.mediaRoutes(r)
+	m.audioRoutes(r)
+	m.novelRoutes(r)
 	m.importRoutes(r)
 	m.pageRoutes(r)
 }

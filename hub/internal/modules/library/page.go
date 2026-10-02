@@ -9,6 +9,8 @@ import (
 func (m *Module) pageRoutes(r core.Router) {
 	r.HandleFunc("GET /ui/library/{$}", func(w http.ResponseWriter, _ *http.Request) { core.Page(w, "资源库", lobbyHTML) })
 	r.HandleFunc("GET /ui/library/read", func(w http.ResponseWriter, _ *http.Request) { core.Page(w, "漫画", readerHTML) })
+	r.HandleFunc("GET /ui/library/matrix/{$}", m.matrixPage)
+	m.readingPageRoutes(r)
 	r.HandleFunc("GET /ui/library/clips", func(w http.ResponseWriter, _ *http.Request) { core.Page(w, "短视频", clipsHTML) })
 }
 
@@ -24,7 +26,7 @@ main{max-width:1100px}
 </style>`
 
 const lobbyHTML = libCSS + `<div class="tabs" id="tabs">
-<button data-t="games">游戏</button><button data-t="manga">漫画</button><button data-t="videos">短视频</button><button data-t="libs">存储与转移</button></div>
+<button data-t="games">游戏</button><button data-t="manga">漫画</button><button data-t="videos">短视频</button><button onclick="location.href='/ui/library/matrix/'">📺 多联放映</button><button onclick="location.href='/ui/library/audio/'">🎧 音声</button><button onclick="location.href='/ui/library/novels/'">📚 小说</button><button data-t="libs">存储与转移</button></div>
 <div class="row" style="margin-bottom:10px"><input id="q" placeholder="按名称筛选" style="max-width:320px"><span class="msg" id="msg"></span></div>
 <div id="out"></div>
 <script>
@@ -68,7 +70,7 @@ async function load(t){tab=t;localStorage.setItem('z6x-lib-tab',t);
   $('msg').textContent='读取中…';
   const url={games:'/api/library/games',manga:'/api/library/manga',videos:'/api/library/videos'}[t];
   data=url?await (await fetch(url)).json():[];render()}
-document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>load(b.dataset.t));
+document.querySelectorAll('#tabs button[data-t]').forEach(b=>b.onclick=()=>load(b.dataset.t));
 $('q').oninput=render;load(tab);
 </script>`
 
