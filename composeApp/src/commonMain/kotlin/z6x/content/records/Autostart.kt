@@ -9,7 +9,7 @@ val ProjectorAutostart = module("projector-autostart", "开机自动启动 hub �
         hub 与 keymap 必须以 shell 身份运行（读取按键、日志，模拟按键），而 shell 身份的程序只能从 ADB 启动；没有 root，就没有让它们开机自启的入口，原来每次投影仪重启后都要从 Deck 重新启动。
         现在由投影仪自己完成：开机时 Termux:Boot 运行脚本，用 Termux 自带的 adb 连接投影仪自己的 ADB（127.0.0.1:5555），再以 shell 身份启动 hub 与 keymap。思路与 Shizuku、LADB 相同。
     """
-    partial("2026-10-02")
+    verified("2026-10-02")
 
     why("为什么可行") {
         facts(
@@ -38,8 +38,12 @@ val ProjectorAutostart = module("projector-autostart", "开机自动启动 hub �
         """)
     }
 
-    verify("待验证") {
-        text("重启投影仪后，hub 与 keymap 是否自动运行（查看 /data/local/tmp/z6x-boot.log）。")
+    verify("重启实测（2026-10-02）") {
+        facts(
+            "结果" to "✓ 用户重启投影仪：开机约 70 秒后（Android 启动 + Termux:Boot + 脚本中等待的 20 秒）hub 与 keymap 自动运行，均为 uid 2000，hub 网页正常响应。全程不需要 Deck",
+            "启动日志" to "/data/local/tmp/z6x-boot.log 记录「已启动 hub」「已启动 keymap」",
+        )
+        read("查看启动日志", "tail -5 /data/local/tmp/z6x-boot.log", Host.Adb) { varies = true }
     }
     related("adb-autostart", "spec-hub", "remote-keys")
 }

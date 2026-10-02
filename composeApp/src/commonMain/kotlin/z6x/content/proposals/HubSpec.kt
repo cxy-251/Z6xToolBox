@@ -46,7 +46,7 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
             "时区" to "安卓没有 /etc/localtime，Go 默认使用 UTC。hub 内嵌时区数据，并读取 `persist.sys.timezone` 设置本地时区",
             "关屏" to "电源菜单选择「关屏」后，安卓认为屏幕仍处于开启状态，hub 持续提供服务（实测）",
             "关机" to "「关机」实际上是挂起到内存的睡眠：约 14 秒后断网，开机后进程原样恢复（同一 PID），无需重新启动。hub 的定时任务按实际时间运行，可以承受冻结",
-            "重启" to "只有「重启」和断电才是真正的重启：ADB 会自动运行，但 hub 需要由 Deck 重新部署启动（`hub/deploy.sh`）",
+            "重启" to "只有「重启」和断电才是真正的重启。2026-10-02 起由 Termux:Boot 经本机 ADB 自动启动 hub 与 keymap，开机约 70 秒后可用，不再需要 Deck（见「开机自动启动 hub 与 keymap」）",
         )
     }
 
