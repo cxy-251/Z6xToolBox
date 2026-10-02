@@ -64,6 +64,18 @@
 
 每台设备的配置为 `hub/devices/<设备名>.yaml`，首次部署时由同目录的 `.example.yaml` 生成并写入随机 token，不会提交到仓库。部署后用浏览器打开 `http://设备IP:8090`，输入 token 登录（`grep token hub/devices/<设备名>.yaml`）。开关：`./hub/ctl.sh phone start|stop|status`，或网页首页的「停止 hub」。手机上的 hub 只在家里的 Wi-Fi 上对外服务（首次在家执行 `./hub/ctl.sh phone trust`），离开后自动停止，回来后自动恢复。向手机资源库导入游戏：`./hub/library-import.sh <文件夹> games.slg`。详见程序中「提案 → 规格 → 规格：z6x-hub」。
 
+## z6x-tools
+
+Rust 编写的命令集（源码位于 `tools/`），形式与 BusyBox 相同：一个约 640KB 的静态 aarch64 程序 `z6x`，以子命令区分功能——`sys`（系统指标）、`ports`（端口所属）、`key`（注入按键）、`keymap`（遥控器重映射守护）、`hash`（查找重复文件，只报告）、`watch`（目录变化）、`ping`、`iobench`（存储测速）、`run`（进程守护）。每个子命令支持 `--json`。
+
+```bash
+./tools/build.sh test                 # 单元测试
+./tools/build.sh deploy projector     # 低优先级编译（适合在 Steam Deck 上进行）并推送到投影仪
+adb shell /data/local/tmp/z6x-tools/z6x sys
+```
+
+详见程序中「提案 → 规格 → 规格：z6x-tools」。
+
 ## 修改内容
 
 内容直接写在 Kotlin 代码中（`composeApp/src/commonMain/kotlin/z6x/content/`），而非 Markdown。修改后运行：
