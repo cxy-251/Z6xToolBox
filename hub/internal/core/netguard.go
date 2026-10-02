@@ -129,6 +129,9 @@ type Gate struct {
 	svcs   []*gateSvc
 	bound  string // 当前监听的地址（IP，或 "*" 表示所有地址）；空表示未监听
 	reason string // 未监听的原因
+	// missing 是连续取不到网络指纹的次数。手机上读取路由器 UPnP 标识偶尔超时（约每小时一次，下一次即恢复），
+	// 取不到不等于换了网络：IP 未变时继续服务，连续 3 次（约 45 秒）取不到才停止。
+	missing int
 }
 
 type gateSvc struct {
@@ -136,9 +139,9 @@ type gateSvc struct {
 	port    int
 	handler http.Handler
 	srv     *http.Server
-	// raw 不为空时为普通 TCP 服务（如 SSH）：监听后交给 raw 处理，关闭时关闭监听器
+	// raw 不为空时为普通 TCP 服务（如 SSH）：监听后交给 raw 处理
 	raw func(net.Listener)
-	ln  net.Listener
+	ln  net.Listener // 当前的监听器（HTTP 与普通 TCP 服务都保存），关闭时直接关闭
 }
 
 func NewGate(cfg NetworkConfig, token string, log *slog.Logger) *Gate {
@@ -179,10 +182,24 @@ func (g *Gate) want() (string, string) {
 		return "", "无法读取网络状态：" + err.Error()
 	case st.IP == "":
 		return "", g.cfg.Iface + " 没有 IPv4 地址（未连接 Wi-Fi）"
+	case len(g.cfg.Trusted) > 0 && st.Fingerprint == "" && st.IP == g.currentIP() && g.missing < 2:
+		g.missing++
+		return st.IP, "" // 指纹暂时取不到，IP 未变：继续服务
 	case len(g.cfg.Trusted) > 0 && !slices.Contains(g.cfg.Trusted, st.Fingerprint):
+		g.missing = 0
+		if st.Fingerprint == "" {
+			return "", "连续多次取不到网络指纹（路由器 UPnP 无响应）"
+		}
 		return "", "当前 Wi-Fi 不是可信网络"
 	}
+	g.missing = 0
 	return st.IP, ""
+}
+
+func (g *Gate) currentIP() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.bound
 }
 
 // Run 立即检查一次网络并开启监听，之后每隔 interval 检查一次，直到 ctx 结束。
@@ -230,8 +247,10 @@ func (g *Gate) check() error {
 			g.closeLocked()
 			return fmt.Errorf("%s 端口 %d 监听失败：%w", s.name, s.port, err)
 		}
+		// 保存监听器并在关闭时直接关闭它：http.Server.Close 只关闭 Serve 已接手的监听器，
+		// 开始监听后马上关闭时 Serve 可能尚未运行，监听器会遗留下来（单元测试中约四成概率复现）
+		s.ln = ln
 		if s.raw != nil {
-			s.ln = ln
 			go s.raw(ln)
 			continue
 		}

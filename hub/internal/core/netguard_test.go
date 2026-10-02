@@ -87,3 +87,32 @@ func TestLoginCodeSingleUse(t *testing.T) {
 		t.Fatal("空登录码应当无效")
 	}
 }
+
+// TestGateToleratesMissingFingerprint：指纹偶尔取不到且 IP 未变时继续服务，连续 3 次才停止；换了网络立即停止。
+func TestGateToleratesMissingFingerprint(t *testing.T) {
+	trusted := fingerprint("tok", "aa:bb:cc:dd:ee:ff")
+	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	state := NetState{IP: "127.0.0.1", Fingerprint: trusted}
+	g.probe = func() (NetState, error) { return state, nil }
+	port := freePort(t)
+	g.Add("main", port, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer g.close()
+	g.check()
+	state.Fingerprint = ""
+	g.check()
+	g.check()
+	if !reachable(port) {
+		t.Fatal("指纹连续两次取不到时应继续服务")
+	}
+	g.check()
+	if reachable(port) {
+		t.Fatal("连续三次取不到指纹应停止服务")
+	}
+	state.Fingerprint = trusted
+	g.check()
+	state.Fingerprint = fingerprint("tok", "11:22:33:44:55:66")
+	g.check()
+	if reachable(port) {
+		t.Fatal("换到其他网络应立即停止")
+	}
+}

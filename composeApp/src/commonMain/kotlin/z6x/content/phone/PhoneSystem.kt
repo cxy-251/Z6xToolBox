@@ -88,7 +88,7 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
             note = "`hub/devices/devices.txt` 中手机一行的第三列为 termux，部署和开关都改经 SSH 进行。程序位于 Termux 的 `~/z6x-hub/`。"
         }
         change("在手机上开关", "hub start\nhub stop\nhub status", Host.Termux) {
-            note = "部署时在 `~/.bashrc` 中加入了别名 `hub`。启动时申请唤醒锁（termux-wake-lock），防止灭屏后休眠；停止时释放。"
+            note = "部署时在 `~/.bashrc` 中加入了别名 `hub`。默认不申请唤醒锁（见下方「唤醒锁实验」），需要时用 `Z6X_WAKELOCK=1 hub start`。"
         }
         change("在 Deck 上开关", "./hub/ctl.sh phone start | stop | status | trust", Host.Deck)
     }
@@ -100,6 +100,21 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
             "被结束（17:32）" to "日志：`Force stopping com.termux ... from process:com.miui.securitycenter`，8 秒后 `Powerkeeper ... NoRestrictAppsList add: com.termux`。即修改省电策略的那一刻，手机管家会先强制停止该应用，不是后台清理所致，此后不会反复发生。需重新打开一次 Termux",
             "打开 Termux 自动启动" to "`~/.bashrc` 中检查：sshd 或 hub 未运行则启动。`hub status` 在未运行时返回退出码 1，供此判断（最初返回 0，导致自动启动不生效）",
             "手机重启后" to "需要打开一次 Termux。若要开机自动启动，需另装 Termux:Boot 插件（尚未安装）",
+        )
+    }
+
+    verify("唤醒锁实验（2026-10-02）") {
+        facts(
+            "持有唤醒锁" to "17:25 左右启动（hub start 中执行 termux-wake-lock），18:26 被 HyperOS 结束：日志为 PowerSaveService 判定 Termux 异常耗电（abnormalDataModel … paction=2），原因 AutoPowerKill。省电策略已设为「无限制」也未能避免",
+            "不持有唤醒锁" to "19:00 启动后持续运行，20:20 检查仍是同一进程（PID 28622，80 分钟未被结束），期间网页一直可访问。结论：唤醒锁是触发异常耗电判定的原因，改为默认不申请",
+        )
+    }
+
+    verify("网络守卫的误判与修正（2026-10-02）") {
+        facts(
+            "现象" to "日志中约每小时出现一次「当前 Wi-Fi 不是可信网络」，十几秒后恢复：手机读取路由器 UPnP 标识偶尔在 2 秒内收不到回复，指纹为空，被当成换了网络",
+            "修正" to "取不到指纹且 IP 未变时继续服务，连续 3 次（约 45 秒）取不到才停止；指纹不同或 IP 改变时仍立即停止",
+            "顺带发现的缺陷" to "新增的单元测试约四成概率失败：开始监听后马上停止时，http.Server 尚未接手监听器，Close 不会关闭它，端口遗留下来。改为保存每个监听器并在停止时直接关闭，此后连续 30 次通过",
         )
     }
 
