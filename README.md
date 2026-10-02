@@ -29,7 +29,7 @@
 在 [Releases](https://github.com/cxy-251/Z6xToolBox/releases) 页面下载：
 
 - **桌面工具箱**（自带 Java 运行时）：Linux / Steam Deck 用 `.deb` 或 `.tar.gz`；Windows 用 `.msi`（不需要管理员权限）或 `-portable.zip`；macOS（Apple Silicon）用 `.dmg`，未经 Apple 公证，首次打开需在「系统设置 → 隐私与安全性」中允许。
-- **安卓端程序**：`z6x-android-arm64.tar.gz`（多数设备）或 `z6x-android-arm.tar.gz`（32 位用户空间），内含 z6x-hub、z6x、配置示例与启动脚本，用法见包内 README.txt。
+- **安卓端程序**：`z6x-android-arm64-<版本>.tar.gz`（多数设备）或 `z6x-android-arm-<版本>.tar.gz`（32 位用户空间），内含 z6x-hub、z6x、配置示例与启动脚本，用法见包内 README.txt。
 
 部署 hub、改键、连接设备等功能需要从源码运行（依赖仓库中的脚本与 Go 工具链）；下载的安装包可以完整阅读知识库。
 
@@ -78,6 +78,8 @@
 2. 提交后打标签并推送：`git tag v<版本号> && git push origin main --tags`。
 
 推送标签后由 GitHub Actions 在 Linux、Windows、macOS 上构建工具箱，在 Linux 上交叉编译安卓端程序，生成校验值并创建 Release。平时推送代码不触发任何构建。
+
+标签构建失败时，不必重打标签：修复并推送到 main 后，执行 `gh workflow run release.yml -f tag=v<版本号>`（或在 Actions 页面手动运行并填写标签），由 main 的代码构建并发布到该标签。
 
 ## 故障排查
 
