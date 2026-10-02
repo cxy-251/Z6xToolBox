@@ -62,7 +62,7 @@
 - 工具箱「📡 设备」页中选择设备，点击「部署并启动」；
 - 命令行执行 `./hub/deploy.sh projector` 或 `./hub/deploy.sh phone`（需要 Go 工具链，位于 `~/.local/go`；手机需先 `adb connect`）。
 
-每台设备的配置为 `hub/devices/<设备名>.yaml`，首次部署时由同目录的 `.example.yaml` 生成并写入随机 token，不会提交到仓库。部署后用浏览器打开 `http://设备IP:8090`，输入 token 登录（`grep token hub/devices/<设备名>.yaml`）。向手机资源库导入游戏：`./hub/library-import.sh <文件夹> games.slg`。详见程序中「提案 → 规格 → 规格：z6x-hub」。
+每台设备的配置为 `hub/devices/<设备名>.yaml`，首次部署时由同目录的 `.example.yaml` 生成并写入随机 token，不会提交到仓库。部署后用浏览器打开 `http://设备IP:8090`，输入 token 登录（`grep token hub/devices/<设备名>.yaml`）。开关：`./hub/ctl.sh phone start|stop|status`，或网页首页的「停止 hub」。手机上的 hub 只在家里的 Wi-Fi 上对外服务（首次在家执行 `./hub/ctl.sh phone trust`），离开后自动停止，回来后自动恢复。向手机资源库导入游戏：`./hub/library-import.sh <文件夹> games.slg`。详见程序中「提案 → 规格 → 规格：z6x-hub」。
 
 ## 修改内容
 

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"log/slog"
@@ -31,6 +30,8 @@ type Hub struct {
 	entries []*entry
 	started time.Time
 	cfgPath string
+	gate    *Gate
+	stop    context.CancelFunc
 }
 
 func New(cfg *Config, log *slog.Logger) *Hub {
@@ -48,15 +49,20 @@ func (h *Hub) Add(m Module) {
 // Run 启动所有模块和主 HTTP 服务，直到 ctx 被取消。
 func (h *Hub) Run(ctx context.Context) error {
 	h.started = time.Now()
+	ctx, h.stop = context.WithCancel(ctx)
+	defer h.stop()
+	h.gate = NewGate(h.cfg.Network, h.cfg.Token, h.log)
 	mux := http.NewServeMux()
 	h.coreRoutes(mux)
+	h.stopRoute(mux)
 	if h.cfgPath != "" {
 		h.configRoutes(mux)
 	}
 
 	for _, e := range h.entries {
 		e := e
-		env := &Env{Config: h.cfg, Log: h.log.With("module", e.mod.Name()), Fail: func(err error) { e.set(StateFailed, err) }}
+		env := &Env{Config: h.cfg, Log: h.log.With("module", e.mod.Name()), Fail: func(err error) { e.set(StateFailed, err) },
+			Serve: func(port int, handler http.Handler) { h.gate.Add(e.mod.Name(), port, handler) }}
 		if err := h.startModule(ctx, e, env); err != nil {
 			h.log.Error("模块启动失败", "module", e.mod.Name(), "err", err)
 			e.set(StateFailed, err)
@@ -67,25 +73,27 @@ func (h *Hub) Run(ctx context.Context) error {
 		h.log.Info("模块已启动", "module", e.mod.Name())
 	}
 
-	srv := &http.Server{Addr: h.cfg.Listen, Handler: logRequests(h.log, mux), ReadHeaderTimeout: 10 * time.Second}
+	// 主端口与模块的独立端口都交给 gate：按网络状态统一开启或关闭，每 15 秒检查一次。
+	h.gate.Add("listen", portOf(h.cfg.Listen), logRequests(h.log, mux))
 	errc := make(chan error, 1)
-	go func() { errc <- srv.ListenAndServe() }()
-	h.log.Info("z6x-hub 已启动", "version", Version, "listen", h.cfg.Listen, "modules", len(h.entries))
+	go func() { errc <- h.gate.Run(ctx, 15*time.Second) }()
+	h.log.Info("z6x-hub 已启动", "version", Version, "listen", h.cfg.Listen, "iface", h.cfg.Network.Iface, "modules", len(h.entries))
 
+	var runErr error
 	select {
 	case <-ctx.Done():
-	case err := <-errc:
-		if !errors.Is(err, http.ErrServerClosed) {
-			return fmt.Errorf("HTTP 服务异常退出：%w", err)
-		}
+	case runErr = <-errc:
 	}
+	h.stop()
 	shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	srv.Shutdown(shut)
 	for _, e := range h.entries {
 		if err := e.mod.Stop(shut); err != nil {
 			h.log.Warn("模块停止时出错", "module", e.mod.Name(), "err", err)
 		}
+	}
+	if runErr != nil {
+		return runErr
 	}
 	h.log.Info("z6x-hub 已退出")
 	return nil
@@ -162,9 +170,13 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 			b.WriteString("</li>")
 		}
 		b.WriteString("</ul>")
+		if bound, _ := h.gate.Status(); bound != "" && bound != "*" {
+			fmt.Fprintf(&b, "<p><small>只在 %s 的 %s 上对外服务；离开可信 Wi-Fi 后自动停止，回来后自动恢复。</small></p>", html.EscapeString(h.cfg.Network.Iface), html.EscapeString(bound))
+		}
 		if h.cfgPath != "" {
 			b.WriteString(`<p><a href="/ui/config/">编辑配置</a></p>`)
 		}
+		b.WriteString(`<form method="post" action="/api/stop" onsubmit="return confirm('停止 hub？停止后需要在 Deck 上执行 ./hub/ctl.sh 启动。')"><button class="ghost">停止 hub</button></form>`)
 		fmt.Fprintf(&b, "<p><small>版本 %s · 已运行 %s</small></p>", Version, time.Since(h.started).Round(time.Second))
 		Page(w, "z6x-hub · "+h.cfg.Name, b.String())
 	})
@@ -233,4 +245,13 @@ func logRequests(log *slog.Logger, h http.Handler) http.Handler {
 		}
 		log.Info("请求", "method", r.Method, "path", r.URL.Path, "status", rec.code, "ms", time.Since(start).Milliseconds(), "from", r.RemoteAddr)
 	})
+}
+
+// stopRoute 让用户在网页上停止 hub（例如在手机上用完后关闭）。Cookie 为 SameSite=Strict，其他网站无法代为提交。
+func (h *Hub) stopRoute(mux *http.ServeMux) {
+	mux.Handle("POST /api/stop", RequireToken(h.cfg.Token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.log.Warn("收到停止请求", "remote", r.RemoteAddr)
+		Page(w, "已停止", `<p>hub 已停止。重新启动：在 Deck 上执行 <code>./hub/ctl.sh 设备名 start</code>。</p>`)
+		go func() { time.Sleep(500 * time.Millisecond); h.stop() }()
+	})))
 }

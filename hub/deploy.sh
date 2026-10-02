@@ -20,23 +20,8 @@ for a in "$@"; do
   esac
 done
 
-# 解析设备名和 ADB 地址
-if [[ "$TARGET" == *.* ]]; then
-  ADDR="$TARGET"
-  NAME=$(awk -v h="${TARGET%%:*}" '!/^#/ && NF>=2 { split($2, a, ":"); if (a[1] == h) { print $1; exit } }' devices/devices.txt)
-  [ -n "$NAME" ] || { echo "devices/devices.txt 中没有 IP 为 ${TARGET%%:*} 的设备"; exit 1; }
-else
-  NAME="$TARGET"
-  ADDR=$(awk -v n="$NAME" '!/^#/ && $1 == n { print $2; exit }' devices/devices.txt)
-  [ -n "$ADDR" ] || { echo "未知设备：$NAME（可选：$(awk '!/^#/ && NF { printf "%s ", $1 }' devices/devices.txt)）"; exit 1; }
-fi
-if [[ "$ADDR" != *:* ]]; then
-  # 只有 IP：找该 IP 当前已连接的端口（手机无线调试每次开启端口都不同）
-  ADDR=$(adb devices | awk -v h="$ADDR" '$2 == "device" && index($1, h ":") == 1 { print $1; exit }')
-  [ -n "$ADDR" ] || { echo "$NAME 未连接。请先在手机「无线调试」中查看端口，执行 adb connect <IP>:<端口>"; exit 1; }
-fi
-CFG="devices/$NAME.yaml"
-DIR=/data/local/tmp/z6x-hub
+source ./lib.sh
+resolve_device "$TARGET"
 export PATH="$HOME/.local/go/bin:$PATH"
 
 if [ ! -f "$CFG" ]; then
@@ -66,9 +51,4 @@ adb -s "$ADDR" push z6x-hub "$DIR/" >/dev/null
 adb -s "$ADDR" shell "chmod 755 $DIR/z6x-hub && chmod 600 $DIR/hub.yaml && $DIR/z6x-hub -c $DIR/hub.yaml -check"
 
 echo "== 重启 hub"
-# setsid 让 hub 脱离 adb shell 的会话，否则 adb shell 会一直等待它退出而无法返回。
-timeout 20 adb -s "$ADDR" shell "cd $DIR && pid=\$(pidof z6x-hub); [ -n \"\$pid\" ] && kill \$pid; sleep 1; setsid ./z6x-hub -c hub.yaml > stdout.log 2>&1 < /dev/null &"
-sleep 2
-HOST="${ADDR%%:*}"
-H=$(curl -s -m 5 "http://$HOST:8090/api/health") || { echo "hub 未响应，查看日志：adb -s $ADDR shell cat $DIR/hub.log"; exit 1; }
-echo "== hub 已启动：$(echo "$H" | grep -c '"running"') 个模块运行中，$(echo "$H" | grep -c '"failed"') 个失败"
+start_hub

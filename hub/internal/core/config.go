@@ -19,6 +19,8 @@ type Config struct {
 	DataDir string               `yaml:"data_dir"`
 	LogFile string               `yaml:"log_file"`
 	Modules map[string]yaml.Node `yaml:"modules"`
+	// Network 限定在哪个网络上对外服务，见 netguard.go。
+	Network NetworkConfig `yaml:"network"`
 }
 
 // ModuleConfig 是每个模块配置里共有的字段。
@@ -82,6 +84,9 @@ func (c *Config) validate() error {
 			errs = append(errs, fmt.Sprintf("端口 %d 冲突：%s 与 %s", mc.Port, other, name))
 		}
 		used[mc.Port] = name
+	}
+	if len(c.Network.Trusted) > 0 && c.Network.Iface == "" {
+		errs = append(errs, "network.trusted 需要同时配置 network.iface（例如 wlan0）")
 	}
 	if len(errs) > 0 {
 		return errors.New("配置校验失败：\n  - " + strings.Join(errs, "\n  - "))

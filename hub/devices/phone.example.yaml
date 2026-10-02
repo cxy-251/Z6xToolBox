@@ -8,6 +8,13 @@ listen: ":8090"
 data_dir: data
 log_file: hub.log
 
+# 网络：只在 Wi-Fi 的局域网 IPv4 地址上对外服务，不监听 IPv6 公网地址和移动数据网络。
+# trusted 为可信 Wi-Fi 的指纹：在家里执行 ./hub/ctl.sh phone trust 自动添加。
+# 连到其他 Wi-Fi 或断开 Wi-Fi 时 hub 自动停止对外服务，回到家里 15 秒内自动恢复。
+network:
+  iface: wlan0
+  trusted: []
+
 modules:
   # 资源库：与 omni-deck 相同的目录结构，位于机身存储的 omni_library/。
   library:

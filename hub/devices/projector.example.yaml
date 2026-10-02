@@ -7,6 +7,11 @@ token: "换成随机长字符串"
 data_dir: data
 log_file: hub.log
 
+# 网络：只在 Wi-Fi 的局域网 IPv4 地址上对外服务，不监听 IPv6 公网地址。
+# 投影仪不会离开家，无需配置 trusted；手机的配置见 phone.example.yaml。
+network:
+  iface: wlan0
+
 modules:
   # 文件共享：WebDAV 在独立端口，HTTP 下载和上传在主端口。
   files:

@@ -34,7 +34,6 @@ type Module struct {
 	cfg   Config
 	roots *Roots
 	env   *core.Env
-	dav   *http.Server
 }
 
 func New() *Module { return &Module{} }
@@ -68,26 +67,12 @@ func (m *Module) Start(ctx context.Context, env *core.Env) error {
 				}
 			},
 		}
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", m.cfg.Port))
-		if err != nil {
-			return fmt.Errorf("WebDAV 端口 %d 监听失败：%w", m.cfg.Port, err)
-		}
-		m.dav = &http.Server{Handler: env.RequireTokenFor(h), ReadHeaderTimeout: 10 * time.Second}
-		go func() {
-			if err := m.dav.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				env.Fail(fmt.Errorf("WebDAV 服务退出：%w", err))
-			}
-		}()
+		env.Serve(m.cfg.Port, env.RequireTokenFor(h)) // 端口由 hub 统一按网络状态开启或关闭
 	}
 	return nil
 }
 
-func (m *Module) Stop(ctx context.Context) error {
-	if m.dav != nil {
-		return m.dav.Shutdown(ctx)
-	}
-	return nil
-}
+func (m *Module) Stop(ctx context.Context) error { return nil }
 
 func (m *Module) Routes(r core.Router) {
 	r.HandleFunc("GET /api/files/list", m.list)

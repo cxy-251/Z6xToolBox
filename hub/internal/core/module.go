@@ -33,6 +33,9 @@ type Env struct {
 	Log    *slog.Logger
 	// Fail 由模块在运行中遇到无法恢复的错误时调用，状态会体现在 /api/health 中。
 	Fail func(err error)
+	// Serve 让模块在独立端口上提供服务（如 WebDAV）。端口由 hub 统一管理，
+	// 与主端口一起按网络状态开启或关闭。只能在 Start 中调用。
+	Serve func(port int, h http.Handler)
 }
 
 // State 是模块的运行状态。

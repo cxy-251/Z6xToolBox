@@ -23,6 +23,17 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
         )
     }
 
+    why("网络范围与开关") {
+        facts(
+            "问题" to "最初 hub 监听所有地址（`::`）。实测两台设备的 wlan0 都有公网 IPv6 地址，手机的移动数据网卡（rmnet）也有；国内运营商的 IPv6 通常允许外部直接连入，因此 hub 理论上可以从外网访问，只靠 token 防护。手机还会随身带到其他 Wi-Fi 上",
+            "只监听局域网 IPv4" to "配置 `network.iface: wlan0` 后，hub 只在该网卡的 IPv4 地址上监听，不再监听 IPv6 和移动数据网络。两台设备均已启用（2026-10-02 实测：/proc/net/tcp6 中不再有 8090/8091）",
+            "只在家里的 Wi-Fi 上开放（手机）" to "`network.trusted` 列出可信 Wi-Fi 的指纹：取网关的硬件地址，与 token 一起做 SHA-256，配置中不保存原始硬件地址，也无法由指纹反推。hub 每 15 秒检查一次：不在可信 Wi-Fi 上或断开 Wi-Fi 时关闭全部端口和现有连接；回到家里后自动恢复；IP 变化时自动改为在新地址上监听",
+            "加入可信网络" to "在家里执行一次 `./hub/ctl.sh phone trust`。更换路由器或更换 token 后需要重新执行",
+            "手动开关" to "Deck 上执行 `./hub/ctl.sh <设备名> start | stop | status`；网页首页的「停止 hub」按钮也可在手机上直接停止（需登录，Cookie 为 SameSite=Strict，其他网站无法代为提交）。停止后只能从 Deck 通过 ADB 启动：只有 ADB 启动的进程才有 shell 身份",
+            "模块开关" to "网页「编辑配置」或修改 `hub/devices/<设备名>.yaml` 中各模块的 `enable`，后者需执行 `./hub/deploy.sh <设备名> --push-config`。手机重启后 hub 不会自动运行",
+        )
+    }
+
     why("运行环境（均已实测）") {
         facts(
             "设备" to "极米 Z6X Pro，海思 Hi3751V660，8 核 A55，Android 12，可用内存约 1.5GB",

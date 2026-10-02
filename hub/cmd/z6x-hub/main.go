@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -36,6 +37,8 @@ func main() {
 	cfgPath := flag.String("c", "hub.yaml", "配置文件路径")
 	checkOnly := flag.Bool("check", false, "只校验配置，不启动")
 	version := flag.Bool("version", false, "输出版本号")
+	showNet := flag.Bool("network", false, "显示当前网络是否可信（hub 是否会对外服务）")
+	trust := flag.Bool("trust", false, "把当前 Wi-Fi 加入可信网络（写入配置的 network.trusted）")
 	flag.Parse()
 
 	setLocalTimezone()
@@ -50,6 +53,33 @@ func main() {
 	}
 	if *checkOnly {
 		fmt.Println("配置校验通过")
+		return
+	}
+	if *trust {
+		fp, existed, err := core.TrustCurrentNetwork(*cfgPath, cfg)
+		switch {
+		case err != nil:
+			fmt.Fprintln(os.Stderr, "加入可信网络失败：", err)
+			os.Exit(1)
+		case existed:
+			fmt.Println("当前 Wi-Fi 已是可信网络：", fp)
+		default:
+			fmt.Println("已把当前 Wi-Fi 加入可信网络：", fp, "（重启 hub 后生效）")
+		}
+		return
+	}
+	if *showNet {
+		if cfg.Network.Iface == "" {
+			fmt.Println("未配置 network.iface：监听所有地址（包括 IPv6 公网地址和移动数据网络）")
+			return
+		}
+		st, err := core.ProbeNetwork(cfg.Network.Iface, cfg.Token)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "读取网络状态失败：", err)
+			os.Exit(1)
+		}
+		trusted := len(cfg.Network.Trusted) == 0 || slices.Contains(cfg.Network.Trusted, st.Fingerprint)
+		fmt.Printf("网卡 %s：IPv4 %q，网络指纹 %q，可信：%v\n", cfg.Network.Iface, st.IP, st.Fingerprint, st.IP != "" && trusted)
 		return
 	}
 
