@@ -69,3 +69,8 @@ modules:
     enable: false
     allow_from: []          # 例如 [192.168.0.21]
     max_sessions: 3
+
+  # 任务管理：相当于手机的最近任务界面（极米去掉了投影仪的最近任务）。
+  tasks:
+    enable: true
+    protect: [com.github.metacubex.clash.meta]   # 不允许结束的应用；桌面、输入法自动受保护

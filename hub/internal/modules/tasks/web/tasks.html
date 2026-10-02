@@ -1,0 +1,32 @@
+<style>
+#apps li{display:flex;align-items:center;gap:10px;padding:10px 4px}
+#apps .n{flex:1;min-width:40%}#apps .n b{font-size:1.05em}#apps .n small{display:block;opacity:.7;word-break:break-all}
+.tag{font-size:12px;padding:1px 6px;border-radius:8px;border:1px solid currentColor;opacity:.8;margin-left:6px}
+button:focus{outline:3px solid #2f81f7;outline-offset:2px}
+</style>
+<div class="card"><p class="row"><button id="clean">一键清理</button><button class="ghost" id="reload">刷新</button></p>
+<p><small>一键清理会结束除当前前台应用和受保护应用之外的全部应用，并从最近任务中移除。受保护：桌面、输入法和配置中列出的应用（如代理）。</small></p>
+<div class="msg" id="msg"></div></div>
+<div class="card"><ul class="list" id="apps"><li>读取中…</li></ul></div>
+<script>
+const $=id=>document.getElementById(id), enc=encodeURIComponent;
+const el=(t,x,c)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e};
+const idle=s=>s<60?s+' 秒前':s<3600?Math.floor(s/60)+' 分钟前':Math.floor(s/3600)+' 小时前';
+async function load(){
+  const list=await (await fetch('/api/tasks/')).json(), ul=$('apps');ul.replaceChildren();
+  if(!list.length){ul.append(el('li','没有可显示的应用'));return}
+  for(const a of list){
+    const li=el('li'), n=el('span',null,'n'), b=el('b',a.name||a.package);n.append(b);
+    if(a.front)b.append(el('span','前台','tag'));if(a.protected)b.append(el('span','受保护','tag'));
+    const info=[a.name?a.package:'',a.running?'运行中 '+a.memory_mb+' MB':'未运行',a.recent?'最近使用：'+idle(a.idle_sec):''].filter(Boolean).join(' · ');
+    n.append(el('small',info));li.append(n);
+    if(!a.protected){const s=el('button','结束','ghost');s.onclick=()=>stop(a.package);li.append(s)}
+    ul.append(li);
+  }
+  const first=ul.querySelector('button');if(first&&document.activeElement===document.body)$('clean').focus();
+}
+async function post(u){const r=await fetch(u,{method:'POST'});const j=await r.json();if(!r.ok)throw new Error(j.error);return j}
+async function stop(p){try{await post('/api/tasks/stop?package='+enc(p));$('msg').textContent='已结束 '+p}catch(e){$('msg').textContent='失败：'+e.message}load()}
+$('clean').onclick=async()=>{try{const r=await post('/api/tasks/clean');$('msg').textContent=r.stopped&&r.stopped.length?'已结束 '+r.stopped.length+' 个应用':'没有需要清理的应用'}catch(e){$('msg').textContent='失败：'+e.message}load()};
+$('reload').onclick=load;load();
+</script>
