@@ -97,7 +97,7 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
             "wol" to "✓ 在线检测：Deck 显示在线（4ms），不存在的地址显示离线；魔术包格式由单元测试验证，广播地址自动计算为 192.168.0.255。**待验证**：实际唤醒一台开启了网络唤醒的电脑",
             "metrics" to "✓ 内存、温度、/data 剩余与 /proc/meminfo、thermal 节点、df 的手工读数一致；/metrics 的 9 行指标格式均合法",
             "speed" to "✓ 下载 4.7MB/s、上传 17Mbps，与 `adb push` 的 4.4MB/s 处于同一量级。瓶颈在 Deck 的无线连接（2.4GHz，链路速率 108Mbps），投影仪本身为 5GHz、520Mbps，本地写盘 92MB/s",
-            "资源" to "部署后空闲内存约 8.7MB（目标小于 30MB）",
+            "资源" to "✓ 空闲运行 10 分 15 秒后内存为 12.0MB（刚部署时约 8.7MB；目标小于 30MB）",
         )
     }
 
