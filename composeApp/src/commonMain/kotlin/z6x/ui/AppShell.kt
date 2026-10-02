@@ -29,12 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import z6x.device.DeviceShell
+import z6x.device.HubControl
 import z6x.framework.Module
 
 private val Rounded = RoundedCornerShape(6.dp)
 
 @Composable
-fun AppShell(state: AppState, shell: DeviceShell, onCopy: (String) -> Unit) {
+fun AppShell(state: AppState, shell: DeviceShell, hub: HubControl, onCopy: (String) -> Unit) {
     val copy: (String) -> Unit = { onCopy(it); state.toast = "已复制到剪贴板" }
 
     Column(Modifier.fillMaxSize().background(Palette.Bg0)) {
@@ -44,7 +45,7 @@ fun AppShell(state: AppState, shell: DeviceShell, onCopy: (String) -> Unit) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 val located = state.current?.let { state.index[it.id] }
                 when {
-                    state.showDevice -> DevicePanel(shell, state::open)
+                    state.showDevice -> DevicePanel(shell, hub, state::open)
                     located != null -> ModuleView(
                         module = located.module,
                         breadcrumb = located.breadcrumb,

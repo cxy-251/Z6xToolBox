@@ -29,4 +29,5 @@ echo "== 重启 hub"
 timeout 20 adb -s "$DEV" shell "cd $DIR && pid=\$(pidof z6x-hub); [ -n \"\$pid\" ] && kill \$pid; sleep 1; setsid ./z6x-hub -c hub.yaml > stdout.log 2>&1 < /dev/null &"
 sleep 2
 HOST="${DEV%%:*}"
-curl -s -m 5 "http://$HOST:8090/api/health" || { echo "hub 未响应，查看日志：adb shell cat $DIR/hub.log"; exit 1; }
+H=$(curl -s -m 5 "http://$HOST:8090/api/health") || { echo "hub 未响应，查看日志：adb -s $DEV shell cat $DIR/hub.log"; exit 1; }
+echo "== hub 已启动：$(echo "$H" | grep -c '"running"') 个模块运行中，$(echo "$H" | grep -c '"failed"') 个失败"

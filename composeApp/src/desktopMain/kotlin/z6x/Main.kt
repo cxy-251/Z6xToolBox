@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import z6x.content.Content
 import z6x.device.DefaultAddress
+import z6x.device.hostOf
 import z6x.device.DeviceShell
 import z6x.device.Level
 import z6x.device.probes
@@ -59,19 +60,36 @@ fun main(args: Array<String>) {
             val bad = results.count { !it.ok && it.check.level == Level.Must }
             kotlin.system.exitProcess(if (bad == 0) 0 else 1)
         }
+        // ./run.sh --hub [地址]：查询 z6x-hub 状态（与「📡 设备」页使用同一段代码）
+        "--hub" -> runBlocking {
+            val host = hostOf(args.getOrElse(1) { DefaultAddress })
+            val h = runCatching { DesktopHub().health(host) }.getOrElse {
+                println("✗ z6x-hub 未运行或无法连接：${it.message}"); kotlin.system.exitProcess(1)
+            }
+            println("z6x-hub ${h.version}，已运行 ${h.uptimeSec} 秒")
+            for (m in h.modules) println("  ${if (m.state == "running") "✓" else "✗"} ${m.name.padEnd(8)} ${m.error ?: m.state}")
+            kotlin.system.exitProcess(if (h.modules.all { it.state == "running" }) 0 else 1)
+        }
+        // ./run.sh --hub-deploy [地址]：编译并部署 z6x-hub（与「📡 设备」页的部署按钮使用同一段代码）
+        "--hub-deploy" -> runBlocking {
+            val code = DesktopHub().deploy(args.getOrElse(1) { DefaultAddress }) { println(it) }
+            kotlin.system.exitProcess(code)
+        }
         "--check" -> kotlin.system.exitProcess(Tools.check(Content.scopes))
         "--try-read" -> kotlin.system.exitProcess(Tools.tryRead(Content.scopes, args.drop(1)))
+        // ./run.sh --device：启动后直接打开「📡 设备」页
+        "--device" -> gui(openDevice = true)
         else -> gui()
     }
 }
 
-private fun gui() = application {
-    val state = remember { AppState(Content.scopes) }
+private fun gui(openDevice: Boolean = false) = application {
+    val state = remember { AppState(Content.scopes).also { it.showDevice = openDevice } }
     Window(
         onCloseRequest = ::exitApplication,
         title = "Z6xToolBox · 极米 Z6X Pro 实践手册",
         state = rememberWindowState(width = 1280.dp, height = 800.dp, position = WindowPosition.Aligned(androidx.compose.ui.Alignment.Center)),
     ) {
-        App(state, DadbShell(), ::copyToClipboard)
+        App(state, DadbShell(), DesktopHub(), ::copyToClipboard)
     }
 }

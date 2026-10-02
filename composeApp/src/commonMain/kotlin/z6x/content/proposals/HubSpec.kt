@@ -32,13 +32,16 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
     }
 
     steps("构建与部署") {
+        change("在工具箱中部署", "", Host.Deck) {
+            note = "「📡 设备」页的 z6x-hub 区域会自动显示运行状态；点击「部署并启动」（已运行时为「重新部署」）即执行下方的部署脚本，输出实时显示在页面上。命令行等效：`./run.sh --hub-deploy`。"
+        }
         change("一键编译、部署并启动", "./hub/deploy.sh", Host.Deck) {
             note = """
                 在项目根目录执行。首次运行时从 `hub.example.yaml` 生成 `hub.yaml`，并写入随机 token（该文件已加入 .gitignore，不会提交）。
                 脚本依次完成：交叉编译 arm64 静态程序 → 推送程序和配置 → 校验配置 → 结束旧进程 → 用 `setsid` 启动新进程 → 请求健康检查。
                 必须**从 ADB 启动**，才能获得 shell 身份和 -1000 的 oom 分值。
             """
-            outcome = "最后输出 /api/health 的 JSON，各模块状态均为 running。整个过程约 5 秒。"
+            outcome = "最后输出「hub 已启动：6 个模块运行中，0 个失败」。整个过程约 5 秒。"
         }
         read("健康检查", "curl -s http://192.168.0.109:8090/api/health", Host.Deck) {
             varies = true

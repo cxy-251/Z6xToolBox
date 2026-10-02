@@ -83,6 +83,7 @@ val KotlinInProject = module("kotlin-in-project", "Kotlin：本项目用到的�
             • **具名参数与默认值**：`Step(title, command, risk, host, note = "…")`，不需要的参数可以省略。
             • **函数引用**：`onOpen = state::open`（ui/AppShell.kt），相当于 C# 的方法组。
             • **use { }**（desktopMain/Main.kt）：使用完毕后自动关闭，相当于 C# 的 using。
+            • **@Serializable**（device/Hub.kt 中的 `HubHealth`）：kotlinx.serialization 的编译器插件自动生成 JSON 解析代码；字段名不同时用 `@SerialName` 指定，相当于 C# 的 `[JsonPropertyName]`。
         """)
     }
 
@@ -135,7 +136,7 @@ val ComposeInProject = module("compose-in-project", "Compose：界面的编写�
         text("""
             • `commonMain/`：所有平台共用的代码，包括内容、框架和界面。今后制作安卓版时，这部分可原样复用。
             • `desktopMain/`：仅属于桌面版的代码，包括窗口入口（Main.kt）、通过 dadb 连接设备、AWT 剪贴板以及命令行工具（Tools.kt）。
-            • 与平台相关的能力通过参数传入共用代码：`App(state, shell, onCopy)`，其中 `shell` 是 DeviceShell 接口，桌面版传入 DadbShell。
+            • 与平台相关的能力通过参数传入共用代码：`App(state, shell, hub, onCopy)`，其中 `shell` 是 DeviceShell 接口（桌面版传入 DadbShell），`hub` 是 HubControl 接口（桌面版传入 DesktopHub，用 JDK 的 HttpClient 查询状态、运行部署脚本）。
         """)
     }
 
@@ -223,6 +224,13 @@ val ProjectLayout = module("project-layout", "项目结构与日常操作") {
             note = "不指定模块 id 时运行全部。ADB 步骤发送给投影仪，Deck 步骤在本机执行，SSH 步骤通过 `ssh z6x` 执行（无法连接时整体跳过）。与实测记录不一致的结果标注为 △。"
         }
         change("在命令行中查询设备", "./run.sh --probe", Host.Deck)
+        change("启动后直接打开设备页", "./run.sh --device", Host.Deck)
+        change("查询 z6x-hub 状态", "./run.sh --hub", Host.Deck) {
+            note = "与「📡 设备」页的 hub 区域使用同一段代码。所有模块正常时退出码为 0。"
+        }
+        change("编译并部署 z6x-hub", "./run.sh --hub-deploy", Host.Deck) {
+            note = "与设备页的「部署并启动」按钮相同，实际执行的是 hub/deploy.sh。"
+        }
         change("命令行版一键体检", "./run.sh --health", Host.Deck) {
             note = "与工具箱「📡 设备」页中的体检为同一组检查。必检项异常时退出码为 1，可在脚本中使用。"
         }
