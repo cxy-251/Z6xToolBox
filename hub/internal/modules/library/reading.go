@@ -24,8 +24,9 @@ import (
 //   - 音声在 media_library/audio/standard、audio/nsfw 下，第一级子目录为专辑（media.go 中扫描）；
 //     续听记录的键为「std:相对路径」或「nsfw:相对路径」，格式与 omni-deck 的 var/data/audio_progress.json 相同，可直接导入；
 //     章节信息读取同名的 .chapters.json 旁车文件（设备上没有 ffprobe，不读 m4b 内嵌章节）。
-//   - 小说在 media_library/novels/standard、novels/nsfw 下（EPUB），第一级子目录为分类。
-//     EPUB 按其阅读顺序（spine）分章，正文转换为纯文本段落，由网页用 textContent 显示，原书中的脚本和样式不会执行。
+//   - 小说在 media_library/novels/standard、novels/nsfw 下，技术文档在 media_library/docs 下，第一级子目录为分类；
+//     支持 EPUB、TXT、Markdown、reStructuredText（formats.go）。EPUB 按阅读顺序（spine）分章，
+//     正文转换为纯文本段落或块，由网页用 textContent 显示，原文中的脚本和样式不会执行。
 
 // ---------------- 进度记录（音声与小说共用） ----------------
 
@@ -120,23 +121,55 @@ type chapter struct {
 func (m *Module) audioRoutes(r core.Router) {
 	r.HandleFunc("GET /api/library/audio", func(w http.ResponseWriter, req *http.Request) {
 		_, tracks := m.media()
-		nsfw := req.URL.Query().Get("nsfw") == "1"
+		src := req.URL.Query().Get("source")
+		if src == "" {
+			src = "standard"
+		}
 		out := []track{}
 		for _, t := range tracks {
-			if t.IsNSFW == nsfw {
+			if t.Source == src {
 				out = append(out, t)
 			}
 		}
-		core.WriteJSON(w, out)
+		core.WriteJSON(w, map[string]any{"tracks": out, "has_music": len(m.cfg.Music) > 0})
+	})
+	// 资源库以外的音乐文件：只允许访问配置中列出的目录，支持 Range（拖动进度）
+	r.HandleFunc("GET /music/{n}/{rest...}", func(w http.ResponseWriter, req *http.Request) {
+		n, err := strconv.Atoi(req.PathValue("n"))
+		if err != nil || n < 0 || n >= len(m.cfg.Music) {
+			http.NotFound(w, req)
+			return
+		}
+		p, err := within(m.cfg.Music[n], req.PathValue("rest"))
+		if err != nil || !audioExts[strings.ToLower(filepath.Ext(p))] {
+			http.Error(w, "禁止访问", http.StatusForbidden)
+			return
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			http.NotFound(w, req)
+			return
+		}
+		defer f.Close()
+		fi, err := f.Stat()
+		if err != nil || fi.IsDir() {
+			http.NotFound(w, req)
+			return
+		}
+		http.ServeContent(w, req, fi.Name(), fi.ModTime(), f)
 	})
 	// 章节：读取与音频同名的 .chapters.json（omni-deck 的旁车文件格式：[{title, start}]）
 	r.HandleFunc("GET /api/library/audio/chapters", func(w http.ResponseWriter, req *http.Request) {
 		q := req.URL.Query()
 		sub := "standard"
-		if q.Get("nsfw") == "1" {
+		if q.Get("source") == "nsfw" {
 			sub = "nsfw"
 		}
 		out := []chapter{}
+		if q.Get("source") == "music" {
+			core.WriteJSON(w, out)
+			return
+		}
 		for _, lib := range m.libs() {
 			p, err := within(filepath.Join(lib.Path, mediaRoot, "audio", sub), q.Get("rel_path"))
 			if err != nil {
@@ -159,18 +192,24 @@ type novel struct {
 	ID       string `json:"id"` // 资源库 id 与相对路径的编码，不暴露真实路径
 	Title    string `json:"title"`
 	Category string `json:"category"`
+	Sub      string `json:"sub,omitempty"` // 分类以下的子目录（技术文档多层嵌套，用于区分同名文件）
 	Size     int64  `json:"size"`
-	NSFW     bool   `json:"nsfw"`
+	Ext      string `json:"ext"`
 }
 
-func (m *Module) listNovels(nsfw bool) []novel {
-	sub := "standard"
-	if nsfw {
-		sub = "nsfw"
+// 三个来源：常规小说、NSFW 小说（media_library/novels/standard、nsfw）与技术文档（media_library/docs）。
+var novelSources = map[string]string{"standard": "novels/standard", "nsfw": "novels/nsfw", "docs": "docs"}
+var readableExts = map[string]bool{".epub": true, ".txt": true, ".md": true, ".markdown": true, ".rst": true}
+
+func (m *Module) listNovels(source string) []novel {
+	sub, ok := novelSources[source]
+	if !ok {
+		return []novel{}
 	}
 	out := []novel{}
 	for _, lib := range m.libs() {
-		base := filepath.Join(lib.Path, mediaRoot, "novels", sub)
+		root := filepath.Join(lib.Path, mediaRoot)
+		base := filepath.Join(root, filepath.FromSlash(sub))
 		filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
@@ -181,50 +220,87 @@ func (m *Module) listNovels(nsfw bool) []novel {
 				}
 				return nil
 			}
-			if strings.ToLower(filepath.Ext(p)) != ".epub" {
+			ext := strings.ToLower(filepath.Ext(p))
+			if !readableExts[ext] || strings.HasPrefix(d.Name(), ".") {
 				return nil
 			}
-			rel, _ := filepath.Rel(filepath.Join(lib.Path, mediaRoot, "novels"), p)
-			rel = filepath.ToSlash(rel) // standard/分类/书名.epub
-			cat := "未分类"
-			if parts := strings.Split(rel, "/"); len(parts) > 2 {
-				cat = parts[1]
+			rel, _ := filepath.Rel(root, p)
+			inner, _ := filepath.Rel(base, p)
+			parts := strings.Split(filepath.ToSlash(inner), "/")
+			cat, subdir := "未分类", ""
+			if len(parts) > 1 {
+				cat = parts[0]
+				subdir = strings.Join(parts[1:len(parts)-1], "/")
 			}
 			var size int64
 			if fi, err := d.Info(); err == nil {
 				size = fi.Size()
 			}
-			out = append(out, novel{ID: encodeID(lib.ID, rel), Title: strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())),
-				Category: cat, Size: size, NSFW: nsfw})
+			out = append(out, novel{ID: encodeID(lib.ID, filepath.ToSlash(rel)), Title: strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())),
+				Category: cat, Sub: subdir, Size: size, Ext: strings.TrimPrefix(ext, ".")})
 			return nil
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Category != out[j].Category {
-			return out[i].Category < out[j].Category
+		a, b := out[i], out[j]
+		if a.Category != b.Category {
+			return a.Category < b.Category
 		}
-		return naturalLess(out[i].Title, out[j].Title)
+		if a.Sub != b.Sub {
+			return naturalLess(a.Sub, b.Sub)
+		}
+		return naturalLess(a.Title, b.Title)
 	})
 	return out
 }
 
+// novelPath 把 ID 换回真实路径：必须位于某个资源库的 novels/ 或 docs/ 下，且是支持的格式。
 func (m *Module) novelPath(id string) (string, bool) {
 	libID, rel, ok := decodeID(id)
-	if !ok {
+	if !ok || !(strings.HasPrefix(rel, "novels/") || strings.HasPrefix(rel, "docs/")) {
 		return "", false
 	}
 	for _, lib := range m.libs() {
 		if lib.ID == libID {
-			p, err := within(filepath.Join(lib.Path, mediaRoot, "novels"), rel)
-			return p, err == nil && strings.ToLower(filepath.Ext(p)) == ".epub"
+			p, err := within(filepath.Join(lib.Path, mediaRoot), rel)
+			return p, err == nil && readableExts[strings.ToLower(filepath.Ext(p))]
 		}
 	}
 	return "", false
 }
 
+// siblings 返回同一目录中按自然顺序的上一篇、下一篇（技术文档用于连续阅读）。
+func siblings(id, p string) (prev, next string) {
+	libID, rel, _ := decodeID(id)
+	ents, err := os.ReadDir(filepath.Dir(p))
+	if err != nil {
+		return "", ""
+	}
+	var names []string
+	for _, e := range ents {
+		if !e.IsDir() && readableExts[strings.ToLower(filepath.Ext(e.Name()))] && !strings.HasPrefix(e.Name(), ".") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Slice(names, func(i, j int) bool { return naturalLess(names[i], names[j]) })
+	dir := path.Dir(rel)
+	for i, n := range names {
+		if n == filepath.Base(p) {
+			if i > 0 {
+				prev = encodeID(libID, dir+"/"+names[i-1])
+			}
+			if i+1 < len(names) {
+				next = encodeID(libID, dir+"/"+names[i+1])
+			}
+		}
+	}
+	return
+}
+
 type novelChapter struct {
-	Title string   `json:"title"`
-	Paras []string `json:"paras"`
+	Title  string   `json:"title"`
+	Paras  []string `json:"paras,omitempty"`  // EPUB、TXT：纯文本段落
+	Blocks []block  `json:"blocks,omitempty"` // MD、RST：标题、段落、代码等块
 }
 
 var (
@@ -367,7 +443,28 @@ func (m *Module) openNovel(p string) (string, string, []novelChapter, error) {
 	if c.path == p && c.mod.Equal(fi.ModTime()) {
 		return c.title, c.author, c.chapters, nil
 	}
-	t, a, ch, err := parseEPUB(p)
+	var t, a string
+	var ch []novelChapter
+	switch strings.ToLower(filepath.Ext(p)) {
+	case ".epub":
+		t, a, ch, err = parseEPUB(p)
+	case ".txt":
+		ch, err = parseTXT(p)
+	default: // .md、.markdown、.rst
+		var raw []byte
+		if raw, err = os.ReadFile(p); err == nil {
+			name := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+			if strings.EqualFold(filepath.Ext(p), ".rst") {
+				ch = splitDoc(name, parseRST(decodeText(raw)))
+			} else {
+				fmT, body := frontMatter(decodeText(raw))
+				if fmT != "" {
+					t = fmT
+				}
+				ch = splitDoc(name, parseMarkdown(body))
+			}
+		}
+	}
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -377,7 +474,11 @@ func (m *Module) openNovel(p string) (string, string, []novelChapter, error) {
 
 func (m *Module) novelRoutes(r core.Router) {
 	r.HandleFunc("GET /api/library/novels", func(w http.ResponseWriter, req *http.Request) {
-		core.WriteJSON(w, m.listNovels(req.URL.Query().Get("nsfw") == "1"))
+		src := req.URL.Query().Get("source")
+		if src == "" {
+			src = "standard"
+		}
+		core.WriteJSON(w, m.listNovels(src))
 	})
 	// 目录：书名、作者与各章标题（不含正文）
 	r.HandleFunc("GET /api/library/novels/toc", func(w http.ResponseWriter, req *http.Request) {
@@ -398,7 +499,9 @@ func (m *Module) novelRoutes(r core.Router) {
 		for i, c := range ch {
 			titles[i] = c.Title
 		}
-		core.WriteJSON(w, map[string]any{"title": t, "author": a, "chapters": titles})
+		prev, next := siblings(req.URL.Query().Get("id"), p)
+		core.WriteJSON(w, map[string]any{"title": t, "author": a, "chapters": titles, "prev_doc": prev, "next_doc": next,
+			"ext": strings.TrimPrefix(strings.ToLower(filepath.Ext(p)), ".")})
 	})
 	// 某一章的正文
 	r.HandleFunc("GET /api/library/novels/chapter", func(w http.ResponseWriter, req *http.Request) {

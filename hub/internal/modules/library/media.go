@@ -33,7 +33,9 @@ var platforms = []platform{
 }
 
 var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mov": true, ".m4v": true, ".mkv": true}
-var audioExts = map[string]bool{".mp3": true, ".m4a": true, ".m4b": true, ".flac": true, ".ogg": true, ".opus": true, ".aac": true, ".wav": true}
+
+// 与 omni-deck 相同的音频格式。WMA 会列出，但浏览器普遍不能播放。
+var audioExts = map[string]bool{".mp3": true, ".m4a": true, ".m4b": true, ".flac": true, ".ogg": true, ".opus": true, ".aac": true, ".wav": true, ".wma": true}
 
 // svItem 是一条短视频。
 type svItem struct {
@@ -53,9 +55,11 @@ func (it *svItem) title() string {
 type track struct {
 	Title  string `json:"title"`
 	Album  string `json:"album"`
+	Artist string `json:"artist,omitempty"` // 仅「音乐」来源
 	URL    string `json:"stream_url"`
 	Rel    string `json:"rel_path"`
 	IsNSFW bool   `json:"is_nsfw"`
+	Source string `json:"source"` // standard、nsfw、music
 }
 
 // mediaIndex 缓存扫描结果。手机上的短视频可达数万条，扫描一遍需要数秒，因此在后台进行，
@@ -148,11 +152,42 @@ func (m *Module) scanMedia() {
 				if i := strings.IndexByte(rel, '/'); i > 0 {
 					album = rel[:i]
 				}
-				tracks = append(tracks, track{Title: strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())), Album: album, Rel: rel, IsNSFW: nsfw,
+				tracks = append(tracks, track{Title: strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())), Album: album, Rel: rel, IsNSFW: nsfw, Source: sub,
 					URL: libURL(lib.ID, filepath.Join(mediaRoot, "audio", sub, filepath.FromSlash(rel)))})
 				return nil
 			})
 		}
+	}
+	// 资源库以外的音乐目录：上一级目录为专辑，再上一级为歌手；地址为 /music/<序号>/<相对路径>
+	for n, root := range m.cfg.Music {
+		filepath.WalkDir(root, func(fp string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() && strings.HasPrefix(d.Name(), ".") {
+				return fs.SkipDir
+			}
+			if d.IsDir() || !audioExts[strings.ToLower(filepath.Ext(fp))] || strings.HasPrefix(d.Name(), ".") {
+				return nil
+			}
+			rel, _ := filepath.Rel(root, fp)
+			rel = filepath.ToSlash(rel)
+			parts := strings.Split(rel, "/")
+			album, artist := "未分类", "未知歌手"
+			if len(parts) >= 2 {
+				album = parts[len(parts)-2]
+			}
+			if len(parts) >= 3 {
+				artist = parts[len(parts)-3]
+			}
+			segs := strings.Split(rel, "/")
+			for k := range segs {
+				segs[k] = urlPathEscape(segs[k])
+			}
+			tracks = append(tracks, track{Title: strings.TrimSuffix(d.Name(), filepath.Ext(d.Name())), Album: album, Artist: artist,
+				Rel: strconv.Itoa(n) + "/" + rel, Source: "music", URL: "/music/" + strconv.Itoa(n) + "/" + strings.Join(segs, "/")})
+			return nil
+		})
 	}
 	for _, list := range videos {
 		sort.Slice(list, func(i, j int) bool { // 与 omni-deck 相同：有日期的按日期从早到晚，没有的排在后面
@@ -167,10 +202,17 @@ func (m *Module) scanMedia() {
 		})
 	}
 	sort.SliceStable(tracks, func(i, j int) bool {
-		if tracks[i].Album != tracks[j].Album {
-			return tracks[i].Album < tracks[j].Album
+		a, b := tracks[i], tracks[j]
+		if a.Source != b.Source {
+			return a.Source < b.Source
 		}
-		return naturalLess(tracks[i].Rel, tracks[j].Rel)
+		if a.Artist != b.Artist {
+			return naturalLess(a.Artist, b.Artist)
+		}
+		if a.Album != b.Album {
+			return a.Album < b.Album
+		}
+		return naturalLess(a.Rel, b.Rel)
 	})
 	ix := &m.mediaIx
 	ix.mu.Lock()
@@ -415,6 +457,9 @@ type audioScope struct {
 }
 
 func scopeOf(t track) string {
+	if t.Source == "music" {
+		return "music:" // 多联中音乐只作为一个整体范围，歌手太多，不逐个列出
+	}
 	if t.IsNSFW {
 		return "nsfw:" + t.Album
 	}
@@ -437,6 +482,9 @@ func (m *Module) audioScopes() []audioScope {
 	})
 	for _, id := range ids {
 		_, name, _ := strings.Cut(id, ":")
+		if id == "music:" {
+			name = "🎵 音乐（全部）"
+		}
 		out = append(out, audioScope{id, name, counts[id]})
 	}
 	return out

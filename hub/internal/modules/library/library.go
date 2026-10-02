@@ -22,6 +22,9 @@ type Config struct {
 	Internal string `yaml:"internal"`
 	// Storage 是 U 盘挂载的上级目录，默认 /storage。
 	Storage string `yaml:"storage"`
+	// Music 是资源库以外的音乐目录（如手机上自行整理的歌曲），在音声页作为「音乐」来源，
+	// 按「歌手/专辑/歌曲」的目录结构分组（上一级目录为专辑，再上一级为歌手）。
+	Music []string `yaml:"music"`
 }
 
 type Module struct {

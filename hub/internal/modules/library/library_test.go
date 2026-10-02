@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/text/encoding/simplifiedchinese"
+
 	"z6x/hub/internal/core"
 )
 
@@ -220,5 +222,42 @@ func TestParseEPUB(t *testing.T) {
 	}
 	if !strings.HasSuffix(ch[1].Title, "…") {
 		t.Fatalf("无标题章节应取首段前 30 字：%q", ch[1].Title)
+	}
+}
+
+func TestFormats(t *testing.T) {
+	// GBK 编码的 TXT：能正确解码并按「第 N 章」分章
+	gbk, _ := simplifiedchinese.GBK.NewEncoder().String("序言一段\n第一章 开端\n正文甲\n\n第二章 发展\n正文乙\n")
+	p := filepath.Join(t.TempDir(), "a.txt")
+	os.WriteFile(p, []byte(gbk), 0o644)
+	ch, err := parseTXT(p)
+	if err != nil || len(ch) != 3 || ch[1].Title != "第一章 开端" || ch[2].Paras[0] != "正文乙" {
+		t.Fatalf("TXT 分章不正确：%+v %v", ch, err)
+	}
+	// Markdown：标题、代码块、列表、行内标记
+	md := parseMarkdown("# 总标题\n\n简介 **粗体** 与 [链接](http://x)\n\n## 第一节\n\n- 项目一\n\n```go\nfmt.Println(1)\n```\n\n## 第二节\n\n内容\n")
+	if md[1].Text != "简介 粗体 与 链接" || md[3].Kind != "li" || md[4].Kind != "code" || md[4].Text != "fmt.Println(1)" {
+		t.Fatalf("Markdown 解析不正确：%+v", md)
+	}
+	if doc := splitDoc("x", md); len(doc) != 3 || doc[1].Title != "第一节" {
+		t.Fatalf("应按二级标题分章：%+v", doc)
+	}
+	// RST：下划线标题、:: 代码块、指令略去
+	rst := parseRST("标题\n====\n\n说明 ``code`` 示例::\n\n    print(1)\n\n.. note::\n\n   被略去\n\n小节\n----\n\n- 列表\n")
+	if rst[0].Kind != "h" || rst[0].Level != 1 || rst[1].Text != "说明 code 示例:" || rst[2].Text != "print(1)" || rst[3].Level != 2 || rst[4].Kind != "li" {
+		t.Fatalf("RST 解析不正确：%+v", rst)
+	}
+}
+
+func TestFrontMatter(t *testing.T) {
+	title, body := frontMatter("---\ntitle: \"第 74 章：WebGPU\"\ntags: [a]\n---\n# 正文标题\n内容\n")
+	if title != "第 74 章：WebGPU" || !strings.HasPrefix(body, "# 正文标题") {
+		t.Fatalf("元数据处理不正确：%q %q", title, body)
+	}
+	if blocks := parseMarkdown(body); blocks[0].Kind != "h" {
+		t.Fatalf("去掉元数据后第一块应为标题：%+v", blocks)
+	}
+	if _, b := frontMatter("没有元数据\n---\n"); b != "没有元数据\n---\n" {
+		t.Fatal("没有元数据时应原样返回")
 	}
 }
