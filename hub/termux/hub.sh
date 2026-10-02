@@ -17,7 +17,7 @@ case "${1:-status}" in
     rm -f hub.pid
     termux-wake-unlock ;;
   status)
-    if p=$(pid); then echo "hub 运行中（PID $p）"; ./z6x-hub -c hub.yaml -network; else echo "hub 未运行"; fi ;;
+    if p=$(pid); then echo "hub 运行中（PID $p）"; ./z6x-hub -c hub.yaml -network; else echo "hub 未运行"; exit 1; fi ;;
   log)
     tail -20 hub.log ;;
   *)

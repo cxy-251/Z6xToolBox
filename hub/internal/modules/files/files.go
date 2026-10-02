@@ -6,9 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -79,6 +77,7 @@ func (m *Module) Routes(r core.Router) {
 	r.HandleFunc("GET /api/files/get", m.get)
 	r.HandleFunc("POST /api/files/upload", m.upload)
 	r.HandleFunc("GET /ui/files/{$}", m.page)
+	m.manageRoutes(r)
 }
 
 // Entry 是目录列表中的一项。
@@ -200,41 +199,4 @@ func (m *Module) fail(w http.ResponseWriter, err error) {
 	default:
 		core.WriteError(w, http.StatusInternalServerError, err.Error())
 	}
-}
-
-func (m *Module) page(w http.ResponseWriter, r *http.Request) {
-	host := r.Host
-	if h, _, err := net.SplitHostPort(r.Host); err == nil {
-		host = h
-	}
-	dav := fmt.Sprintf("http://%s:%d/", host, m.cfg.Port)
-	core.Page(w, "文件共享", `<div class="card"><div class="row"><b id="cwd">/</b></div><ul class="list" id="ls"></ul></div>
-<div class="card"><p>上传到当前目录：</p><input type="file" id="file"><p><button onclick="up()">上传</button></p><div class="msg" id="msg"></div></div>
-<div class="card"><p><b>挂载为网络盘（WebDAV）</b></p><pre>`+html.EscapeString(dav)+`</pre>
-<p><small>用户名任意，密码为 token。Windows：此电脑 → 映射网络驱动器；Linux 文件管理器：输入 dav://`+html.EscapeString(strings.TrimPrefix(dav, "http://"))+`</small></p></div>
-<script>
-let cwd='/';
-const enc=encodeURIComponent, size=n=>n>1073741824?(n/1073741824).toFixed(1)+' GB':n>1048576?(n/1048576).toFixed(1)+' MB':(n/1024).toFixed(0)+' KB';
-async function go(p){
-  const res=await fetch('/api/files/list?path='+enc(p)); if(!res.ok){alert((await res.json()).error);return}
-  cwd=p; document.getElementById('cwd').textContent=p;
-  const items=await res.json(), ul=document.getElementById('ls'); ul.innerHTML='';
-  if(p!=='/'){const li=document.createElement('li');li.innerHTML='<a href="#">⬆ 上一级</a>';li.onclick=e=>{e.preventDefault();go(p.replace(/\/[^\/]+\/?$/,'')||'/')};ul.append(li)}
-  for(const it of items){
-    const li=document.createElement('li'), full=(p==='/'?'':p)+'/'+it.name, a=document.createElement('a');
-    a.textContent=(it.dir?'📁 ':'📄 ')+it.name; a.href=it.dir?'#':'/api/files/get?path='+enc(full);
-    if(it.dir) a.onclick=e=>{e.preventDefault();go(full)};
-    li.append(a); if(!it.dir){const s=document.createElement('small');s.textContent='  '+size(it.size);li.append(s)}
-    ul.append(li);
-  }
-}
-async function up(){
-  const f=document.getElementById('file').files[0], msg=document.getElementById('msg'); if(!f) return;
-  if(cwd==='/'){msg.textContent='请先进入一个共享目录';return}
-  msg.textContent='上传中…';
-  const res=await fetch('/api/files/upload?path='+enc(cwd+'/'+f.name),{method:'POST',body:f});
-  msg.textContent=res.ok?'上传完成':'失败：'+(await res.json()).error; if(res.ok) go(cwd);
-}
-go('/');
-</script>`)
 }
