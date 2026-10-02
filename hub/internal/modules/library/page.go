@@ -51,8 +51,9 @@ async function renderLibs(){const out=$('out');$('msg').textContent='';
   if(!libs.length)h+='<li>尚未建立资源库</li>';
   for(const l of libs)h+='<li><b></b> <small>'+l.location+' · 剩余 '+size(l.free_bytes)+' / '+size(l.total_bytes)+'</small><br><small><code></code> · id <code></code></small></li>';
   h+='</ul></div><div class="card"><b>可建立资源库的位置</b><ul class="list" style="margin-top:8px" id="vols"></ul></div>'+
-    '<div class="card"><b>如何转移</b><p><small>① 大批量：把 U 盘插到 Deck，在 omni-deck「存储与游戏库」中把它添加为资源库，用 omni-deck 把游戏或媒体移过去；再把 U 盘插到投影仪，几秒内即出现在这里，存档随游戏目录一起转移。<br>'+
-    '② 少量：在 Deck 上用 <code>./hub/library-import.sh</code> 通过网络导入一个游戏文件夹（受 Wi-Fi 速度限制）。<br>③ 网页游戏（RPG Maker、SLG）、CBZ 漫画、MP4 短视频可在浏览器中直接使用；复古游戏和 Ren\'Py 桌面版暂不支持。</small></p></div>';
+    '<div class="card"><b>如何转移</b><p><small>① 大批量（手机）：用数据线连接 Deck，执行 <code>adb push</code> 把文件夹放进 omni_library 的对应目录；或在 Deck 的文件管理器中打开 <code>webdav://设备IP:8091</code>（需启用文件共享模块），直接拷贝进去。<br>'+
+    '② 大批量（投影仪）：把 U 盘插到 Deck，在 omni-deck「存储与游戏库」中把它添加为资源库，用 omni-deck 把游戏或媒体移过去；再把 U 盘插到投影仪，几秒内即出现在这里。<br>'+
+    '③ 少量：在 Deck 上用 <code>./hub/library-import.sh</code> 通过网络导入一个游戏文件夹（受 Wi-Fi 速度限制）。存档随游戏目录一起转移。<br>④ 网页游戏（RPG Maker、SLG）、CBZ 漫画、MP4 短视频可在浏览器中直接使用；复古游戏和 Ren\'Py 桌面版暂不支持。</small></p></div>';
   out.innerHTML=h;
   const items=out.querySelectorAll('.list')[0].querySelectorAll('li');
   libs.forEach((l,i)=>{const b=items[i].querySelector('b'),c=items[i].querySelectorAll('code');b.textContent=l.label;c[0].textContent=l.path;c[1].textContent=l.id});

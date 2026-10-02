@@ -110,7 +110,8 @@ func (m *Module) sample() {
 		if e1 != nil || e2 != nil {
 			continue
 		}
-		if v, err := strconv.ParseFloat(strings.TrimSpace(string(raw)), 64); err == nil {
+		// 手机上有几十个温区，其中一些不是真实温度（例如 bcl-warn 读数为 -273）：超出 -40～150 ℃ 的读数视为无效。
+		if v, err := strconv.ParseFloat(strings.TrimSpace(string(raw)), 64); err == nil && v/1000 > -40 && v/1000 < 150 {
 			s.TempsC[strings.TrimSpace(string(typ))] = v / 1000
 		}
 	}

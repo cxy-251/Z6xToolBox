@@ -12,6 +12,8 @@ import (
 
 // Config 对应 hub.yaml。各模块自己的配置原样保存在 Modules 里，由模块自行解析。
 type Config struct {
+	// Name 是设备的显示名称（如「投影仪」「手机」），用于页面标题和资源库名称。
+	Name    string               `yaml:"name"`
 	Listen  string               `yaml:"listen"`
 	Token   string               `yaml:"token"`
 	DataDir string               `yaml:"data_dir"`
@@ -35,6 +37,9 @@ func LoadConfig(path string) (*Config, error) {
 	var c Config
 	if err := yaml.Unmarshal(raw, &c); err != nil {
 		return nil, fmt.Errorf("配置格式错误：%w", err)
+	}
+	if c.Name == "" {
+		c.Name = "设备"
 	}
 	if c.Listen == "" {
 		c.Listen = ":8090"

@@ -1,4 +1,4 @@
-// Package library 是投影仪上的「资源库」：读取与 omni-deck 相同结构的资源库（以 omnilibrary.json 标记），
+// Package library 是 hub 所在设备上的「资源库」：读取与 omni-deck 相同结构的资源库（以 omnilibrary.json 标记），
 // 在任何设备的浏览器中提供网页游戏、漫画和短视频。
 //
 // 资源库可以在机身存储（/storage/emulated/0/omni_library）和 U 盘上，按优先级合并展示，与 omni-deck 的多资源库一致。

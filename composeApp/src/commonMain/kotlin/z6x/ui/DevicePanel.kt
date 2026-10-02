@@ -36,6 +36,7 @@ import z6x.device.HealthResult
 import z6x.device.HubControl
 import z6x.device.HubHealth
 import z6x.device.hostOf
+import z6x.device.knownDevices
 import z6x.device.Level
 import z6x.device.probes
 import z6x.device.runHealthChecks
@@ -57,9 +58,21 @@ fun DevicePanel(shell: DeviceShell, hub: HubControl, onOpen: (String) -> Unit) {
     ) {
         Text("📡 设备", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Palette.TextStrong)
         Text(
-            "通过 ADB 协议直接连接投影仪，只执行下面列出的只读命令。修改类操作不会在这里执行，请在模块页复制命令后自己运行。",
+            "通过 ADB 协议直接连接设备，只执行下面列出的只读命令。修改类操作不会在这里执行，请在模块页复制命令后自己运行。",
             fontSize = 13.sp, color = Palette.TextMuted,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("设备：", fontSize = 13.sp, color = Palette.TextMuted)
+            for (d in knownDevices) {
+                val selected = hostOf(d.address) == hostOf(address)
+                TextButton(onClick = { if (!selected) { address = d.address; results = emptyList(); health = emptyList() } }) {
+                    Text(if (selected) "● ${d.name}" else d.name, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        }
+        knownDevices.firstOrNull { hostOf(it.address) == hostOf(address) }?.let {
+            Text(it.note, fontSize = 12.sp, color = Palette.TextMuted)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(address, { address = it }, label = { Text("ADB 地址") }, singleLine = true)
             Button(
@@ -100,7 +113,7 @@ fun DevicePanel(shell: DeviceShell, hub: HubControl, onOpen: (String) -> Unit) {
 
         Text("🩺 一键体检", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Palette.TextStrong, modifier = Modifier.padding(top = 18.dp))
         Text(
-            "对照 2026-10-01 核对过的正确状态逐项检查 ADB、定制、桌面、hub、温度和存储，全部为只读命令。异常项可点击「查看」，跳转到说明恢复方法的页面。",
+            "针对投影仪：对照 2026-10-01 核对过的正确状态逐项检查 ADB、定制、桌面、hub、温度和存储，全部为只读命令。异常项可点击「查看」，跳转到说明恢复方法的页面。",
             fontSize = 13.sp, color = Palette.TextMuted,
         )
         Button(
@@ -179,7 +192,7 @@ private fun HubSection(hub: HubControl, address: String, onOpen: (String) -> Uni
 
     Text("🛰 z6x-hub", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Palette.TextStrong, modifier = Modifier.padding(top = 18.dp))
     Text(
-        "运行在投影仪上的常驻服务：文件共享、发送文字、网页遥控、网络唤醒、系统状态、测速。部署会编译 hub/ 下的源码，推送到投影仪并重启服务。",
+        "运行在投影仪和手机上的常驻服务，同一个程序，各设备按 hub/devices/<设备名>.yaml 启用不同模块。部署会编译 hub/ 下的源码，推送到当前设备并重启服务。",
         fontSize = 13.sp, color = Palette.TextMuted,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

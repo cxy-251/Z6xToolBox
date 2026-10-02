@@ -1,5 +1,5 @@
 // Package speed 提供局域网测速：下载（服务端在内存中生成数据）、上传（接收后丢弃）和往返延迟。
-// 数据不经过磁盘，测得的是投影仪与客户端之间的纯网络速度。
+// 数据不经过磁盘，测得的是 hub 所在设备与客户端之间的纯网络速度。
 package speed
 
 import (
@@ -82,8 +82,8 @@ func (m *Module) upload(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) page(w http.ResponseWriter, _ *http.Request) {
 	core.Page(w, "局域网测速", `<div class="card"><p class="row"><button onclick="run()" id="go">开始测速</button></p>
-<pre id="out">测试本设备与投影仪之间的网速：延迟（20 次取中位数），下载和上传各测 8 秒，过程中实时显示进度。</pre></div>
-<p><small>结果受 Wi-Fi 信号和频段影响较大（2.4GHz 明显慢于 5GHz）。命令行测速：<code>curl -o /dev/null http://投影仪IP:8090/api/speed/download?mb=200</code>（需带 token）。</small></p>
+<pre id="out">测试本机与 hub 所在设备之间的网速：延迟（20 次取中位数），下载和上传各测 8 秒，过程中实时显示进度。</pre></div>
+<p><small>结果受 Wi-Fi 信号和频段影响较大（2.4GHz 明显慢于 5GHz）。命令行测速：<code>curl -o /dev/null http://设备IP:8090/api/speed/download?mb=200</code>（需带 token）。</small></p>
 <script>
 const SECONDS=8, out=t=>document.getElementById('out').textContent=t;
 const mbps=(bytes,sec)=>(bytes*8/sec/1e6).toFixed(1)+' Mbps';

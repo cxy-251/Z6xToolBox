@@ -79,14 +79,14 @@ func (m *Module) initHandler(w http.ResponseWriter, r *http.Request) {
 	var root, label string
 	switch {
 	case target == "internal":
-		root, label = filepath.Join(m.cfg.Internal, defaultDir), "投影仪机身存储"
+		root, label = filepath.Join(m.cfg.Internal, defaultDir), m.env.Config.Name+"机身存储"
 	case strings.HasPrefix(target, "usb:"):
 		name := strings.TrimPrefix(target, "usb:")
 		if name == "" || strings.ContainsAny(name, "/\\") || strings.HasPrefix(name, ".") {
 			core.WriteError(w, http.StatusBadRequest, "U 盘名称不正确")
 			return
 		}
-		root, label = filepath.Join(m.cfg.Storage, name, defaultDir), "投影仪 U 盘 "+name
+		root, label = filepath.Join(m.cfg.Storage, name, defaultDir), m.env.Config.Name+" U 盘 "+name
 	default:
 		core.WriteError(w, http.StatusBadRequest, "target 应为 internal 或 usb:<卷名>")
 		return
@@ -106,7 +106,7 @@ func (m *Module) initHandler(w http.ResponseWriter, r *http.Request) {
 
 // importHandler 接收一个 tar 流，解压为资源库中的一个文件夹（例如一个游戏）。
 //
-//	tar -C <上级目录> -cf - <文件夹名> | curl -T - "http://投影仪:8090/api/library/import?lib=<库 id>&key=games.rpg"
+//	tar -C <上级目录> -cf - <文件夹名> | curl -T - "http://设备IP:8090/api/library/import?lib=<库 id>&key=games.rpg"
 //
 // tar 中的顶层文件夹即目标文件夹。先解压到临时目录，全部完成后再改名，中断时不会留下不完整的游戏。
 // 拒绝绝对路径、..、符号链接和设备文件。

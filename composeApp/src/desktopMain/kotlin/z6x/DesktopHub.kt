@@ -34,8 +34,8 @@ class DesktopHub(private val projectDir: File = File(".").absoluteFile) : HubCon
             .redirectErrorStream(true) // 标准错误并入标准输出，按顺序显示
             .start()
         proc.inputStream.bufferedReader().useLines { lines ->
-            // hub.yaml 首次生成时会打印 token，不显示在界面上
-            lines.forEach { if (!it.startsWith("已生成 hub.yaml")) onLine(it) else onLine("已生成 hub.yaml（token 只保存在本机 hub/hub.yaml 中）") }
+            // deploy.sh 按 IP 在 hub/devices/devices.txt 中找到设备名；token 不会出现在输出中
+            lines.forEach(onLine)
         }
         proc.waitFor()
     }

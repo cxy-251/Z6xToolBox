@@ -1,6 +1,7 @@
-# z6x-hub 配置示例。deploy.sh 首次运行时会复制为 hub.yaml 并生成随机 token。
-# hub.yaml 含 token，已加入 .gitignore，不要提交。
+# z6x-hub 投影仪配置示例。./hub/deploy.sh projector 首次运行时复制为 devices/projector.yaml 并生成随机 token。
+# devices/*.yaml 含 token，已加入 .gitignore，不要提交。
 
+name: 投影仪
 listen: ":8090"
 token: "换成随机长字符串"
 data_dir: data
@@ -47,7 +48,7 @@ modules:
   # 局域网设备扫描（SSDP）。
   # 资源库：网页游戏、漫画、短视频（与 omni-deck 相同的目录结构，自动发现机身存储和 U 盘上的资源库）。
   library:
-    enable: true
+    enable: false   # 投影仪专门放电影，资源库放在手机上（见 phone.example.yaml）
 
   # 发送通知到电视的通知界面（不弹出提醒）。
   notify:

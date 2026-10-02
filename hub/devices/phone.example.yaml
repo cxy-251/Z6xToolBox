@@ -1,0 +1,31 @@
+# z6x-hub 手机配置示例（Redmi Note 12 Turbo）。./hub/deploy.sh phone 首次运行时复制为 devices/phone.yaml 并生成随机 token。
+# 手机作为资源库：网页游戏、漫画、短视频。遥控、发送文字、网络唤醒只对电视有意义，不在手机上启用。
+# devices/*.yaml 含 token，已加入 .gitignore，不要提交。
+
+token: "换成随机长字符串"
+name: 手机
+listen: ":8090"
+data_dir: data
+log_file: hub.log
+
+modules:
+  # 资源库：与 omni-deck 相同的目录结构，位于机身存储的 omni_library/。
+  library:
+    enable: true
+
+  # 文件共享：用于向资源库批量拷贝内容（WebDAV 在 8091 端口）。
+  files:
+    enable: true
+    port: 8091
+    usb: false
+    roots:
+      - { name: 内部存储, path: /storage/emulated/0 }
+
+  # 系统状态：查看手机存储余量、温度和内存。
+  metrics:
+    enable: true
+    interval_sec: 10
+
+  # 局域网测速：判断手机的 Wi-Fi 速度是否够用。
+  speed:
+    enable: true

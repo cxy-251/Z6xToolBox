@@ -166,7 +166,7 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 			b.WriteString(`<p><a href="/ui/config/">编辑配置</a></p>`)
 		}
 		fmt.Fprintf(&b, "<p><small>版本 %s · 已运行 %s</small></p>", Version, time.Since(h.started).Round(time.Second))
-		Page(w, "z6x-hub", b.String())
+		Page(w, "z6x-hub · "+h.cfg.Name, b.String())
 	})
 }
 
