@@ -84,7 +84,7 @@ val ForceAdb = module("force-adb", "通过 SSH 启动网络 ADB") {
     consequences {
         text("""
             • **重启后 adbd 会自动运行**（2026-10-01 实测：重启后 `ro.boottime.adbd` 约为 6.6 秒，ADB 可直接连接）。原因是极米启动配置中的一段补丁，见「核查：ADB 开机自动运行的原因」。
-            • 但只要 adbd 被停止一次，自动运行即失效，需要再从 SSH 启动。因此**不要卸载** SimpleSSHD。
+            • 但只要 adbd 被停止一次，自动运行即失效，需要再从 SSH 启动。因此**不要卸载** SimpleSSHD。（2026-10-02 更新：这一后路已由投影仪上的 Termux 承担，开机脚本每次先执行 `setprop ctl.start adbd`，SimpleSSHD 随后卸载，见「开机自动启动 hub 与 keymap」。）
             • `ro.adb.secure=0` 意味着同一局域网内的**任何人**都能连接并获得 shell 权限，不要将投影仪置于不可信的网络中。
             • 系统 OTA 升级可能将 SELinux 改回 Enforcing，届时此方法将失效。「系统定制」中停用 OTA 也有这一考虑。
         """)

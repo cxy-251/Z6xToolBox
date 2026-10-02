@@ -80,17 +80,13 @@ object Tools {
         val modules = all(scopes).filter { wanted.isEmpty() || it.id in wanted }
         var failed = 0
         var changed = 0
-        // SSH（SimpleSSHD）可能没在运行：先探测一次，不通就跳过全部 SSH 步骤，免得每条都等超时
-        val sshUp = modules.any { m -> m.steps.any { it.host == Host.Ssh } } &&
-            runCatching { process(listOf("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "z6x", "true")).first == 0 }.getOrDefault(false)
-        if (!sshUp && modules.any { m -> m.steps.any { it.host == Host.Ssh } }) {
-            println("! SSH（z6x）连不上，跳过全部 SSH 步骤。在电视上打开 SimpleSSHD 点 Start 后重试。")
-        }
+        // 「SSH · App 权限」步骤记录的是 SimpleSSHD（普通应用身份）中的结果；该应用已于 2026-10-02 卸载，
+        // ssh z6x 现在连接 hub 内置的 SSH（shell 身份），重新执行会得到不同结果，因此这类步骤不再核对。
 
         for (m in modules) {
             println("━━ ${m.id}  ${m.title}")
             for (s in m.steps) {
-                val skip = skipReason(s) ?: if (s.host == Host.Ssh && !sshUp) "SSH 不可用" else null
+                val skip = skipReason(s) ?: if (s.host == Host.Ssh) "SimpleSSHD 已卸载（历史记录）" else null
                 if (skip != null) { if (verbose) println("  · 跳过「${s.title}」：$skip"); continue }
 
                 val (code, out) = runCatching { execute(s) }.getOrElse { -1 to "执行失败：${it.message}" }

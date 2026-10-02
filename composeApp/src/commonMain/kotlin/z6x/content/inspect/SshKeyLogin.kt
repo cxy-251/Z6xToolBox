@@ -3,9 +3,10 @@ package z6x.content.inspect
 import z6x.framework.Host
 import z6x.framework.module
 
-val SshKeyLogin = module("ssh-key-login", "SimpleSSHD 公钥登录") {
+val SshKeyLogin = module("ssh-key-login", "SimpleSSHD 公钥登录（历史记录）") {
     keywords = "ssh-keygen · authorized_keys · dropbear · ~/.ssh/config"
     overview = """
+        **历史记录：SimpleSSHD 已于 2026-10-02 卸载**，SSH 改由 hub 内置（端口 8022，shell 身份，见「以 shell 身份运行 SSH 服务」），恢复 ADB 的后路改由 Termux 承担。以下内容保留当时的做法与结论。
         SimpleSSHD 默认每次登录都需要输入一次性密码，操作繁琐，也无法让脚本自动登录。
         将 Deck 的公钥登记到 SimpleSSHD 后，执行 `ssh z6x` 即可直接登录。过程中曾因密钥类型不受支持而无法登录。
     """

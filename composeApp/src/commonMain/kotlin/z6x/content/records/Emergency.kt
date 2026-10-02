@@ -7,28 +7,30 @@ val Emergency = module("emergency", "应急恢复手册") {
     keywords = "ADB 连不上 · 遥控器失灵 · 定制被还原 · 恢复出厂 · 重启后"
     overview = """
         汇总各篇中已验证的恢复手段：先判断故障类型，再按步骤恢复。每种恢复手段都已于 2026-10-01 实际使用或核实。
+        2026-10-02 更新：SimpleSSHD 已卸载，恢复 ADB 的后路改由投影仪上的 Termux 承担，hub 与 keymap 开机自动启动（见「开机自动启动 hub 与 keymap」）。下文保留原先使用 SimpleSSHD 的做法作为记录。
     """
-    verified("2026-10-01")
+    verified("2026-10-02")
 
     story("情况 1：ADB 无法连接") {
         text("按顺序排查，前一步恢复正常即可停止：")
         read("投影仪是否在线", "ping -c 3 192.168.0.109", Host.Deck) {
             manual = true
-            note = "不通：投影仪可能已关机（睡眠），或路由器为其分配了新 IP。IP 可在电视上打开 SimpleSSHD 查看（界面顶部列出所有 IP），或在路由器后台查询。"
+            note = "不通：投影仪可能已关机（睡眠），或路由器为其分配了新 IP。IP 可在路由器后台查询，或在电视上打开 Termux 执行 `/system/bin/ip -4 addr show wlan0`。（原先在 SimpleSSHD 界面顶部查看，该应用已于 2026-10-02 卸载。）"
         }
         change("重启 Deck 端的 adb 后重新连接", "adb kill-server && adb connect 192.168.0.109:5555", Host.Deck)
         read("5555 端口是否开放", "timeout 3 bash -c 'echo > /dev/tcp/192.168.0.109/5555' && echo 开 || echo 关", Host.Deck) {
             manual = true
             note = "网络可达但端口关闭：说明 adbd 未运行。注意：adbd 一旦停止，开机自动运行也会失效（见「核查：ADB 开机自动运行的原因」）。"
         }
-        change("通过 SSH 重新启动 adbd", "ssh z6x 'setprop ctl.start adbd'", Host.Deck) {
-            note = "先在电视上打开 SimpleSSHD 并点击 Start。adbd 启动后，极米的补丁会同时恢复开机自动运行。原理见「通过 SSH 启动网络 ADB」。"
+        change("重启投影仪", "", Host.Tv) {
+            note = "最简单的办法：Termux:Boot 的开机脚本每次先执行 `setprop ctl.start adbd`，adbd 被停止过也会重新启动。开机约 70 秒后 ADB、hub、keymap 都会恢复。"
+        }
+        change("不重启：在 Termux 中启动 adbd", "/system/bin/setprop ctl.start adbd", Host.Tv) {
+            note = "在电视上打开 Termux，用遥控器输入这条命令（Termux 的 PATH 不含系统命令，需写完整路径）。原理与当初在 SimpleSSHD 中打开 ADB 相同，见「通过 SSH 启动网络 ADB」。"
         }
         text("""
-            **如果 SSH 也无法登录：**
-            • 报 `Connection refused`：SimpleSSHD 未点击 Start。
-            • 报 `Permission denied (publickey)`：Deck 上的私钥 `~/.ssh/z6x_ecdsa` 丢失或被更换。SimpleSSHD 目前只接受这把密钥（密码登录已自动关闭）。清除 SimpleSSHD 的数据可以恢复密码登录，但这一操作需要 ADB，**因此务必备份这把私钥**（见文末）。
-            • 两种途径均不可用：只能用遥控器在电视上操作，通过 U 盘重新安装 SimpleSSHD（见「U 盘安装应用」），重新登记公钥并重新启动 ADB。
+            **原先的做法（SimpleSSHD，2026-10-02 已卸载）**：在电视上打开 SimpleSSHD 点击 Start，执行 `ssh z6x 'setprop ctl.start adbd'`。现在 `ssh z6x` 指向 hub 内置的 SSH（端口 8022），它由 hub 启动、依赖 ADB，ADB 失效时不能用来恢复 ADB。
+            **如果 Termux 也不可用**（例如被卸载）：只能用遥控器在电视上操作，通过 U 盘重新安装 Termux（见「U 盘安装应用」），在其中执行上面的命令。
         """)
     }
 
@@ -54,18 +56,18 @@ val Emergency = module("emergency", "应急恢复手册") {
 
     story("情况 4：想回到原厂状态") {
         change("撤销全部定制", "./scripts/z6x_debloat_restore.sh 192.168.0.109:5555", Host.Deck) {
-            note = "重新安装官方桌面和影视推荐，启用所有已停用的组件。ADB 和 SSH 不受影响。"
+            note = "重新安装官方桌面和影视推荐，启用所有已停用的组件。ADB、hub 与 Termux 不受影响。"
         }
     }
 
     story("情况 5：已恢复出厂设置") {
         text("""
-            恢复出厂设置会清除所有内容：第三方应用、定制、ADB 自动运行（persist 属性）以及 /data/local/tmp 中的程序。按最初的顺序重新操作：
-            1. 通过 U 盘安装 TV Bro 和 SimpleSSHD（改扩展名为 .apk1，见「U 盘安装应用」）。
-            2. 在 SimpleSSHD 中点击 Start，用一次性密码登录，登记 Deck 的公钥（见「SimpleSSHD 公钥登录」）。
-            3. 执行 `ssh z6x 'setprop ctl.start adbd'` 启动 ADB（前提：SELinux 仍为 Permissive）。
-            4. 执行 `./scripts/z6x_debloat_apply.sh` 重新精简，用 `adb install` 重新安装 Projectivy、Clash 等。
-            5. 重新部署 BusyBox 和 Go 服务。
+            恢复出厂设置会清除所有内容：第三方应用、定制、ADB 自动运行（persist 属性）以及 /data/local/tmp 中的程序。按以下顺序重新操作：
+            1. 通过 U 盘安装 Termux（改扩展名为 .apk1，见「U 盘安装应用」）。
+            2. 在 Termux 中用遥控器输入 `/system/bin/setprop ctl.start adbd` 启动 ADB（前提：SELinux 仍为 Permissive）。
+            3. 执行 `./scripts/z6x_debloat_apply.sh` 重新精简，用 `adb install` 重新安装 Projectivy、Clash、Kodi、Termux:Boot 等。
+            4. 部署 hub 与 z6x-tools：`./hub/deploy.sh projector`、`./tools/build.sh deploy projector`、`./tools/keymap.sh projector --push-config`，再按「开机自动启动 hub 与 keymap」配置 Termux。
+            （最初是先装 TV Bro 和 SimpleSSHD，在 SimpleSSHD 中登记公钥后执行 `ssh z6x 'setprop ctl.start adbd'`，见「SimpleSSHD 公钥登录」；SimpleSSHD 已于 2026-10-02 卸载。）
         """)
     }
 
@@ -74,9 +76,8 @@ val Emergency = module("emergency", "应急恢复手册") {
             注意：电源菜单中的「关机」**并非**重启，而是睡眠，开机后一切原样恢复，无需任何操作（见「核查：「关屏」与「关机」的实际行为」）。以下针对选择「重启」或断电之后的情况：
         """)
         text("""
-            • ADB：自动可用，无需处理（开机约 1 分钟后）。
-            • SSH：在电视上打开 SimpleSSHD 并点击 Start。
-            • 自行部署的服务需要通过 ADB 重新启动：z6x-hub 在 Deck 上执行 `./hub/deploy.sh` 即可（见「规格：z6x-hub」）。
+            • ADB、hub（含 SSH 8022）、keymap：开机约 70 秒后全部自动可用，无需处理（2026-10-02 实测，见「开机自动启动 hub 与 keymap」）。
+            • 原先需要在电视上打开 SimpleSSHD 点 Start、在 Deck 上执行 `./hub/deploy.sh` 重新启动 hub，现已不需要。
             • 已停用的 3 个常驻组件（hilink 等）仍会启动，属于已知问题，见「停用清单」。
         """)
         change("重新启动 Go 测试服务", "adb shell 'nohup /data/local/tmp/z6x_go_server > /data/local/tmp/go_server.log 2>&1 &'", Host.Deck)
@@ -88,7 +89,9 @@ val Emergency = module("emergency", "应急恢复手册") {
 
     consequences("需要备份的内容") {
         text("""
-            • **Deck 上的 `~/.ssh/z6x_ecdsa`**（SSH 私钥）：丢失后将无法登录 SimpleSSHD。
+            • **Deck 上的 `~/.ssh/z6x_ecdsa`**（SSH 私钥）：hub 内置 SSH 只接受它（原先用于 SimpleSSHD）。丢失后可在 hub 配置中更换公钥，不影响 ADB。
+            • **Deck 上的 `~/.ssh/phone_ed25519`**：手机 Termux 的 SSH 私钥。
+            • **`hub/devices/*.yaml`**：各设备的 hub 配置与 token（不入库，只在 Deck 上）。
             • **本项目仓库**：脚本、知识库和 Go 源码均在其中，git 保留完整历史。
             • **shared 目录中的安装包**：恢复出厂设置后重新安装时需要。
             • 投影仪本身没有需要备份的数据：定制可通过脚本重新完成。
@@ -108,7 +111,8 @@ val Security = module("security", "安全检查：对局域网开放的服务") 
     story("开放的服务") {
         facts(
             "ADB 5555" to "**免授权**（ro.adb.secure=0）。同一 Wi-Fi 下的任何设备只要安装 adb 即可获得 shell 权限：安装卸载应用、查看文件、模拟按键。风险最高",
-            "SSH 2222" to "只接受 Deck 的 ECDSA 公钥，密码登录已自动关闭。在私钥不泄露的前提下较为安全",
+            "SSH 8022（hub 内置）" to "shell 身份，只接受配置中列出的公钥（Deck 的 ECDSA 公钥），不支持密码；只在局域网地址上监听。原先的 SimpleSSHD（2222）已于 2026-10-02 卸载",
+            "z6x-hub 8090 / 8091" to "需要 token；投影仪开启了 trust_local，投影仪本机的浏览器免 token（保存配置除外）",
             "Clash 7890 / 7891" to "监听所有地址，**从 Deck 可以直接连接**（实测）：局域网内的其他设备都能使用这台投影仪的代理节点和流量",
             "Go 测试服务 8088" to "只返回版本信息，无害；z6x-hub 的规格要求使用 token 鉴权",
             "系统组件端口" to "8080、7100、1458 等属于系统组件（uid 1000），见「核查：端口的所属进程」",

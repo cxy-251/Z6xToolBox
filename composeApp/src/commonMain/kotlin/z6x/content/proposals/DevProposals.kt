@@ -90,7 +90,7 @@ val DropbearShell = module("dropbear-shell", "以 shell 身份运行 SSH 服务�
 
     consequences("之后") {
         text("""
-            SimpleSSHD 不再需要，可以卸载；遥控器芒果键目前设为打开 SimpleSSHD，卸载前应改成其他功能。与 hub 一样，投影仪重启后需要由 Deck 重新部署启动。
+            SimpleSSHD 已于 2026-10-02 卸载：用户先把遥控器芒果键改成了其他功能；恢复 ADB 的后路改由 Termux 承担（见「开机自动启动 hub 与 keymap」）。Deck 上 `~/.ssh/config` 的 z6x 别名改为端口 8022。投影仪重启后 hub 与 SSH 自动启动。
         """)
     }
 
@@ -319,7 +319,7 @@ val OomWatchdog = module("oom-watchdog", "服务保活：看门狗与 OOM 优先
         )
         text("""
             **结论：看门狗可选（仅负责崩溃后重启）；无需调整 oom 分值。**
-            重启后的恢复：2026-10-01 实测重启后 **adbd 会自动运行**，因此只需在 Deck 上通过 ADB 重新启动服务即可（可编写脚本一键恢复）。SimpleSSHD 需要在电视上手动点击 Start。
+            重启后的恢复：2026-10-01 实测重启后 **adbd 会自动运行**，因此只需在 Deck 上通过 ADB 重新启动服务即可（可编写脚本一键恢复）。SimpleSSHD 需要在电视上手动点击 Start。（2026-10-02 起由 Termux:Boot 经本机 ADB 自动启动，SimpleSSHD 已卸载。）
         """)
     }
 

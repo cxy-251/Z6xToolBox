@@ -17,7 +17,7 @@ enum class Risk(val label: String) {
 enum class Host(val label: String, val hint: String) {
     Deck("Deck 终端", "在 Steam Deck 桌面模式的 Konsole 里执行"),
     Adb("ADB shell", "先 adb connect 连上投影仪，再在 adb shell 里执行（uid 2000，shell 身份）"),
-    Ssh("SSH · App 权限", "在 SimpleSSHD 的 SSH 会话里执行（uid 10068，普通 App 身份）"),
+    Ssh("SSH · App 权限", "在 SimpleSSHD 的 SSH 会话里执行（uid 10068，普通 App 身份）。SimpleSSHD 已于 2026-10-02 卸载，此类步骤为历史记录"),
     Tv("电视界面", "在投影仪上用遥控器操作，不是命令"),
     PhoneAdb("手机 ADB", "先在手机「无线调试」中查看端口并 adb connect，再在 adb shell 里执行（uid 2000，shell 身份）"),
     Termux("Termux", "在手机的 Termux 中执行，或在 Deck 上 ssh -i ~/.ssh/phone_ed25519 -p 8022 <手机IP> 登录后执行（普通应用身份）"),

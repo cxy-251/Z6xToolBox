@@ -615,7 +615,7 @@ val BackgroundCmds = module("background-cmds", "后台任务、唤醒、时间�
             note = "最长 180 秒。第二行在 Deck 上执行，用于取回视频。受版权保护的画面录制结果为黑屏。"
         }
         danger("重启 / 关机 / 进入 Recovery", "reboot\nreboot -p\nreboot recovery", Host.Adb) {
-            note = "`-p` 表示关机。实测重启后 ADB 会自动运行；自行部署的服务需要重新启动，SimpleSSHD 需要在电视上手动点击 Start。"
+            note = "`-p` 表示关机。实测重启后 ADB 会自动运行；自行部署的服务需要重新启动，SimpleSSHD 需要在电视上手动点击 Start。（2026-10-02 起 hub 与 keymap 开机自动启动，SimpleSSHD 已卸载，见「开机自动启动 hub 与 keymap」。）"
         }
     }
 
