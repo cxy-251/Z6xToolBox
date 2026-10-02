@@ -25,8 +25,15 @@ val ProjectorAutostart = module("projector-autostart", "开机自动启动 hub �
             note = "仓库中的 `hub/adb-boot.sh`，由 `hub/deploy.sh` 推送到 /data/local/tmp/z6x-boot.sh。hub 或 keymap 未运行时启动，已在运行的不重复启动，记录写入 /data/local/tmp/z6x-boot.log。Deck 上也可以手动执行。"
         }
         change("Termux 的开机脚本", "~/.termux/boot/z6x-start.sh", Host.Remote) {
-            note = "等待 20 秒（adbd 与网络就绪），然后最多尝试 6 次：adb connect 127.0.0.1:5555，adb shell sh /data/local/tmp/z6x-boot.sh。Termux:Boot 需在安装后手动打开一次，安卓才允许它接收开机广播。"
+            note = "仓库中的 `hub/termux/projector-boot.sh`。先执行 `/system/bin/setprop ctl.start adbd` 确保 adbd 在运行，等待 20 秒，然后最多尝试 6 次：adb connect 127.0.0.1:5555，adb shell sh /data/local/tmp/z6x-boot.sh。Termux:Boot 需在安装后手动打开一次，安卓才允许它接收开机广播。"
         }
+    }
+
+    why("Termux 代替 SimpleSSHD 作为恢复 ADB 的后路") {
+        text("""
+            ADB 是当初在 SimpleSSHD（普通应用身份）中执行 `setprop ctl.start adbd` 打开的；adbd 一旦被停止，开机不再自动运行，需要再次执行这条命令（见「通过 SSH 启动网络 ADB」），因此原来的结论是「不要卸载 SimpleSSHD」。
+            hub 内置的 SSH 依赖 ADB 启动，ADB 失效时它也随之失效，不能作为后路。Termux 与 SimpleSSHD 同为普通应用身份（同一 SELinux 域，系统为 Permissive），实测在 Termux 中执行 `/system/bin/setprop ctl.start adbd` 返回 0（Termux 的 PATH 不含系统命令，需写完整路径）。开机脚本因此每次先执行这条命令，再连接本机 ADB：adbd 正常时请求被忽略，adbd 被停止时则重新启动。为免断开现有连接，未实际停止 adbd 测试，依据是与 SimpleSSHD 的方法相同。
+        """)
     }
 
     story("安装 adb 时遇到的问题（2026-10-02）") {
