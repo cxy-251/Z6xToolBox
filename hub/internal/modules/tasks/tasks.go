@@ -124,9 +124,12 @@ func (m *Module) run(ctx context.Context, name string, args ...string) string {
 	return out
 }
 
-// protected 返回不允许结束的包名集合：配置的列表、桌面、当前输入法、hub 所需的系统组件。
+// protected 返回不允许结束的包名集合：配置的列表、桌面、当前输入法、hub 所需的系统组件，
+// 以及开机自启动依赖的 Termux 与 Termux:Boot（被 force-stop 后应用处于「已停止」状态，收不到开机广播，
+// 下次开机 hub 与 keymap 就不会启动；2026-10-02 曾因此失效）。
 func (m *Module) protected(ctx context.Context) map[string]bool {
-	p := map[string]bool{"android": true, "com.android.systemui": true, "com.android.shell": true}
+	p := map[string]bool{"android": true, "com.android.systemui": true, "com.android.shell": true,
+		"com.termux": true, "com.termux.boot": true}
 	for _, x := range m.cfg.Protect {
 		p[x] = true
 	}

@@ -52,5 +52,16 @@ val ProjectorAutostart = module("projector-autostart", "开机自动启动 hub �
         )
         read("查看启动日志", "tail -5 /data/local/tmp/z6x-boot.log", Host.Adb) { varies = true }
     }
+    story("不要强行停止 Termux（2026-10-03）") {
+        text("""
+            拔掉电源重开后 hub 与 keymap 没有启动。排查：开机日志没有这次开机的记录；`dumpsys package com.termux.boot` 显示 `stopped=true`；hub 日志记录前一晚在「任务管理」中结束了 Termux 与 Termux:Boot。
+            原因：结束应用使用 `am force-stop`，安卓会把应用置为「已停止」，这种状态的应用收不到开机广播，直到用户手动打开一次。当时任务管理没有保护这两个应用。
+            处理：任务管理把 Termux 与 Termux:Boot 列为内置保护（不能结束、不参与一键清理）；从 Deck 执行 z6x-boot.sh 先恢复 hub 与 keymap；在电视上打开一次 Termux:Boot 清除「已停止」状态。另外试过用带 --include-stopped-packages 的显式广播唤醒 Termux:Boot，返回成功但应用没有运行，状态也没有清除。
+        """)
+        read("检查是否处于「已停止」状态", "dumpsys package com.termux.boot | grep -m1 -oE 'stopped=[a-z]+'", Host.Adb) {
+            note = "应为 stopped=false；为 true 时下次开机不会自动启动。"
+            varies = true
+        }
+    }
     related("adb-autostart", "spec-hub", "remote-keys")
 }
