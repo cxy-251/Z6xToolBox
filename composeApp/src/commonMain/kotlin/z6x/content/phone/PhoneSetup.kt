@@ -93,7 +93,7 @@ val PhoneTransfer = module("phone-transfer", "向手机传输大量文件") {
     overview = """
         用户曾从电脑向手机传输数万首音乐，一次传输大概率卡死，只能分批进行；在手机上直接解压 50GB 以上的压缩包也失败了。本节说明原因与更可靠的做法。
     """
-    partial("2026-10-02")
+    partial("2026-10-04")
 
     why("卡死的原因（分析，未专门测试）") {
         facts(
@@ -110,8 +110,23 @@ val PhoneTransfer = module("phone-transfer", "向手机传输大量文件") {
         change("用 adb push 传输整个目录", "adb -d push <Deck 上的目录> /storage/emulated/0/omni_library/media_library/<分区>/", Host.Deck) {
             note = "`adb push` 使用 ADB 自己的传输协议，可连续发送整个目录，不存在 MTP 的逐个确认问题。需先在开发者选项中打开「USB 调试」（与无线调试是两个开关）。这款手机按公开规格为 USB 2.0（未实测），实际约 30～40MB/s，300GB 约需 2.5～3 小时；同期 Wi-Fi 只有约 1MB/s。"
         }
+        change("大目录用续传脚本，不要一次 push 整个目录", "./scripts/phone_push.sh ~/Games/omni_library/media_library/shortvideo/抖音 /storage/emulated/0/omni_library/media_library/shortvideo/抖音", Host.Deck) {
+            note = "按顶层的每个文件夹逐个传输：先传到临时名 .part-<名称>，核对文件数与总字节数一致后再改为正式名称；手机上已有且一致的直接跳过，中断后重新运行即可续传；断线时重启 adb 并等待手机重新连接，每项最多重试 5 次。不用 `adb push --sync`：中断留下的半截文件修改时间比本地新，会被当作已传完而跳过。"
+        }
         change("在手机上解压大压缩包", "pkg install unzip && unzip <文件>.zip -d <目标目录>", Host.Termux) {
             note = "Termux 的 unzip 支持 Zip64。"
+        }
+    }
+
+    story("插着数据线，adb 却找不到手机（2026-10-04）") {
+        text("""
+            第一次传抖音短视频（370 个文件夹、98416 个文件、114G）：`adb -d push` 传了约 2G 后报「failed to read copy response: EOF」，之后 `adb devices` 列表为空，而 `lsusb` 仍能看到手机（MTP + ADB 模式）。
+            Deck 的内核日志显示手机在一分多钟内数次断开、重新连接，USB 产品号在 ff48（MTP + ADB）与 ff18 之间切换。查看谁打开了这个 USB 设备文件：是 KDE 桌面的 kiod6，而不是 adb。桌面发现 MTP 设备后会自动打开它，与 adb 争抢同一个设备。重启 adb 服务能暂时恢复，一分钟后又消失。
+            解决：用 `svc usb setFunctions`（不带参数）把手机 USB 模式改为「仅充电」，USB 调试不受影响，桌面不再抢占，adb 保持连接。续传脚本开始时会自动执行这一步。核对发现中断前已传的 10 个文件夹中有 2 个不完整（39/100、829/830 个文件），由脚本重新传输。
+        """)
+        read("查看谁占用了手机的 USB 设备", "for p in /proc/[0-9]*; do ls -l \$p/fd 2>/dev/null | grep -q 'bus/usb' && echo \"\$(basename \$p) \$(tr '\\0' ' ' < \$p/cmdline)\"; done", Host.Deck) {
+            note = "只应看到 adb。出现 kiod 等桌面进程时，把手机 USB 模式改为仅充电：`adb -d shell svc usb setFunctions`。"
+            varies = true
         }
     }
 
