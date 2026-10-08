@@ -108,7 +108,9 @@ async function boot(){
   addTab('audio','🎧 音声',0,p=>frame(p,'/ui/library/audio/'));
   if(mg.length)addTab('manga','🖼️ 漫画',mg.length,p=>mangaPane(p,mg));
   addTab('novels','📖 小说',0,p=>frame(p,'/ui/library/novels/'));
-  for(const m of mods)if(m.title&&m.name!=='library'&&m.state==='running')addTab('m-'+m.name,'🔧 '+m.title,0,p=>frame(p,'/ui/'+m.name+'/'));
+  // 各模块的页面（文件共享、系统状态、局域网测速……）合为「工具」标签，在行末下拉菜单中选择
+  const tools=mods.filter(m=>m.title&&m.name!=='library'&&m.state==='running').map(m=>({id:m.name,label:m.title}));
+  if(tools.length)addTab('tools','🔧 工具',0,(p,t)=>{p.classList.add('frame');subTab(p,t,tools,'z6x-tool',(pane,id)=>frame(pane,'/ui/'+id+'/'))});
   addTab('storage','🗄️ 存储',0,p=>frame(p,'/ui/library/storage?tab=libs'));
   addTab('system','⚙️ 系统',0,p=>frame(p,'/ui/hub/'));
   const bar=$('tabs');
@@ -122,7 +124,7 @@ function show(id){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
   const t=tabs.find(t=>t.id===id);if(!t.ready){t.ready=true;t.init(t.pane,t)}
   const sel=$('sub');sel.style.display=t.subs?'':'none';
-  if(t.subs){sel.replaceChildren(...t.subs.map(s=>new Option(s.label+'  '+s.count,s.id)));sel.value=t.cur;sel.onchange=()=>t.pick(sel.value)}
+  if(t.subs){sel.replaceChildren(...t.subs.map(s=>new Option(s.label+(s.count?'  '+s.count:''),s.id)));sel.value=t.cur;sel.onchange=()=>t.pick(sel.value)}
   history.replaceState(null,'','#'+id);store.set('z6x-home-tab',id);
   document.querySelector('#tabs button.on')?.scrollIntoView({inline:'nearest',block:'nearest'});
 }

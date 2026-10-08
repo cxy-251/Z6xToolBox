@@ -1,0 +1,77 @@
+<title>存储与转移</title><style>
+main{max-width:900px;margin:0 auto;padding:12px 14px 40px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.card h2{font-size:15px;margin:0 0 8px}
+.lib{padding:8px 0;border-bottom:1px solid var(--line)}.lib:last-child{border:0}
+.bar{height:6px;background:#21262d;border-radius:3px;margin:6px 0 2px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent)}
+code,pre{font:12px ui-monospace,monospace;background:#0d1117;border:1px solid var(--line);border-radius:6px}
+code{padding:1px 5px}
+pre{padding:8px 10px;margin:6px 0;white-space:pre-wrap;word-break:break-all;position:relative}
+pre button{position:absolute;top:4px;right:4px;font-size:11px;padding:2px 8px}
+.step{margin:12px 0 4px;font-weight:600}
+.tip{font-size:13px;color:var(--muted);line-height:1.6}
+ul.t{margin:4px 0;padding-left:20px;line-height:1.7;font-size:13px}
+</style></head><body><main>
+<div class="card"><h2>当前资源库</h2><div id="libs">读取中…</div></div>
+<div class="card"><h2>可建立资源库的位置</h2><div id="vols">读取中…</div></div>
+
+<div class="card"><h2>从 Deck 向手机转移资源库（数据线 + ADB）</h2>
+<p class="tip">大量文件请用数据线，Wi-Fi 只有约 1MB/s。以下命令都在 <b>Deck 的终端</b>中、Z6xToolBox 目录下执行。</p>
+<div class="step">1. 连接</div>
+<ul class="t">
+<li>数据线<b>直接插 Deck 机身的 USB-C 口</b>：经扩展坞时手机端 adb 每传几百 MB 就卡死一次。</li>
+<li>手机上打开「开发者选项 → USB 调试」（与无线调试是两个开关）。</li>
+<li>手机 USB 模式选<b>仅充电</b>：选「文件传输（MTP）」时，Deck 的桌面会自动打开手机、与 adb 抢占 USB，表现为插着线但 adb 找不到手机。同步脚本开始时会自动切换。</li>
+</ul>
+<pre>adb devices</pre>
+<div class="step">2. 阻止手机相册扫描资源库（只需一次）</div>
+<pre>adb -d shell touch /storage/emulated/0/omni_library/.nomedia</pre>
+<div class="step">3. 同步：只传缺少或大小不同的文件，可随时中断、重新运行即续传</div>
+<pre>./scripts/phone_push.sh ~/Games/omni_library/media_library/shortvideo/抖音 /storage/emulated/0/omni_library/media_library/shortvideo/抖音</pre>
+<pre>./scripts/phone_push.sh ~/Games/omni_library/standalone_games/rpg_games /storage/emulated/0/omni_library/standalone_games/rpg_games</pre>
+<ul class="t">
+<li>手机上多出的文件不会被删除：SSD 与 SD 卡中同名但内容互补的文件夹可以先后同步到同一位置。</li>
+<li>断线时脚本自动重连；若提示「手机的 adb 卡住了」，拔下数据线再插上即可继续。</li>
+<li>软链接与只有大小写不同的同名文件会跳过并列出（手机存储不支持软链接、不区分大小写）。</li>
+<li>不要用 <code>adb push --sync</code> 续传：中断留下的半截文件修改时间较新，会被当作已传完。</li>
+</ul>
+<div class="step">4. 速度参考</div>
+<ul class="t">
+<li>大视频约 30～40MB/s；大量小文件取决于文件数：每秒约 50 个，目录中文件上万时降到每秒几个（手机存储逐个建文件的开销，换传输方式也无法改善）。</li>
+<li>传完后 hub 最多 <span id="rescan"></span> 分钟内自动重新扫描；短视频封面由手机在后台补齐（Termux 中执行 <code>thumbs status</code> 查看进度）。</li>
+</ul>
+<p class="tip">完整的说明、排查过程与原理见 Z6xToolBox 知识库「手机 → 向手机传输大量文件」。</p>
+</div>
+
+<div class="card"><h2>其他转移方式</h2>
+<ul class="t">
+<li><b>投影仪</b>：把 U 盘插到 Deck，在 omni-deck「存储与游戏库」中把它添加为资源库并移入内容；再插到投影仪，几秒内即出现在上方列表。</li>
+<li><b>少量</b>：<code>./hub/library-import.sh &lt;文件夹&gt; games.slg</code> 经网络导入一个游戏（受 Wi-Fi 速度限制），存档随游戏目录一起转移。</li>
+<li>浏览器中可直接使用：网页游戏（RPG Maker、SLG）、CBZ 漫画、MP4 短视频；复古游戏与 Ren'Py 桌面版暂不支持。</li>
+</ul></div>
+</main>
+<script>
+const $=id=>document.getElementById(id),enc=encodeURIComponent;
+const CFG={{cfg}};
+const size=n=>n>1073741824?(n/1073741824).toFixed(1)+' GB':(n/1048576).toFixed(0)+' MB';
+const el=(t,x,c)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e};
+$('rescan').textContent=CFG.rescan_minutes;
+// 命令块加「复制」按钮
+document.querySelectorAll('pre').forEach(p=>{const b=el('button','复制');b.onclick=()=>{navigator.clipboard?.writeText(p.firstChild.textContent).then(()=>b.textContent='已复制',()=>b.textContent='请手动选择');setTimeout(()=>b.textContent='复制',1500)};p.append(b)});
+async function load(){
+  const [libs,vols]=await Promise.all([fetch('/api/library/libs').then(r=>r.json()),fetch('/api/library/volumes').then(r=>r.json())]);
+  const box=$('libs');box.replaceChildren();
+  if(!libs.length)box.textContent='尚未建立资源库';
+  for(const l of libs){const d=el('div',null,'lib');d.append(el('b',l.label),' ',el('small',l.location+' · 剩余 '+size(l.free_bytes)+' / '+size(l.total_bytes),'muted'));
+    const bar=el('div',null,'bar'),i=el('i');i.style.width=(l.total_bytes?100-l.free_bytes/l.total_bytes*100:0).toFixed(0)+'%';bar.append(i);
+    const p=el('small',null,'muted');p.append(el('code',l.path),' · id ',el('code',l.id));d.append(bar,p);box.append(d)}
+  const vb=$('vols');vb.replaceChildren();
+  if(!vols.length)vb.textContent='没有其他可用位置';
+  for(const v of vols){const d=el('div',null,'lib');d.append(v.label+'（剩余 '+size(v.free_bytes)+'）');
+    if(v.has_library)d.append(el('small','  已有资源库','muted'));
+    else{const b=el('button','在此建立资源库');b.style.marginLeft='8px';
+      b.onclick=async()=>{const r=await fetch('/api/library/init?target='+enc(v.target),{method:'POST'});alert(r.ok?'已建立':(await r.json()).error);load()};d.append(b)}
+    vb.append(d)}
+}
+load();
+</script></body></html>
