@@ -56,6 +56,11 @@ fi
 if [ "$MODE" = termux ]; then
   put termux/hub.sh "$RDIR/hub.sh"
   rsh "chmod 755 $RDIR/hub.sh; grep -q 'alias hub=' ~/.bashrc 2>/dev/null || echo 'alias hub=~/$RDIR/hub.sh' >> ~/.bashrc"
+  # 短视频封面生成（手机上运行，按温度调速）与开机脚本
+  put termux/thumbs.sh "$RDIR/thumbs.sh"
+  put ../scripts/shortvideo_thumbs.py "$RDIR/shortvideo_thumbs.py"
+  put termux/phone-boot.sh "$RDIR/phone-boot.sh"
+  rsh "chmod 755 $RDIR/thumbs.sh; mkdir -p ~/.termux/boot && cp $RDIR/phone-boot.sh ~/.termux/boot/z6x-start.sh && chmod 755 ~/.termux/boot/z6x-start.sh; grep -q 'alias thumbs=' ~/.bashrc 2>/dev/null || echo 'alias thumbs=~/$RDIR/thumbs.sh' >> ~/.bashrc"
 fi
 
 echo "== 重启 hub"

@@ -106,6 +106,9 @@ class Throttle:
             self.cv.notify_all()
 
 
+NAMES = {"skip": "已有", "reuse": "复用 omni-deck", "made": "新生成", "fail": "失败", "todo": "待生成"}
+
+
 def natural_key(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
 
@@ -114,6 +117,21 @@ def omni_cache(src, tag):
     key = hashlib.sha1((os.path.abspath(src) + "|" + tag).encode("utf-8")).hexdigest()
     p = os.path.join(OMNI_THUMBS, key + ".webp")
     return p if os.path.isfile(p) else None
+
+
+def clean_tmp(platform_dir):
+    """删除上次中断留下的临时文件（.thumbs/ 下以点开头、以 .tmp 结尾；旧版为 *.tmp.webp）。"""
+    n = 0
+    for root, dirs, files in os.walk(platform_dir):
+        if os.path.basename(root) == THUMB_DIR:
+            for f in files:
+                if f.endswith(".tmp") or f.endswith(".tmp.webp"):
+                    os.remove(os.path.join(root, f))
+                    n += 1
+            dirs[:] = []
+        else:
+            dirs[:] = [d for d in dirs if d == THUMB_DIR or not d.startswith(".")]
+    return n
 
 
 def jobs_in(platform_dir, only):
@@ -137,17 +155,30 @@ def jobs_in(platform_dir, only):
             yield os.path.join(root, imgs[0]), os.path.join(parent, THUMB_DIR, name + ".webp"), "gthumb"
 
 
+def log(msg):
+    print(time.strftime("%m-%d %H:%M:%S ") + msg, flush=True)
+
+
+failures = []
+
+
 def make(job, dry):
-    src, dst, tag = job
     try:
-        if os.path.exists(dst) and os.path.getmtime(dst) >= os.path.getmtime(src):
-            return "skip"
-    except OSError:
+        return _make(job, dry)
+    except Exception as e:  # 单个作品出错不影响其他作品
+        failures.append(f"{job[0]}：{e}")
         return "fail"
+
+
+def _make(job, dry):
+    src, dst, tag = job
+    if os.path.exists(dst) and os.path.getmtime(dst) >= os.path.getmtime(src):
+        return "skip"
     if dry:
         return "reuse" if omni_cache(src, tag) else "todo"
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    tmp = dst + ".tmp.webp"
+    # 临时文件以点开头、不以 .webp 结尾：中断后残留也不会被当作封面（启动时清理）
+    tmp = os.path.join(os.path.dirname(dst), "." + os.path.basename(dst) + ".tmp")
     cached = omni_cache(src, tag)
     if cached:
         shutil.copyfile(cached, tmp)
@@ -163,6 +194,7 @@ def make(job, dry):
             return "made"
     if os.path.exists(tmp):
         os.remove(tmp)
+    failures.append(f"{src}：ffmpeg 无法取帧（文件可能损坏或格式不支持）")
     return "fail"
 
 
@@ -190,15 +222,19 @@ def main():
             pl, _, who = a.only.partition("/")
             if pl and pl != plat:
                 continue
+            if not a.dry_run:
+                n = clean_tmp(pdir)
+                if n:
+                    log(f"清理了上次中断留下的 {n} 个临时文件：{pdir}")
             jobs.extend(jobs_in(pdir, who))
     if a.limit:
         jobs = jobs[: a.limit]
-    print(f"共 {len(jobs)} 个作品；omni-deck 封面缓存：{OMNI_THUMBS}", flush=True)
+    log(f"开始：共 {len(jobs)} 个作品" + (f"；复用 omni-deck 的封面缓存 {OMNI_THUMBS}" if os.path.isdir(OMNI_THUMBS) else ""))
 
     stats, done, lock = {}, [0], threading.Lock()
     th = Throttle(max(1, a.jobs), a.cool, a.hot)
     if th.zones:
-        print(f"温度控制：低于 {a.cool}°C 同时 {a.jobs} 个，{a.cool}～{a.hot}°C 1 个，{a.hot}°C 以上暂停", flush=True)
+        log(f"温度控制：低于 {a.cool}°C 同时 {a.jobs} 个，{a.cool}～{a.hot}°C 1 个，{a.hot}°C 以上暂停")
     it = iter(jobs)
 
     def worker():
@@ -214,15 +250,18 @@ def main():
                 done[0] += 1
                 if done[0] % 500 == 0 or done[0] == len(jobs):
                     temp = f"，{th.temp:.1f}°C" + ("（暂停中）" if th.paused else "") if th.temp is not None else ""
-                    print(f"[{done[0]}/{len(jobs)}] " + "，".join(f"{k} {v}" for k, v in sorted(stats.items())) + temp, flush=True)
+                    log(f"[{done[0]}/{len(jobs)}] " + "，".join(f"{NAMES.get(k, k)} {v}" for k, v in sorted(stats.items())) + temp)
 
     ts = [threading.Thread(target=worker) for _ in range(max(1, a.jobs))]
     for t in ts:
         t.start()
     for t in ts:
         t.join()
-    names = {"skip": "已有", "reuse": "复用 omni-deck", "made": "新生成", "fail": "失败", "todo": "待生成"}
-    print("完成：" + "，".join(f"{names.get(k, k)} {v}" for k, v in sorted(stats.items())))
+    for f in failures[:20]:
+        log("失败：" + f)
+    if len(failures) > 20:
+        log(f"……另有 {len(failures) - 20} 个失败")
+    log("完成：" + "，".join(f"{NAMES.get(k, k)} {v}" for k, v in sorted(stats.items())))
     return 1 if stats.get("fail") else 0
 
 

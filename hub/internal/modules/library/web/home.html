@@ -146,14 +146,16 @@ function svTab(pane,pfs){
   const panes={};
   const pick=id=>{store.set('z6x-sv-platform',id);plat.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
     for(const k in panes)panes[k].style.display=k===id?'':'none';
-    if(!panes[id]){panes[id]=el('div');body.append(panes[id]);svPane(panes[id],id)}};
+    if(!panes[id]){panes[id]=el('div');body.append(panes[id]);svPane(panes[id],id,pfs.find(p=>p.id===id))}};
   for(const p of pfs){const b=el('button','',{douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]+p.title+' ');b.dataset.id=p.id;b.append(el('span','muted',p.count));b.onclick=()=>pick(p.id);plat.append(b)}
   const last=store.get('z6x-sv-platform','');pick(pfs.some(p=>p.id===last)?last:pfs[0].id);
 }
-function svPane(p,platform){
+function svPane(p,platform,info){
   const st={platform,folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0,folders:[],moreOpen:false,authorQ:''};
   const tools=el('div','tools'),q=el('input');q.type='search';q.placeholder='🔍 搜索标题或博主';
   const likeBtn=el('button','','♡ 只看喜欢'),count=el('span','muted');tools.append(q,likeBtn,count);
+  // 封面由手机上的 thumbs.sh 生成，hub 每 10 分钟重新扫描一次；未完成时显示进度
+  if(info&&info.thumbs<info.count){const t=el('span','muted','封面 '+info.thumbs+'/'+info.count);t.title='封面在手机上后台生成（Termux 中执行 thumbs status 查看）';tools.append(t)}
   const chips=el('div','chips'),morePanel=el('div','more'),grid=el('div','svgrid'),sentinel=el('div');sentinel.style.height='40px';
   morePanel.style.display='none';const empty=el('div','empty','没有作品');empty.style.display='none';
   p.append(tools,chips,morePanel,grid,empty,sentinel);

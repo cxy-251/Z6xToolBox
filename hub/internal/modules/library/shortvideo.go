@@ -36,7 +36,14 @@ func (m *Module) shortvideoRoutes(r core.Router) {
 	r.HandleFunc("GET /api/library/shortvideo/platforms", func(w http.ResponseWriter, _ *http.Request) {
 		out := make([]map[string]any, 0, len(platforms))
 		for _, p := range platforms {
-			out = append(out, map[string]any{"id": p.ID, "title": p.Dir, "count": len(m.platformItems(p.ID))})
+			items := m.platformItems(p.ID)
+			thumbs := 0
+			for _, it := range items {
+				if it.Thumb != "" {
+					thumbs++
+				}
+			}
+			out = append(out, map[string]any{"id": p.ID, "title": p.Dir, "count": len(items), "thumbs": thumbs})
 		}
 		core.WriteJSON(w, out)
 	})
