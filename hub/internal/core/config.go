@@ -13,12 +13,14 @@ import (
 // Config 对应 hub.yaml。各模块自己的配置原样保存在 Modules 里，由模块自行解析。
 type Config struct {
 	// Name 是设备的显示名称（如「投影仪」「手机」），用于页面标题和资源库名称。
-	Name    string               `yaml:"name"`
-	Listen  string               `yaml:"listen"`
-	Token   string               `yaml:"token"`
-	DataDir string               `yaml:"data_dir"`
-	LogFile string               `yaml:"log_file"`
-	Modules map[string]yaml.Node `yaml:"modules"`
+	Name   string `yaml:"name"`
+	Listen string `yaml:"listen"`
+	Token  string `yaml:"token"`
+	// Password 是浏览器登录用的简单密码（可选）。登录后浏览器保存的仍是 token；接口与网络指纹只认 token。
+	Password string               `yaml:"password"`
+	DataDir  string               `yaml:"data_dir"`
+	LogFile  string               `yaml:"log_file"`
+	Modules  map[string]yaml.Node `yaml:"modules"`
 	// TrustLocal 为真时，来自设备本身的请求（例如投影仪上的浏览器）不需要 token；保存配置除外。
 	TrustLocal bool `yaml:"trust_local"`
 	// Network 限定在哪个网络上对外服务，见 netguard.go。
@@ -61,6 +63,9 @@ func (c *Config) validate() error {
 	var errs []string
 	if len(c.Token) < 16 {
 		errs = append(errs, "token 至少 16 个字符（所有接口都靠它鉴权）")
+	}
+	if c.Password != "" && len(c.Password) < 4 {
+		errs = append(errs, "password 至少 4 个字符")
 	}
 	if strings.Contains(c.Token, "换成") {
 		errs = append(errs, "token 仍是示例值，请换成随机字符串")

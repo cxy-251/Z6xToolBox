@@ -136,15 +136,15 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 		WriteJSON(w, h.health().Modules)
 	})))
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
-		Page(w, "登录", `<form method="post"><p>请输入 hub.yaml 中配置的 token：</p>
+		Page(w, "登录", `<form method="post"><p>请输入密码（hub.yaml 中的 password，或 token）：</p>
 <input type="password" name="token" autofocus style="width:100%">
 <input type="hidden" name="next" value="`+html.EscapeString(r.URL.Query().Get("next"))+`">
 <p><button>登录</button></p></form>`)
 	})
 	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
-		if !ValidToken(r.FormValue("token"), h.cfg.Token) {
+		if got := r.FormValue("token"); !ValidToken(got, h.cfg.Token) && !ValidToken(got, h.cfg.Password) {
 			time.Sleep(time.Second) // 减缓暴力尝试
-			Page(w, "登录失败", `<p>token 不正确。<a href="/login">重试</a></p>`)
+			Page(w, "登录失败", `<p>密码不正确。<a href="/login">重试</a></p>`)
 			return
 		}
 		setTokenCookie(w, h.cfg.Token)

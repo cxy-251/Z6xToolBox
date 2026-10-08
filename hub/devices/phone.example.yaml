@@ -3,6 +3,7 @@
 # devices/*.yaml 含 token，已加入 .gitignore，不要提交。
 
 token: "换成随机长字符串"
+password: z6x888   # 浏览器登录密码（可选，至少 4 个字符）；接口与网络指纹仍使用 token
 name: 手机
 listen: ":8090"
 data_dir: data
