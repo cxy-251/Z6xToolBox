@@ -277,7 +277,8 @@ func TestShortvideoItemsAndAlbums(t *testing.T) {
 	root := t.TempDir()
 	initLibrary(root, "测试")
 	for _, f := range []string{"抖音/作者甲/2025-01-12_新_1.mp4", "抖音/作者甲/2024-03-01_旧_2.mp4", "抖音/作者乙/3.mp4",
-		"抖音/作者甲/2025-02-01_图集/2.webp", "抖音/作者甲/2025-02-01_图集/10.webp", "抖音/作者甲/封面.jpg"} {
+		"抖音/作者甲/2025-02-01_图集/2.webp", "抖音/作者甲/2025-02-01_图集/10.webp", "抖音/作者甲/封面.jpg",
+		"抖音/作者甲/.thumbs/2024-03-01_旧_2.mp4.webp", "抖音/作者甲/.thumbs/2025-02-01_图集.webp", "抖音/作者乙/#话题.mp4", "抖音/作者乙/.thumbs/#话题.mp4.webp"} {
 		p := filepath.Join(root, mediaRoot, "shortvideo", filepath.FromSlash(f))
 		os.MkdirAll(filepath.Dir(p), 0o755)
 		os.WriteFile(p, []byte("x"), 0o644)
@@ -302,12 +303,25 @@ func TestShortvideoItemsAndAlbums(t *testing.T) {
 			Rel    string   `json:"rel_path"`
 			Kind   string   `json:"kind"`
 			Images []string `json:"images"`
+			Thumb  string   `json:"thumb"`
 		} `json:"items"`
 	}
 	get("/api/library/shortvideo/items?platform=douyin&folder="+url.QueryEscape("作者甲"), &res)
 	// 博主目录下直接放的图片（封面.jpg）不算作品；图集按日期排在最前（从新到旧）
 	if res.Total != 3 || res.Items[0].Kind != "images" || len(res.Items[0].Images) != 2 || res.Items[2].Rel != "作者甲/2024-03-01_旧_2.mp4" {
 		t.Fatalf("作品列表不正确：%+v", res)
+	}
+	if !strings.HasSuffix(res.Items[0].Thumb, "/.thumbs/2025-02-01_%E5%9B%BE%E9%9B%86.webp") && !strings.HasSuffix(res.Items[0].Thumb, "/.thumbs/2025-02-01_图集.webp") || res.Items[1].Thumb != "" || res.Items[2].Thumb == "" {
+		t.Errorf("封面不正确：%q %q %q", res.Items[0].Thumb, res.Items[1].Thumb, res.Items[2].Thumb)
+	}
+	var b struct {
+		Items []struct {
+			Thumb string `json:"thumb"`
+		} `json:"items"`
+	}
+	get("/api/library/shortvideo/items?platform=douyin&folder="+url.QueryEscape("作者乙"), &b)
+	if len(b.Items) != 2 || b.Items[0].Thumb == "" && b.Items[1].Thumb == "" {
+		t.Errorf("名称排在 .thumbs 之前的作品（#话题.mp4）也应找到封面：%+v", b.Items)
 	}
 	if !strings.HasSuffix(res.Items[0].Images[0], "2.webp") {
 		t.Errorf("图集中的图片应按自然顺序排列：%v", res.Items[0].Images)
@@ -318,10 +332,10 @@ func TestShortvideoItemsAndAlbums(t *testing.T) {
 		t.Fatalf("只看喜欢不正确：%+v", res)
 	}
 	get("/api/library/shortvideo/items?platform=douyin&limit=2&offset=2", &res)
-	if res.Total != 4 || len(res.Items) != 2 {
+	if res.Total != 5 || len(res.Items) != 2 {
 		t.Fatalf("分页不正确：%+v", res)
 	}
-	if got := m.channelVideos("all", 0); len(got) != 3 {
+	if got := m.channelVideos("all", 0); len(got) != 4 {
 		t.Fatalf("多联放映不应包含图集：%d", len(got))
 	}
 	var folders []struct {
@@ -334,7 +348,7 @@ func TestShortvideoItemsAndAlbums(t *testing.T) {
 	for _, f := range folders {
 		by[f.Name] = [2]int{f.Count, f.Liked}
 	}
-	if len(folders) != 2 || by["作者甲"] != [2]int{3, 0} || by["作者乙"] != [2]int{1, 1} {
+	if len(folders) != 2 || by["作者甲"] != [2]int{3, 0} || by["作者乙"] != [2]int{2, 1} {
 		t.Fatalf("博主列表不正确：%+v", folders)
 	}
 }

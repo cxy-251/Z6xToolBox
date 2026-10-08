@@ -33,8 +33,9 @@ var platforms = []platform{
 	{"tiktok", "TikTok", "TikTok"},
 }
 
-// thumbDir 是短视频封面目录（在 shortvideo/ 下，与平台目录并列；以点开头，omni-deck 与媒体扫描都会跳过）。
-const thumbDir = ".z6x-thumbs"
+// thumbDir 是短视频封面目录：作品所在目录下的 .thumbs/，视频 abc.mp4 的封面为 .thumbs/abc.mp4.webp，
+// 图集目录 abc/ 的封面为 .thumbs/abc.webp。以点开头，omni-deck 与媒体扫描都会跳过。
+const thumbDir = ".thumbs"
 
 var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mov": true, ".m4v": true, ".mkv": true}
 
@@ -48,7 +49,7 @@ type svItem struct {
 	Folder   string   // 作者（第一级子目录），直接放在平台目录下的为「未分类」
 	URL      string   // 播放地址
 	Images   []string // 图集作品（博主目录下装着图片的子目录）的图片地址；视频为空
-	Thumb    string   // 预先生成的封面（shortvideo/.z6x-thumbs/<平台>/<相对路径>.webp），没有为空
+	Thumb    string   // 预先生成的封面（见 thumbDir），没有为空
 	date     int      // 文件名开头的日期（YYYYMMDD），没有为 0
 	mtime    int64
 }
@@ -127,21 +128,25 @@ func (m *Module) scanMedia() {
 	for _, lib := range m.libs() {
 		for _, p := range platforms {
 			base := filepath.Join(lib.Path, mediaRoot, "shortvideo", p.Dir)
-			// 封面由 Deck 生成后同步过来（scripts/shortvideo_thumbs.sh），hub 不生成；这里只记下哪些作品有封面
-			thumbBase := filepath.Join(lib.Path, mediaRoot, "shortvideo", thumbDir, p.Dir)
+			// 封面由 Deck 生成（scripts/shortvideo_thumbs.py），放在作品所在目录的 .thumbs/ 下，随作品一起移动；
+			// hub 不生成封面，扫描时只记下哪些作品有封面：相对路径 → 地址
 			thumbs := map[string]string{}
-			filepath.WalkDir(thumbBase, func(fp string, d fs.DirEntry, err error) error {
-				if err == nil && !d.IsDir() && strings.HasSuffix(fp, ".webp") {
-					rel, _ := filepath.Rel(thumbBase, fp)
-					thumbs[strings.TrimSuffix(filepath.ToSlash(rel), ".webp")] = libURL(lib.ID, filepath.Join(mediaRoot, "shortvideo", thumbDir, p.Dir, rel))
-				}
-				return nil
-			})
+			var found []*svItem // 本次遍历到的作品，遍历结束后再配封面（.thumbs 不一定先于作品被遍历到）
 			filepath.WalkDir(base, func(fp string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return nil
 				}
 				if d.IsDir() {
+					if d.Name() == thumbDir {
+						dirRel, _ := filepath.Rel(base, filepath.Dir(fp))
+						dirRel = filepath.ToSlash(dirRel)
+						ents, _ := os.ReadDir(fp)
+						for _, e := range ents {
+							if name, ok := strings.CutSuffix(e.Name(), ".webp"); ok && !e.IsDir() {
+								thumbs[pathpkg.Join(dirRel, name)] = libURL(lib.ID, filepath.Join(mediaRoot, "shortvideo", p.Dir, filepath.FromSlash(dirRel), thumbDir, e.Name()))
+							}
+						}
+					}
 					if strings.HasPrefix(d.Name(), ".") {
 						return fs.SkipDir
 					}
@@ -168,9 +173,9 @@ func (m *Module) scanMedia() {
 						if info, err := d.Info(); err == nil {
 							al.mtime = info.ModTime().Unix()
 						}
-						al.Thumb = thumbs[dir]
 						albumAt[key] = al
 						albums[p.ID] = append(albums[p.ID], al)
+						found = append(found, al)
 					}
 					al.Images = append(al.Images, libURL(lib.ID, filepath.Join(mediaRoot, "shortvideo", p.Dir, filepath.FromSlash(rel))))
 					return nil
@@ -190,10 +195,13 @@ func (m *Module) scanMedia() {
 				if info, err := d.Info(); err == nil {
 					it.mtime = info.ModTime().Unix()
 				}
-				it.Thumb = thumbs[rel]
 				videos[p.ID] = append(videos[p.ID], it)
+				found = append(found, it)
 				return nil
 			})
+			for _, it := range found {
+				it.Thumb = thumbs[it.Rel]
+			}
 		}
 		for _, nsfw := range []bool{false, true} {
 			sub := "standard"
