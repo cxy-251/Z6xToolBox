@@ -47,6 +47,12 @@ body{overscroll-behavior-y:contain}
 #pl.on{display:block}
 #pl video,#pl img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 #pl img{display:none}
+/* 图集：两侧翻页按钮、点图片左半边 / 右半边翻页、底部页码 */
+#pl .pg{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:64px;border:0;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;font-size:30px;display:none;z-index:2;padding:0}
+#pgl{left:10px}#pgr{right:66px}
+#pl.album .pg,#pl.album #pgn{display:block}
+#pgn{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:13px;padding:3px 12px;border-radius:12px;display:none;z-index:2}
+#pl.idle .pg,#pl.idle #pgn{opacity:.25}
 #pl .ui{position:absolute;left:0;right:0;padding:12px 14px;background:linear-gradient(rgba(0,0,0,.7),transparent);display:flex;gap:8px;align-items:center;transition:opacity .3s}
 #pl .ui.b{bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.75));flex-wrap:wrap}
 #pl .ui button{background:rgba(255,255,255,.12);border:0;color:#fff;border-radius:18px;padding:6px 12px}
@@ -66,6 +72,7 @@ body{overscroll-behavior-y:contain}
 <div id="panes"></div>
 <div id="pl">
   <video id="pv" playsinline preload="auto"></video><img id="pi" alt="">
+  <button class="pg" id="pgl" title="上一张（←）">‹</button><button class="pg" id="pgr" title="下一张（→）">›</button><span id="pgn"></span>
   <div class="ui" style="top:0"><button id="pclose">✕</button><span id="ptitle"></span><span id="pmeta"></span></div>
   <div class="side"><button id="pprev" title="上一个（↑）">▲</button><button id="plike" title="喜欢（L）">♡</button><button id="pnext" title="下一个（↓）">▼</button></div>
   <div class="ui b"><button id="pplay">⏸</button><input type="range" id="pseek" min="0" max="1000" value="0"><span id="ptime" class="muted">0:00</span>
@@ -212,9 +219,13 @@ const player=(()=>{
   const cur=()=>st&&st.items[i];
   function render(){const it=cur();if(!it)return;
     $('ptitle').textContent=it.title;$('plike').textContent=it.liked?'❤️':'♡';
+    pl.classList.toggle('album',it.kind==='images');
     if(it.kind==='images'){v.pause();v.removeAttribute('src');v.style.display='none';img.style.display='block';img.src=it.images[page];
-      $('pmeta').textContent=it.folder+' · 第 '+(page+1)+'/'+it.images.length+' 张 · '+(i+1)+'/'+st.total;$('pplay').style.display=$('pseek').style.display='none'}
-    else{img.style.display='none';v.style.display='block';$('pplay').style.display=$('pseek').style.display='';
+      // 预取下一张，翻页时不用等
+      if(page+1<it.images.length)(new Image()).src=it.images[page+1];
+      $('pgn').textContent=(page+1)+' / '+it.images.length;
+      $('pmeta').textContent=it.folder+' · '+(i+1)+'/'+st.total;$('pplay').style.display=$('pseek').style.display=$('ptime').style.display='none'}
+    else{img.style.display='none';v.style.display='block';$('pplay').style.display=$('pseek').style.display=$('ptime').style.display='';
       v.src=it.url;v.play().catch(()=>{});$('pmeta').textContent=it.folder+' · '+(i+1)+'/'+st.total}
     $('pplay').textContent='⏸'}
   async function go(d){if(!st)return;let n;
@@ -245,6 +256,9 @@ const player=(()=>{
   pl.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
     if(Math.abs(dy)>60&&Math.abs(dy)>Math.abs(dx))go(dy<0?1:-1);else if(Math.abs(dx)>60)flip(dx<0?1:-1)},{passive:true});
   v.onclick=()=>$('pplay').click();
+  // 图集：点图片左半边上一张、右半边下一张；两侧按钮同样。第一张再往前 / 最后一张再往后切换到上一个 / 下一个作品
+  img.onclick=e=>{flip(e.clientX<window.innerWidth/2?-1:1);idle()};
+  $('pgl').onclick=e=>{e.stopPropagation();flip(-1);idle()};$('pgr').onclick=e=>{e.stopPropagation();flip(1);idle()};
   let it2;function idle(){pl.classList.remove('idle');clearTimeout(it2);it2=setTimeout(()=>pl.classList.add('idle'),2500)}
   pl.addEventListener('mousemove',idle);
   return {open};
