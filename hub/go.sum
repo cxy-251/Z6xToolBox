@@ -1,3 +1,5 @@
+github.com/alicebob/alac v0.0.0-20251224094718-0cfeed25bc2f h1:FDzkAeU0pjSmsIbOvYOfeQ+NhnjjlCyP8UNrudSPYWc=
+github.com/alicebob/alac v0.0.0-20251224094718-0cfeed25bc2f/go.mod h1:63lldzSxf+fkQJUqbQPvTzykbScPUib9oHs24zsTjxs=
 golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
 golang.org/x/crypto v0.57.0/go.mod h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=
 golang.org/x/image v0.46.0 h1:b1+oYj0Jbp6K5MDT4i4/eZpYlk3V8SJhhDKh6LBHAyQ=

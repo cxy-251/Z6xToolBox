@@ -22,6 +22,7 @@ import (
 	_ "time/tzdata" // 安卓没有 /etc/localtime，内嵌时区数据以便按本地时间记录日志
 
 	"z6x/hub/internal/core"
+	"z6x/hub/internal/modules/airplay"
 	"z6x/hub/internal/modules/control"
 	"z6x/hub/internal/modules/files"
 	"z6x/hub/internal/modules/jobs"
@@ -136,6 +137,7 @@ func main() {
 	h.Add(sshd.New())
 	h.Add(keys.New(nil))
 	h.Add(jobs.New())
+	h.Add(airplay.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

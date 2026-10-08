@@ -74,6 +74,13 @@ modules:
     timeout_sec: 4
   # 遥控、任务管理、通知需要 shell 身份，遥控器按键为投影仪专用，SSH 由 Termux 提供，因此手机上不开启。
 
+  # AirPlay 音箱：苹果设备在「音频输出」中选择本设备即可推送声音（AirPlay 1 音频，经 Termux 的 PulseAudio 播放）。
+  # 在「🔧 工具 → AirPlay 音箱」中开关。需要 pkg install pulseaudio。
+  airplay:
+    enable: true
+    # name: 手机        # 在苹果设备上显示的名称，默认为设备名
+    # port: 5050
+
   # 后台任务：设备上的后台脚本，可在「工具 → 后台任务」中启动、停止，并设置是否随 hub 启动。
   # 开机时只需启动 hub，由 hub 启动 autostart 的任务（网页上修改的开关保存在 data/jobs_autostart.json）。
   jobs:
