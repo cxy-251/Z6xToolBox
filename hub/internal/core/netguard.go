@@ -132,6 +132,11 @@ type Gate struct {
 	// missing 是连续取不到网络指纹的次数。手机上读取路由器 UPnP 标识偶尔超时（约每小时一次，下一次即恢复），
 	// 取不到不等于换了网络：IP 未变时继续服务，连续 3 次（约 45 秒）取不到才停止。
 	missing int
+	// gen 每次开始或停止监听时加一。服务退出时若 gen 未变，说明监听器是被意外作废的而非 hub 主动关闭：
+	// 安卓在应用进入后台受限、网络变化时会销毁应用的套接字，accept 返回 EINVAL（2026-10-08 手机上实测），
+	// 此时进程仍在运行却不再监听。broken 置位后，下一次检查（15 秒内）重新监听。
+	gen    int
+	broken bool
 }
 
 type gateSvc struct {
@@ -227,9 +232,13 @@ func (g *Gate) check() error {
 	addr, reason := g.want()
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if addr == g.bound {
+	if addr == g.bound && !g.broken {
 		g.reason = reason
 		return nil
+	}
+	if g.broken {
+		g.log.Warn("监听被系统意外关闭，重新监听")
+		g.broken = false
 	}
 	g.closeLocked()
 	g.reason = reason
@@ -250,16 +259,22 @@ func (g *Gate) check() error {
 		// 保存监听器并在关闭时直接关闭它：http.Server.Close 只关闭 Serve 已接手的监听器，
 		// 开始监听后马上关闭时 Serve 可能尚未运行，监听器会遗留下来（单元测试中约四成概率复现）
 		s.ln = ln
+		gen := g.gen
 		if s.raw != nil {
-			go s.raw(ln)
+			go func(s *gateSvc) {
+				s.raw(ln)
+				g.serviceExited(gen, s.name, nil)
+			}(s)
 			continue
 		}
 		// http.Server 关闭后不能再次使用，每次重新监听都新建一个。
 		s.srv = &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second}
 		go func(s *gateSvc, srv *http.Server) {
-			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				g.log.Error("服务异常退出", "service", s.name, "err", err)
+			err := srv.Serve(ln)
+			if errors.Is(err, http.ErrServerClosed) {
+				err = nil
 			}
+			g.serviceExited(gen, s.name, err)
 		}(s, s.srv)
 	}
 	g.bound = addr
@@ -273,8 +288,20 @@ func (g *Gate) close() {
 	g.closeLocked()
 }
 
+// serviceExited 在某个服务的监听结束时调用；不是 hub 主动关闭的（gen 未变）则标记为需要重新监听。
+func (g *Gate) serviceExited(gen int, name string, err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if gen != g.gen {
+		return
+	}
+	g.log.Error("服务异常退出", "service", name, "err", err)
+	g.broken = true
+}
+
 // closeLocked 关闭全部监听和现有连接（离开可信网络时不应保留任何连接）。
 func (g *Gate) closeLocked() {
+	g.gen++
 	for _, s := range g.svcs {
 		if s.srv != nil {
 			s.srv.Close()

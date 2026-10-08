@@ -116,3 +116,42 @@ func TestGateToleratesMissingFingerprint(t *testing.T) {
 		t.Fatal("换到其他网络应立即停止")
 	}
 }
+
+// 安卓会销毁应用的监听套接字（accept 返回 EINVAL），进程仍在运行却不再监听；下一次检查应重新监听。
+func TestGateRebindsAfterListenerDestroyed(t *testing.T) {
+	trusted := fingerprint("tok", "aa:bb:cc:dd:ee:ff")
+	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	g.probe = func() (NetState, error) { return NetState{IP: "127.0.0.1", Fingerprint: trusted}, nil }
+	port := freePort(t)
+	g.Add("main", port, http.NotFoundHandler())
+	if err := g.check(); err != nil || !reachable(port) {
+		t.Fatalf("应开始监听：%v", err)
+	}
+	g.mu.Lock()
+	ln := g.svcs[0].ln
+	g.mu.Unlock()
+	ln.Close() // 模拟被系统作废：不经过 closeLocked
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		g.mu.Lock()
+		broken := g.broken
+		g.mu.Unlock()
+		if broken {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("监听器意外关闭后应标记为需要重新监听")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := g.check(); err != nil || !reachable(port) {
+		t.Fatalf("应重新监听：%v", err)
+	}
+	g.close()
+	time.Sleep(50 * time.Millisecond)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.broken {
+		t.Error("主动关闭不应标记为需要重新监听")
+	}
+}
