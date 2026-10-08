@@ -64,7 +64,7 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
     overview = """
         手机上的 z6x-hub 最初与投影仪一样从 ADB 启动，后改为在 Termux 中运行：无线调试关闭不再导致 hub 消失，用户也可以在手机上自行开关。
     """
-    verified("2026-10-02")
+    partial("2026-10-08")
 
     why("ADB 方式在手机上不可行") {
         text("""
@@ -91,6 +91,12 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
             note = "部署时在 `~/.bashrc` 中加入了别名 `hub`。默认不申请唤醒锁（见下方「唤醒锁实验」），需要时用 `Z6X_WAKELOCK=1 hub start`。"
         }
         change("在 Deck 上开关", "./hub/ctl.sh phone start | stop | status | trust", Host.Deck)
+        change("短视频封面生成", "thumbs status\nthumbs log\nthumbs stop\nthumbs start", Host.Termux) {
+            note = "后台循环为资源库中的短视频生成封面（放在作品目录的 `.thumbs/` 下），按机身温度调速、过热暂停，每轮只补新作品；参数在 hub 设置页「短视频封面生成」中修改。依赖 `pkg install python ffmpeg`。原理见「规格：z6x-hub」第四期。"
+        }
+        read("浏览器访问", "http://127.0.0.1:8090", Host.Remote) {
+            note = "手机自己的浏览器用本机地址，不连网络也能使用；其他设备用手机的局域网地址（只在可信 Wi-Fi 上开放）。登录密码在 hub 设置页修改。"
+        }
     }
 
     why("Termux 会被冻结或结束：两次实测") {
@@ -99,7 +105,7 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
             "解决" to "在手机上把 Termux 的「省电策略」改为「无限制」，并打开「自启动」（设置 → 应用设置 → 应用管理 → Termux）。改后在后台观察 10 分钟（17:48～17:57），未再冻结",
             "被结束（17:32）" to "日志：`Force stopping com.termux ... from process:com.miui.securitycenter`，8 秒后 `Powerkeeper ... NoRestrictAppsList add: com.termux`。即修改省电策略的那一刻，手机管家会先强制停止该应用，不是后台清理所致，此后不会反复发生。需重新打开一次 Termux",
             "打开 Termux 自动启动" to "`~/.bashrc` 中检查：sshd 或 hub 未运行则启动。`hub status` 在未运行时返回退出码 1，供此判断（最初返回 0，导致自动启动不生效）",
-            "手机重启后" to "需要打开一次 Termux。若要开机自动启动，需另装 Termux:Boot 插件（尚未安装）",
+            "手机重启后" to "已装 Termux:Boot：开机脚本（仓库 `hub/termux/phone-boot.sh`，部署时安装到 `~/.termux/boot/z6x-start.sh`）依次启动 sshd、hub 与封面生成。Termux:Boot 需在安装后手动打开一次，安卓才允许它接收开机广播；被强行停止后同样需要再打开一次（见「开机自动启动 hub 与 keymap」）。**手机开机自启尚未经重启实测**",
         )
     }
 
