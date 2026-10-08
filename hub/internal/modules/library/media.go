@@ -27,10 +27,51 @@ import (
 
 type platform struct{ ID, Dir, Label string }
 
-var platforms = []platform{
+// knownPlatforms 是 omni-deck 中已有的平台：标识与目录名的对应关系必须一致，点赞文件按标识存放。
+// 平台以资源库 shortvideo/ 下的子文件夹为准（见 discoverPlatforms）：这里只决定已知文件夹的标识，
+// 其他文件夹（以后新增的平台）以文件夹名作为标识与名称。
+var knownPlatforms = []platform{
 	{"kuaishou", "快手", "Kwai"},
 	{"douyin", "抖音", "Douyin"},
 	{"tiktok", "TikTok", "TikTok"},
+}
+
+// discoverPlatforms 列出各资源库 shortvideo/ 下的子文件夹（不含以点开头的目录）作为平台：已知平台在前，其余按名称排序。
+func (m *Module) discoverPlatforms() []platform {
+	dirs := map[string]bool{}
+	for _, lib := range m.libs() {
+		ents, _ := os.ReadDir(filepath.Join(lib.Path, mediaRoot, "shortvideo"))
+		for _, e := range ents {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				dirs[e.Name()] = true
+			}
+		}
+	}
+	var out []platform
+	for _, p := range knownPlatforms {
+		if dirs[p.Dir] {
+			out = append(out, p)
+			delete(dirs, p.Dir)
+		}
+	}
+	var extra []string
+	for d := range dirs {
+		extra = append(extra, d)
+	}
+	sort.Slice(extra, func(i, j int) bool { return naturalLess(extra[i], extra[j]) })
+	for _, d := range extra {
+		out = append(out, platform{ID: d, Dir: d, Label: d})
+	}
+	return out
+}
+
+// platformList 返回最近一次扫描到的平台。
+func (m *Module) platformList() []platform {
+	m.media()
+	ix := &m.mediaIx
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	return ix.platforms
 }
 
 // thumbDir 是短视频封面目录：作品所在目录下的 .thumbs/，视频 abc.mp4 的封面为 .thumbs/abc.mp4.webp，
@@ -72,12 +113,13 @@ type track struct {
 // mediaIndex 缓存扫描结果。手机上的短视频可达数万条，扫描一遍需要数秒，因此在后台进行，
 // 请求时先返回现有结果，超过配置的 rescan_minutes 才触发重新扫描。
 type mediaIndex struct {
-	mu       sync.Mutex
-	videos   map[string][]*svItem // 平台 → 视频（按文件名中的日期从早到晚）
-	albums   map[string][]*svItem // 平台 → 图集作品（只用于短视频页，多联放映不播放图集）
-	tracks   []track
-	at       time.Time
-	scanning bool
+	mu        sync.Mutex
+	videos    map[string][]*svItem // 平台 → 视频（按文件名中的日期从早到晚）
+	albums    map[string][]*svItem // 平台 → 图集作品（只用于短视频页，多联放映不播放图集）
+	platforms []platform           // 扫描时发现的平台
+	tracks    []track
+	at        time.Time
+	scanning  bool
 	// ready 在第一次扫描完成时关闭。扫描在进行中（例如启动时的扫描，手机上需要 40 秒到 2 分钟）时，
 	// 新请求等它完成，而不是拿到空列表、页面显示「没有内容」
 	ready     chan struct{}
@@ -123,8 +165,9 @@ func (m *Module) scanMedia() {
 	albums := map[string][]*svItem{}
 	albumAt := map[string]*svItem{} // 平台/图集相对路径 → 图集
 	var tracks []track
+	plats := m.discoverPlatforms()
 	for _, lib := range m.libs() {
-		for _, p := range platforms {
+		for _, p := range plats {
 			base := filepath.Join(lib.Path, mediaRoot, "shortvideo", p.Dir)
 			// 封面由 Deck 生成（scripts/shortvideo_thumbs.py），放在作品所在目录的 .thumbs/ 下，随作品一起移动；
 			// hub 不生成封面，扫描时只记下哪些作品有封面：相对路径 → 地址
@@ -289,7 +332,7 @@ func (m *Module) scanMedia() {
 	}
 	ix := &m.mediaIx
 	ix.mu.Lock()
-	ix.videos, ix.albums, ix.tracks, ix.at, ix.scanning = videos, albums, tracks, time.Now(), false
+	ix.videos, ix.albums, ix.platforms, ix.tracks, ix.at, ix.scanning = videos, albums, plats, tracks, time.Now(), false
 	if ix.ready == nil {
 		ix.ready = make(chan struct{})
 	}
@@ -358,7 +401,7 @@ func (l *likeStore) set(p, rel string, on bool) error {
 // saveLocked 写成与 omni-deck 相同的格式，先写临时文件再改名。
 func (l *likeStore) saveLocked() error {
 	out := map[string][]string{}
-	for _, p := range platforms {
+	for _, p := range knownPlatforms { // 与 omni-deck 的文件格式一致：已知平台即使为空也写出
 		out[p.ID] = []string{}
 	}
 	for p, set := range l.data {
@@ -467,12 +510,12 @@ func (m *Module) channels() []channel {
 		{"liked", "常用", "❤️ 我的点赞 (" + strconv.Itoa(liked) + ")", liked},
 		{"all", "常用", "🌐 全部平台 (" + strconv.Itoa(total) + ")", total},
 	}
-	for _, p := range platforms {
+	for _, p := range m.platformList() {
 		if n := len(videos[p.ID]); n > 0 {
 			out = append(out, channel{p.ID + ":", "常用", p.Label + " · 全部 (" + strconv.Itoa(n) + ")", n})
 		}
 	}
-	for _, p := range platforms {
+	for _, p := range m.platformList() {
 		counts := map[string]int{}
 		for _, it := range videos[p.ID] {
 			counts[it.Folder]++
@@ -501,7 +544,7 @@ func (m *Module) channelVideos(id string, seed int64) []*svItem {
 	var out []*svItem
 	switch id {
 	case "liked":
-		for _, p := range platforms {
+		for _, p := range m.platformList() {
 			for _, it := range videos[p.ID] {
 				if m.likes.has(it.Platform, it.Rel) {
 					out = append(out, it)
@@ -509,7 +552,7 @@ func (m *Module) channelVideos(id string, seed int64) []*svItem {
 			}
 		}
 	case "all", "random":
-		for _, p := range platforms {
+		for _, p := range m.platformList() {
 			out = append(out, videos[p.ID]...)
 		}
 	default:

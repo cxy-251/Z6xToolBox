@@ -63,5 +63,10 @@ val ProjectorAutostart = module("projector-autostart", "开机自动启动 hub �
             varies = true
         }
     }
+    story("改由 hub 启动 keymap（2026-10-09）") {
+        text("""
+            开机脚本 `z6x-boot.sh` 现在只启动 hub；遥控器改键守护进程登记为 hub 的后台任务（`keymapd.sh start | stop | status`），由 hub 启动约 15 秒后按「开机自动启动」的设置启动，也可在 hub 的「🔧 工具 → 后台任务」中随时开关。实测通过 hub 停止、再启动后，新的守护进程正常运行。
+        """)
+    }
     related("adb-autostart", "spec-hub", "remote-keys")
 }

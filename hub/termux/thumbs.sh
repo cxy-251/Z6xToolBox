@@ -25,7 +25,8 @@ case "${1:-status}" in
       SETTINGS=$(./z6x-hub -c hub.yaml -thumbs-config 2>>thumbs.log) || SETTINGS='{}'
       HOURS=$(python -c 'import json,sys;print(json.loads(sys.argv[1]).get("interval_hours",6))' "$SETTINGS")
       echo "======== $(date '+%m-%d %H:%M:%S') 开始一轮，参数 $SETTINGS" >> thumbs.log
-      python shortvideo_thumbs.py --settings "$SETTINGS" >> thumbs.log 2>&1
+      # 运行中每半分钟重新读取参数（并发、温度阈值），改设置后无须等到下一轮
+      python shortvideo_thumbs.py --settings "$SETTINGS" --settings-cmd "./z6x-hub -c hub.yaml -thumbs-config" >> thumbs.log 2>&1
       echo "======== $(date '+%m-%d %H:%M:%S') 本轮结束（退出码 $?），$HOURS 小时后再检查新作品" >> thumbs.log
       INTERVAL=$(python -c 'import sys;print(int(float(sys.argv[1])*3600))' "$HOURS")
       # 日志只保留最近 2000 行

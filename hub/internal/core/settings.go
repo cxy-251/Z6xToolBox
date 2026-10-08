@@ -24,7 +24,7 @@ type Setting struct {
 	Key     string  `json:"key"`   // 在 hub.yaml 中的路径，以点分隔，如 login_days、modules.library.slide_seconds
 	Label   string  `json:"label"` // 显示名称
 	Help    string  `json:"help,omitempty"`
-	Type    string  `json:"type"`           // number、text 或 password
+	Type    string  `json:"type"`           // number、text、password 或 bool
 	Unit    string  `json:"unit,omitempty"` // 单位，如「秒」
 	Min     float64 `json:"min,omitempty"`
 	Max     float64 `json:"max,omitempty"`
@@ -36,6 +36,8 @@ type Setting struct {
 type SettingsGroup struct {
 	Title string    `json:"title"`
 	Items []Setting `json:"items"`
+	// StatusURL 不为空时，设置页从该地址读取状态（{"lines": ["…"]}）显示在这一组的开头
+	StatusURL string `json:"status_url,omitempty"`
 }
 
 // SettingsProvider 由提供可调参数的模块实现。
@@ -160,8 +162,9 @@ func (h *Hub) getSettings(w http.ResponseWriter, _ *http.Request) {
 		Value any `json:"value"`
 	}
 	type group struct {
-		Title string `json:"title"`
-		Items []item `json:"items"`
+		Title     string `json:"title"`
+		Items     []item `json:"items"`
+		StatusURL string `json:"status_url,omitempty"`
 	}
 	var doc *yaml.Node
 	if h.cfgPath != "" {
@@ -169,7 +172,7 @@ func (h *Hub) getSettings(w http.ResponseWriter, _ *http.Request) {
 	}
 	var groups []group
 	for _, g := range h.allSettings() {
-		gg := group{Title: g.Title}
+		gg := group{Title: g.Title, StatusURL: g.StatusURL}
 		for _, s := range g.Items {
 			it := item{Setting: s}
 			if doc != nil {
@@ -235,6 +238,13 @@ func (h *Hub) saveSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tag := "!!str"
+		if v != nil && s.Type == "bool" {
+			if *v != "true" && *v != "false" {
+				WriteError(w, http.StatusBadRequest, "「"+s.Label+"」应为 true 或 false")
+				return
+			}
+			tag = "!!bool"
+		}
 		if v != nil && s.Type == "number" {
 			f, err := strconv.ParseFloat(strings.TrimSpace(*v), 64)
 			if err != nil || f < s.Min || (s.Max > 0 && f > s.Max) {
@@ -247,7 +257,7 @@ func (h *Hub) saveSettings(w http.ResponseWriter, r *http.Request) {
 				tag = "!!int"
 			}
 		}
-		if v != nil && s.Type != "number" && s.Min > 0 && *v != "" && float64(len([]rune(*v))) < s.Min {
+		if v != nil && (s.Type == "text" || s.Type == "password") && s.Min > 0 && *v != "" && float64(len([]rune(*v))) < s.Min {
 			WriteError(w, http.StatusBadRequest, fmt.Sprintf("「%s」至少 %g 个字符", s.Label, s.Min))
 			return
 		}

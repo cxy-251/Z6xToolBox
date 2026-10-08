@@ -67,8 +67,13 @@ function renderNet(n){
 function renderGroups(groups){
   const box=$('groups');box.replaceChildren();
   for(const g of groups){const c=el('div',null,'card');c.append(el('h2',g.title));
+    if(g.status_url){const st=el('div',null,'muted');st.style.cssText='font-size:13px;line-height:1.6;margin-bottom:6px';st.textContent='读取状态…';c.append(st);
+      fetch(g.status_url).then(r=>r.json()).then(d=>{st.replaceChildren(...(d.lines||[]).flatMap((l,i)=>i?[el('br'),l]:[l]))}).catch(()=>st.textContent='读取状态失败')}
     for(const s of g.items){const r=el('div',null,'row'),l=el('div',null,'l');l.append(el('b',s.label));if(s.help)l.append(el('small',s.help));
       const inp=el('input');
+      if(s.type==='bool'){inp.type='checkbox';inp.style.width='auto';const cur=s.value==null?s.default:s.value==='true';inp.checked=cur;
+        inp.onchange=()=>{if(inp.checked===cur)delete changes[s.key];else changes[s.key]=String(inp.checked);inp.classList.toggle('changed',s.key in changes);mark()};
+        r.append(l,inp,el('span',inp.checked?'':'','u'));c.append(r);continue}
       if(s.type==='password'){inp.type='password';inp.placeholder=s.value?'已设置（输入新密码以更改）':'未设置';}
       else{inp.type=s.type==='number'?'number':'text';if(s.step)inp.step=s.step;if(s.min)inp.min=s.min;if(s.max)inp.max=s.max;
         inp.value=s.value??'';inp.placeholder='默认 '+s.default}

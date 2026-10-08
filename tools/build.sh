@@ -34,7 +34,9 @@ case "$MODE" in
         echo "z6x-tools 需要 shell 身份（输入设备、/proc），只部署到以 ADB 方式运行的设备"; exit 1; }
       adb -s "$ADDR" shell "mkdir -p /data/local/tmp/z6x-tools"
       adb -s "$ADDR" push "$BIN" /data/local/tmp/z6x-tools/z6x >/dev/null
-      adb -s "$ADDR" shell "chmod 755 /data/local/tmp/z6x-tools/z6x && /data/local/tmp/z6x-tools/z6x version"
+      # 改键守护进程的开关脚本，供 hub 的「后台任务」调用
+      adb -s "$ADDR" push keymapd.sh /data/local/tmp/z6x-tools/keymapd.sh >/dev/null
+      adb -s "$ADDR" shell "chmod 755 /data/local/tmp/z6x-tools/z6x /data/local/tmp/z6x-tools/keymapd.sh && /data/local/tmp/z6x-tools/z6x version"
     fi ;;
   *)
     sed -n 2,7p "$0"; exit 2 ;;

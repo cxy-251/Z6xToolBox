@@ -102,7 +102,7 @@ async function boot(){
   const n=t=>gs.filter(g=>g.type===t).length;
   const types=[['rpg','🗡️ RPG'],['slg','♟️ SLG']].filter(([id])=>n(id)).map(([id,label])=>({id,label,count:n(id)}));
   if(types.length)addTab('games','🎮 游戏',gs.length,(p,t)=>subTab(p,t,types,'z6x-game-type',(pane,id)=>gamePane(pane,id)));
-  const pfs=pf.filter(p=>p.count).map(p=>({id:p.id,label:{douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]+p.title,count:p.count,info:p}));
+  const pfs=pf.filter(p=>p.count).map(p=>({id:p.id,label:({douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]||'🎞️ ')+p.title,count:p.count,info:p}));
   if(pfs.length)addTab('sv','📱 短视频',pfs.reduce((n,p)=>n+p.count,0),(p,t)=>subTab(p,t,pfs,'z6x-sv-platform',(pane,id)=>svPane(pane,id,pfs.find(x=>x.id===id).info)));
   addTab('matrix','📺 多联放映',0,p=>frame(p,'/ui/library/matrix/'));
   addTab('audio','🎧 音声',0,p=>frame(p,'/ui/library/audio/'));

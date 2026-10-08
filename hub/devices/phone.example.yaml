@@ -57,3 +57,17 @@ modules:
   # 局域网测速：判断手机的 Wi-Fi 速度是否够用。
   speed:
     enable: true
+
+  # 后台任务：设备上的后台脚本，可在「工具 → 后台任务」中启动、停止，并设置是否随 hub 启动。
+  # 开机时只需启动 hub，由 hub 启动 autostart 的任务（网页上修改的开关保存在 data/jobs_autostart.json）。
+  jobs:
+    enable: true
+    items:
+      - id: thumbs
+        title: 短视频封面生成
+        help: 为资源库中的短视频生成封面（放在作品目录的 .thumbs/），按机身温度调速、过热暂停；参数在「设置」中修改
+        start: ./thumbs.sh start
+        stop: ./thumbs.sh stop
+        status: ./thumbs.sh status
+        log: thumbs.log
+        autostart: true

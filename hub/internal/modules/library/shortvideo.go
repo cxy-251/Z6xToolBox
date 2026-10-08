@@ -34,8 +34,9 @@ func (m *Module) platformItems(platform string) []*svItem {
 
 func (m *Module) shortvideoRoutes(r core.Router) {
 	r.HandleFunc("GET /api/library/shortvideo/platforms", func(w http.ResponseWriter, _ *http.Request) {
-		out := make([]map[string]any, 0, len(platforms))
-		for _, p := range platforms {
+		plats := m.platformList()
+		out := make([]map[string]any, 0, len(plats))
+		for _, p := range plats {
 			items := m.platformItems(p.ID)
 			thumbs := 0
 			for _, it := range items {

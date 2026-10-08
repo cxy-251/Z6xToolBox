@@ -24,6 +24,7 @@ import (
 	"z6x/hub/internal/core"
 	"z6x/hub/internal/modules/control"
 	"z6x/hub/internal/modules/files"
+	"z6x/hub/internal/modules/jobs"
 	"z6x/hub/internal/modules/keys"
 	"z6x/hub/internal/modules/lanscan"
 	"z6x/hub/internal/modules/library"
@@ -134,6 +135,7 @@ func main() {
 	h.Add(tasks.New(nil))
 	h.Add(sshd.New())
 	h.Add(keys.New(nil))
+	h.Add(jobs.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

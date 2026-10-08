@@ -154,6 +154,7 @@ func (m *Module) Routes(r core.Router) {
 	m.mediaRoutes(r)
 	m.shortvideoRoutes(r)
 	m.coverRoutes(r)
+	m.thumbsRoutes(r)
 	m.audioRoutes(r)
 	m.novelRoutes(r)
 	m.importRoutes(r)
@@ -209,9 +210,9 @@ func (m *Module) Settings() []core.SettingsGroup {
 			{Key: p + "cover_px", Label: "音乐封面宽度", Unit: "像素", Type: "number", Min: 64, Max: 1024, Step: 1, Default: d.CoverPx,
 				Help: "封面缩小后的宽度；越大越清晰，加载越慢"},
 		}},
-		{Title: "🖼️ 短视频封面生成（手机后台）", Items: []core.Setting{
+		{Title: "🖼️ 短视频封面生成（手机后台）", StatusURL: "/api/library/thumbs/status", Items: []core.Setting{
 			{Key: p + "thumbs.jobs", Label: "同时生成数", Unit: "个", Type: "number", Min: 1, Max: 8, Step: 1, Default: d.Thumbs.Jobs,
-				Help: "温度低于下面的「全速温度」时同时运行的 ffmpeg 数"},
+				Help: "温度低于下面的「全速温度」时同时运行的 ffmpeg 数。以下参数在生成过程中半分钟内生效；启动与停止在「工具 → 后台任务」中"},
 			{Key: p + "thumbs.cool", Label: "全速温度", Unit: "°C", Type: "number", Min: 20, Max: 60, Step: 0.5, Default: d.Thumbs.Cool,
 				Help: "低于此温度全速；介于全速温度与暂停温度之间只运行 1 个"},
 			{Key: p + "thumbs.hot", Label: "暂停温度", Unit: "°C", Type: "number", Min: 21, Max: 70, Step: 0.5, Default: d.Thumbs.Hot,

@@ -422,3 +422,33 @@ func TestReadConfigDefaults(t *testing.T) {
 		t.Errorf("不合理的值（cover_px: 5）应换回默认值：%d", c.CoverPx)
 	}
 }
+
+func TestNewPlatformDiscovered(t *testing.T) {
+	root := t.TempDir()
+	initLibrary(root, "测试")
+	for _, f := range []string{"小红书/某博主/1.mp4", "抖音/甲/2.mp4", ".thumbs/x.webp"} {
+		p := filepath.Join(root, mediaRoot, "shortvideo", filepath.FromSlash(f))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("x"), 0o644)
+	}
+	os.RemoveAll(filepath.Join(root, mediaRoot, "shortvideo", "TikTok")) // 建库时会建好已知平台的空文件夹；删掉一个
+	m := New()
+	m.env = &core.Env{Config: &core.Config{DataDir: t.TempDir()}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	m.cfg = func() Config {
+		c := DefaultConfig()
+		c.Roots = []string{root}
+		c.Internal = t.TempDir()
+		c.Storage = t.TempDir()
+		return c
+	}()
+	var ids []string
+	for _, p := range m.platformList() {
+		ids = append(ids, p.ID)
+	}
+	if strings.Join(ids, ",") != "kuaishou,douyin,小红书" {
+		t.Fatalf("平台应为 shortvideo/ 下的子文件夹（已知平台在前，新文件夹在后，隐藏目录不算）：%v", ids)
+	}
+	if got := m.platformItems("小红书"); len(got) != 1 || got[0].Folder != "某博主" {
+		t.Fatalf("新平台的作品不正确：%+v", got)
+	}
+}

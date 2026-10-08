@@ -92,7 +92,7 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
         }
         change("在 Deck 上开关", "./hub/ctl.sh phone start | stop | status | trust", Host.Deck)
         change("短视频封面生成", "thumbs status\nthumbs log\nthumbs stop\nthumbs start", Host.Termux) {
-            note = "后台循环为资源库中的短视频生成封面（放在作品目录的 `.thumbs/` 下），按机身温度调速、过热暂停，每轮只补新作品；参数在 hub 设置页「短视频封面生成」中修改。依赖 `pkg install python ffmpeg`。原理见「规格：z6x-hub」第四期。"
+            note = "后台循环为资源库中的短视频生成封面（放在作品目录的 `.thumbs/` 下），按机身温度调速、过热暂停，每轮只补新作品。一般在 hub 的「🔧 工具 → 后台任务」中开关，参数在「⚙️ 设置」中修改；这里的命令供排查使用。依赖 `pkg install python ffmpeg`。原理见「规格：z6x-hub」第四期。"
         }
         read("浏览器访问", "http://127.0.0.1:8090", Host.Remote) {
             note = "手机自己的浏览器用本机地址，不连网络也能使用；其他设备用手机的局域网地址（只在可信 Wi-Fi 上开放）。登录密码在 hub 设置页修改。"
@@ -106,7 +106,7 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
             "被结束（17:32）" to "日志：`Force stopping com.termux ... from process:com.miui.securitycenter`，8 秒后 `Powerkeeper ... NoRestrictAppsList add: com.termux`。即修改省电策略的那一刻，手机管家会先强制停止该应用，不是后台清理所致，此后不会反复发生。需重新打开一次 Termux",
             "打开 Termux 自动启动" to "`~/.bashrc` 中检查：sshd 或 hub 未运行则启动。`hub status` 在未运行时返回退出码 1，供此判断（最初返回 0，导致自动启动不生效）",
             "手机重启后" to "已装 Termux:Boot：开机脚本（仓库 `hub/termux/phone-boot.sh`，部署时安装到 `~/.termux/boot/z6x-start.sh`）依次启动 sshd、hub 与封面生成。Termux:Boot 需在安装后手动打开一次，安卓才允许它接收开机广播；被强行停止后同样需要再打开一次（见「开机自动启动 hub 与 keymap」）。开机广播在第一次解锁后才发出，解锁前什么都不会启动",
-            "开机自启第一次实测（2026-10-08）" to "✗ 22:50 重启、解锁后，开机脚本在 22:52 执行，hub 与封面生成都已启动，但几分钟内全部被结束。推测原因：开机脚本是 Termux 的一个后台任务，脚本执行完任务即结束，Termux 的服务随之退出，应用变为可回收，系统连同它启动的进程一起结束（手动打开 Termux 时有终端会话保持服务，因此不受影响）。修改：开机脚本最后不退出（`exec sleep`），让服务保持运行；不用唤醒锁。**修改后尚待重启实测**",
+            "开机自启第一次实测（2026-10-08）" to "✗ 22:50 重启、解锁后，开机脚本在 22:52 执行，hub 与封面生成都已启动，但几分钟内全部被结束。推测原因：开机脚本是 Termux 的一个后台任务，脚本执行完任务即结束，Termux 的服务随之退出，应用变为可回收，系统连同它启动的进程一起结束（手动打开 Termux 时有终端会话保持服务，因此不受影响）。修改：开机脚本最后不退出（`exec sleep`），让服务保持运行；不用唤醒锁。开机脚本只启动 sshd 与 hub，封面生成由 hub 的后台任务启动。**修改后尚待重启实测**",
         )
     }
 

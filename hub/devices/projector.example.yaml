@@ -89,3 +89,17 @@ modules:
   # 遥控器按键：在网页上设置四个影视快捷键的短按与长按（由 z6x-tools 的 keymap 守护进程执行）。
   keys:
     enable: true
+
+  # 后台任务：设备上的后台脚本，可在「工具 → 后台任务」中启动、停止，并设置是否随 hub 启动。
+  # 开机时只需启动 hub，由 hub 启动 autostart 的任务（网页上修改的开关保存在 data/jobs_autostart.json）。
+  jobs:
+    enable: true
+    items:
+      - id: keymap
+        title: 遥控器按键重映射
+        help: 识别影视快捷键与调焦旁键的短按、长按并执行动作；动作在「遥控器按键」页中设置
+        start: /data/local/tmp/z6x-tools/keymapd.sh start
+        stop: /data/local/tmp/z6x-tools/keymapd.sh stop
+        status: /data/local/tmp/z6x-tools/keymapd.sh status
+        log: /data/local/tmp/z6x-tools/keymap.log
+        autostart: true

@@ -71,21 +71,40 @@ def read_temp(zones):
     return max(vals) if vals else None
 
 
-class Throttle:
-    """按温度调节允许同时运行的任务数：低于 cool 为 jobs，cool～hot 为 1，达到 hot 暂停直到低于 cool+1。"""
+# 运行中重新读取配置的间隔（秒）：在 hub 设置页关闭或修改参数后，这么久内生效
+SETTINGS_REFRESH_SEC = 30
+# 温度检查间隔（秒）
+TEMP_CHECK_SEC = 5
 
-    def __init__(self, jobs, cool, hot):
+
+class Throttle:
+    """按温度调节允许同时运行的任务数：低于 cool 为 jobs，cool～hot 为 1，达到 hot 暂停直到低于 cool+1。
+    提供 settings_cmd 时（手机上为 z6x-hub -thumbs-config），每 SETTINGS_REFRESH_SEC 秒重新读取参数。"""
+
+    def __init__(self, jobs, cool, hot, settings_cmd=None):
         self.jobs, self.cool, self.hot = jobs, cool, hot
+        self.settings_cmd = settings_cmd
         self.zones = thermal_zones()
         self.allowed, self.running, self.paused = jobs, 0, False
         self.cv = threading.Condition()
         self.temp = None
-        if self.zones:
+        if self.zones or settings_cmd:
             threading.Thread(target=self.watch, daemon=True).start()
 
+    def refresh_settings(self):
+        try:
+            s = json.loads(subprocess.run(self.settings_cmd, capture_output=True, text=True, timeout=20).stdout)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return  # 读不到时沿用原参数
+        self.jobs, self.cool, self.hot = max(1, s.get("jobs", self.jobs)), s.get("cool", self.cool), s.get("hot", self.hot)
+
     def watch(self):
+        last = 0.0
         while True:
-            t = read_temp(self.zones)
+            if self.settings_cmd and time.time() - last >= SETTINGS_REFRESH_SEC:
+                self.refresh_settings()
+                last = time.time()
+            t = read_temp(self.zones) if self.zones else None
             with self.cv:
                 self.temp = t
                 if t is not None:
@@ -93,9 +112,10 @@ class Throttle:
                         self.paused = True
                     elif self.paused and t < self.cool + 1:
                         self.paused = False
-                    self.allowed = 0 if self.paused else (self.jobs if t < self.cool else 1)
+                allowed = self.jobs if t is None or t < self.cool else 1
+                self.allowed = 0 if self.paused else allowed
                 self.cv.notify_all()
-            time.sleep(5)
+            time.sleep(TEMP_CHECK_SEC)
 
     def __enter__(self):
         with self.cv:
@@ -219,6 +239,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="最多处理多少个作品（测试用）")
     ap.add_argument("--dry-run", action="store_true", help="只统计需要生成多少个，不写文件")
     ap.add_argument("--settings", default="", help="JSON 形式的参数（jobs、cool、hot、width），覆盖上面的默认值")
+    ap.add_argument("--settings-cmd", default="", help="运行中定期执行以重新读取参数的命令（手机上为 \"./z6x-hub -c hub.yaml -thumbs-config\"）")
     a = ap.parse_args()
     if a.settings:
         s = json.loads(a.settings)
@@ -249,7 +270,7 @@ def main():
     log(f"开始：共 {len(jobs)} 个作品" + (f"；复用 omni-deck 的封面缓存 {OMNI_THUMBS}" if os.path.isdir(OMNI_THUMBS) else ""))
 
     stats, done, lock = {}, [0], threading.Lock()
-    th = Throttle(max(1, a.jobs), a.cool, a.hot)
+    th = Throttle(max(1, a.jobs), a.cool, a.hot, a.settings_cmd.split() if a.settings_cmd else None)
     if th.zones:
         log(f"温度控制：低于 {a.cool}°C 同时 {a.jobs} 个，{a.cool}～{a.hot}°C 1 个，{a.hot}°C 以上暂停")
     it = iter(jobs)
