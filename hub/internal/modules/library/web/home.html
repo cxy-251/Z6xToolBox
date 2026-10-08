@@ -1,17 +1,16 @@
 <title>{{name}}</title>
 <style>
 body{overscroll-behavior-y:contain}
-#top{position:sticky;top:0;z-index:5;background:rgba(13,17,23,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-#bar{display:flex;align-items:center;gap:10px;padding:10px 14px 0}
-#bar h1{font-size:17px;margin:0;white-space:nowrap}
-#bar .sp{flex:1}
-#tabs{display:flex;gap:4px;overflow-x:auto;padding:8px 10px 0;scrollbar-width:none}
+#top{position:sticky;top:0;z-index:5;background:rgba(13,17,23,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);display:flex;align-items:flex-end}
+#tabs{flex:1;min-width:0;display:flex;gap:4px;overflow-x:auto;padding:4px 6px 0;scrollbar-width:none}
+/* 行末下拉菜单：当前标签的分类（游戏：RPG / SLG；短视频：平台） */
+#sub{flex:none;margin:0 8px 6px 4px;max-width:46vw;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
 #tabs::-webkit-scrollbar{display:none}
 #tabs button{flex:none;background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;padding:8px 10px;color:var(--muted);white-space:nowrap}
 #tabs button.on{color:var(--fg);border-bottom-color:var(--accent);background:transparent}
 #tabs .n{font-size:11px;color:var(--muted);margin-left:3px}
 .pane{display:none;padding:12px 14px 40px}.pane.on{display:block}
-.pane.frame{padding:0}.pane.frame iframe{display:block;width:100%;height:calc(100vh - 92px);border:0;background:var(--bg)}
+.pane.frame{padding:0}.pane.frame iframe{display:block;width:100%;height:calc(100vh - 44px);border:0;background:var(--bg)}
 .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .tools input[type=search]{flex:1;max-width:320px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
@@ -22,7 +21,6 @@ body{overscroll-behavior-y:contain}
 .book{display:block;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:var(--fg);text-decoration:none}
 .book img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#0d1117}
 .book span{display:block;padding:6px 8px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.plat{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .chips button{font-size:12px;padding:4px 6px 4px 10px;border-radius:14px;display:inline-flex;align-items:center;gap:4px}
 .chips button .c{color:var(--muted)}.chips button.on .c{color:#dbe9ff}
@@ -66,8 +64,7 @@ body{overscroll-behavior-y:contain}
 #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#238636;color:#fff;padding:8px 16px;border-radius:8px;z-index:30;display:none}
 </style>
 <div id="top">
-  <div id="bar"><h1 id="brand">{{name}}</h1><span class="muted" id="sub"></span><span class="sp"></span></div>
-  <div id="tabs"></div>
+  <div id="tabs"></div><select id="sub" style="display:none"></select>
 </div>
 <div id="panes"></div>
 <div id="pl">
@@ -91,6 +88,7 @@ function hue(s){let h=0;for(const c of s)h=(h*31+c.codePointAt(0))%360;return h}
 
 /* ---------- 标签：内容来自各接口，没有内容的分类不显示；首次点开时才加载 ---------- */
 const tabs=[];
+// init(面板, 标签)；有分类的标签在 init 中设置 t.subs（[{id,label,count}]）、t.cur 与 t.pick(id)，行末下拉菜单据此显示
 function addTab(id,label,count,init){tabs.push({id,label,count,init,ready:false})}
 let games=[];
 async function boot(){
@@ -98,9 +96,10 @@ async function boot(){
     get('/api/library/manga').catch(()=>[]),get('/api/modules').catch(()=>[])]);
   games=gs;
   const n=t=>gs.filter(g=>g.type===t).length;
-  if(n('rpg'))addTab('rpg','🗡️ RPG',n('rpg'),p=>gamePane(p,'rpg'));
-  if(n('slg'))addTab('slg','♟️ SLG',n('slg'),p=>gamePane(p,'slg'));
-  const pfs=pf.filter(p=>p.count);if(pfs.length)addTab('sv','📱 短视频',pfs.reduce((n,p)=>n+p.count,0),pane=>svTab(pane,pfs));
+  const types=[['rpg','🗡️ RPG'],['slg','♟️ SLG']].filter(([id])=>n(id)).map(([id,label])=>({id,label,count:n(id)}));
+  if(types.length)addTab('games','🎮 游戏',gs.length,(p,t)=>subTab(p,t,types,'z6x-game-type',(pane,id)=>gamePane(pane,id)));
+  const pfs=pf.filter(p=>p.count).map(p=>({id:p.id,label:{douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]+p.title,count:p.count,info:p}));
+  if(pfs.length)addTab('sv','📱 短视频',pfs.reduce((n,p)=>n+p.count,0),(p,t)=>subTab(p,t,pfs,'z6x-sv-platform',(pane,id)=>svPane(pane,id,pfs.find(x=>x.id===id).info)));
   addTab('matrix','📺 多联放映',0,p=>frame(p,'/ui/library/matrix/'));
   addTab('audio','🎧 音声',0,p=>frame(p,'/ui/library/audio/'));
   if(mg.length)addTab('manga','🖼️ 漫画',mg.length,p=>mangaPane(p,mg));
@@ -117,7 +116,9 @@ async function boot(){
 function show(id){
   for(const t of tabs)t.pane.classList.toggle('on',t.id===id);
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
-  const t=tabs.find(t=>t.id===id);if(!t.ready){t.ready=true;t.init(t.pane)}
+  const t=tabs.find(t=>t.id===id);if(!t.ready){t.ready=true;t.init(t.pane,t)}
+  const sel=$('sub');sel.style.display=t.subs?'':'none';
+  if(t.subs){sel.replaceChildren(...t.subs.map(s=>new Option(s.label+'  '+s.count,s.id)));sel.value=t.cur;sel.onchange=()=>t.pick(sel.value)}
   history.replaceState(null,'','#'+id);store.set('z6x-home-tab',id);
   document.querySelector('#tabs button.on')?.scrollIntoView({inline:'nearest',block:'nearest'});
 }
@@ -146,17 +147,17 @@ function mangaPane(p,list){
   q.oninput=render;render();
 }
 
-/* ---------- 短视频（与 omni-deck 的短视频画廊相同的用法）：一个标签内切换平台；📌 置顶的博主排在第一行 ---------- */
-const PAGE=48;
-function svTab(pane,pfs){
-  const plat=el('div','plat'),body=el('div');pane.append(plat,body);
-  const panes={};
-  const pick=id=>{store.set('z6x-sv-platform',id);plat.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+/* ---------- 有分类的标签：每个分类一个子面板，首次选中时创建，切换时保留各自的状态 ---------- */
+function subTab(pane,t,subs,key,make){
+  const panes={};t.subs=subs;
+  t.pick=id=>{t.cur=id;store.set(key,id);$('sub').value=id;
     for(const k in panes)panes[k].style.display=k===id?'':'none';
-    if(!panes[id]){panes[id]=el('div');body.append(panes[id]);svPane(panes[id],id,pfs.find(p=>p.id===id))}};
-  for(const p of pfs){const b=el('button','',{douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]+p.title+' ');b.dataset.id=p.id;b.append(el('span','muted',p.count));b.onclick=()=>pick(p.id);plat.append(b)}
-  const last=store.get('z6x-sv-platform','');pick(pfs.some(p=>p.id===last)?last:pfs[0].id);
+    if(!panes[id]){panes[id]=el('div');pane.append(panes[id]);make(panes[id],id)}};
+  const last=store.get(key,'');t.pick(subs.some(s=>s.id===last)?last:subs[0].id);
 }
+
+/* ---------- 短视频（与 omni-deck 的短视频画廊相同的用法）：平台在行末下拉菜单中切换；📌 置顶的博主排在第一行 ---------- */
+const PAGE=48;
 function svPane(p,platform,info){
   const st={platform,folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0,folders:[],moreOpen:false,authorQ:''};
   const tools=el('div','tools'),q=el('input');q.type='search';q.placeholder='🔍 搜索标题或博主';
