@@ -105,7 +105,8 @@ val PhoneHub = module("phone-hub", "hub 改在 Termux 中运行") {
             "解决" to "在手机上把 Termux 的「省电策略」改为「无限制」，并打开「自启动」（设置 → 应用设置 → 应用管理 → Termux）。改后在后台观察 10 分钟（17:48～17:57），未再冻结",
             "被结束（17:32）" to "日志：`Force stopping com.termux ... from process:com.miui.securitycenter`，8 秒后 `Powerkeeper ... NoRestrictAppsList add: com.termux`。即修改省电策略的那一刻，手机管家会先强制停止该应用，不是后台清理所致，此后不会反复发生。需重新打开一次 Termux",
             "打开 Termux 自动启动" to "`~/.bashrc` 中检查：sshd 或 hub 未运行则启动。`hub status` 在未运行时返回退出码 1，供此判断（最初返回 0，导致自动启动不生效）",
-            "手机重启后" to "已装 Termux:Boot：开机脚本（仓库 `hub/termux/phone-boot.sh`，部署时安装到 `~/.termux/boot/z6x-start.sh`）依次启动 sshd、hub 与封面生成。Termux:Boot 需在安装后手动打开一次，安卓才允许它接收开机广播；被强行停止后同样需要再打开一次（见「开机自动启动 hub 与 keymap」）。**手机开机自启尚未经重启实测**",
+            "手机重启后" to "已装 Termux:Boot：开机脚本（仓库 `hub/termux/phone-boot.sh`，部署时安装到 `~/.termux/boot/z6x-start.sh`）依次启动 sshd、hub 与封面生成。Termux:Boot 需在安装后手动打开一次，安卓才允许它接收开机广播；被强行停止后同样需要再打开一次（见「开机自动启动 hub 与 keymap」）。开机广播在第一次解锁后才发出，解锁前什么都不会启动",
+            "开机自启第一次实测（2026-10-08）" to "✗ 22:50 重启、解锁后，开机脚本在 22:52 执行，hub 与封面生成都已启动，但几分钟内全部被结束。推测原因：开机脚本是 Termux 的一个后台任务，脚本执行完任务即结束，Termux 的服务随之退出，应用变为可回收，系统连同它启动的进程一起结束（手动打开 Termux 时有终端会话保持服务，因此不受影响）。修改：开机脚本最后不退出（`exec sleep`），让服务保持运行；不用唤醒锁。**修改后尚待重启实测**",
         )
     }
 
