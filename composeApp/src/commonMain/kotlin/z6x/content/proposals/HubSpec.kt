@@ -104,7 +104,7 @@ val HubSpec = module("spec-hub", "规格：z6x-hub（Go 常驻服务）") {
             3. **paste**（来源：「手机把文字和链接发给电视」）：文字只保存在内存中（最多 100 条，重启即清空）；「输入到电视」调用 `input text`，只支持可打印的 ASCII 字符，中文会给出明确提示；链接可在电视上打开。
             4. **control**（来源：「智能家居控制入口」「手机当遥控器和触控板」「统一控制接口」「Webhook 触发动作」）：`/api/control/key`（按键名或键值，可重复）、`/text`、`/app`（包名，自动查找电视或普通启动入口）、`/macro`（配置中预设的按键序列）；`/ui/control/` 为手机网页遥控器。
             5. **wol**（来源：「网络唤醒」「跨网段网络唤醒」）：`/api/wol/wake?name=` 向网段广播地址发送魔术包（可为每台设备指定广播地址以跨网段唤醒）；配置了 IP 的设备每隔一段时间 ping 一次，显示在线状态。
-            6. **metrics**（来源：「系统状态面板」「Prometheus 监控接口」）：`/api/metrics/` 返回 JSON（CPU 使用率、可用内存、各温度区、/data 剩余空间、网卡收发字节、运行时长），`/metrics` 返回 Prometheus 文本格式；采样间隔不少于 5 秒。
+            6. **metrics**（来源：「系统状态面板」「Prometheus 监控接口」）：`/api/metrics/` 返回 JSON（CPU 使用率、可用内存、各温度区、/data 剩余空间、网卡收发字节、运行时长），`/metrics` 返回 Prometheus 文本格式；采样间隔不少于 5 秒。手机上 hub 是普通应用，读不到 /proc/stat、/proc/loadavg、/proc/uptime、/proc/net/dev（2026-10-09 实测；最初误显示为 0）：CPU 改为显示频率负载（各核心当前频率占最高频率的比例，按大小核分组），开机时长与负载改用 sysinfo 系统调用，网络流量标明读不到。页面以卡片显示，温度先显示 CPU、GPU、电池、机身，其余可展开。
             7. **speed**（来源：「局域网测速」「iperf3 测速」）：下载（服务端内存中的伪随机数据）、上传（接收后丢弃）、延迟三项；`/ui/speed/` 网页测速，下载和上传各测 8 秒，并实时显示进度。
         """)
         text("配置示例见 `hub/devices/projector.example.yaml` 和 `hub/devices/phone.example.yaml`。")
