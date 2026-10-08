@@ -154,9 +154,21 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 		}
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	})
+	// 首页：启用了资源库时进入资源首页（音视频与游戏，各工具在其标签中），否则为系统页
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		if !Authorized(r, h.cfg.Token) {
 			http.Redirect(w, r, "/login?next=/", http.StatusFound)
+			return
+		}
+		if e := h.find("library"); e != nil && e.status().State == StateRunning {
+			http.Redirect(w, r, "/ui/library/", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "/ui/hub/", http.StatusFound)
+	})
+	mux.HandleFunc("GET /ui/hub/{$}", func(w http.ResponseWriter, r *http.Request) {
+		if !Authorized(r, h.cfg.Token) {
+			http.Redirect(w, r, "/login?next=/ui/hub/", http.StatusFound)
 			return
 		}
 		var b strings.Builder

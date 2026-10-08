@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -39,11 +40,12 @@ var audioExts = map[string]bool{".mp3": true, ".m4a": true, ".m4b": true, ".flac
 
 // svItem 是一条短视频。
 type svItem struct {
-	Platform string // 平台标识
-	Rel      string // 相对于平台目录：作者/文件名
-	Folder   string // 作者（第一级子目录），直接放在平台目录下的为「未分类」
-	URL      string // 播放地址
-	date     int    // 文件名开头的日期（YYYYMMDD），没有为 0
+	Platform string   // 平台标识
+	Rel      string   // 相对于平台目录：作者/文件名
+	Folder   string   // 作者（第一级子目录），直接放在平台目录下的为「未分类」
+	URL      string   // 播放地址
+	Images   []string // 图集作品（博主目录下装着图片的子目录）的图片地址；视频为空
+	date     int      // 文件名开头的日期（YYYYMMDD），没有为 0
 	mtime    int64
 }
 
@@ -67,6 +69,7 @@ type track struct {
 type mediaIndex struct {
 	mu       sync.Mutex
 	videos   map[string][]*svItem // 平台 → 视频（按文件名中的日期从早到晚）
+	albums   map[string][]*svItem // 平台 → 图集作品（只用于短视频页，多联放映不播放图集）
 	tracks   []track
 	at       time.Time
 	scanning bool
@@ -98,6 +101,8 @@ func (m *Module) media() (map[string][]*svItem, []track) {
 func (m *Module) scanMedia() {
 	start := time.Now()
 	videos := map[string][]*svItem{}
+	albums := map[string][]*svItem{}
+	albumAt := map[string]*svItem{} // 平台/图集相对路径 → 图集
 	var tracks []track
 	for _, lib := range m.libs() {
 		for _, p := range platforms {
@@ -112,11 +117,36 @@ func (m *Module) scanMedia() {
 					}
 					return nil
 				}
-				if !videoExts[strings.ToLower(filepath.Ext(fp))] || strings.HasPrefix(d.Name(), ".") {
-					return nil // 图集（文件夹中的图片）不在多联中播放
+				if strings.HasPrefix(d.Name(), ".") {
+					return nil
 				}
 				rel, _ := filepath.Rel(base, fp)
 				rel = filepath.ToSlash(rel)
+				if isImage(d.Name()) {
+					// 图集：博主/作品/图片（至少两级目录）；直接放在博主目录下的图片可能是封面，不算作品
+					dir := pathpkg.Dir(rel)
+					if strings.Count(rel, "/") < 2 {
+						return nil
+					}
+					key := p.ID + "/" + dir
+					al := albumAt[key]
+					if al == nil {
+						al = &svItem{Platform: p.ID, Rel: dir, Folder: dir[:strings.IndexByte(dir, '/')]}
+						if mm := datePrefix.FindStringSubmatch(pathpkg.Base(dir)); mm != nil {
+							al.date, _ = strconv.Atoi(mm[1] + mm[2] + mm[3])
+						}
+						if info, err := d.Info(); err == nil {
+							al.mtime = info.ModTime().Unix()
+						}
+						albumAt[key] = al
+						albums[p.ID] = append(albums[p.ID], al)
+					}
+					al.Images = append(al.Images, libURL(lib.ID, filepath.Join(mediaRoot, "shortvideo", p.Dir, filepath.FromSlash(rel))))
+					return nil
+				}
+				if !videoExts[strings.ToLower(filepath.Ext(fp))] {
+					return nil
+				}
 				folder := "未分类"
 				if i := strings.IndexByte(rel, '/'); i > 0 {
 					folder = rel[:i]
@@ -214,9 +244,14 @@ func (m *Module) scanMedia() {
 		}
 		return naturalLess(a.Rel, b.Rel)
 	})
+	for _, list := range albums {
+		for _, al := range list {
+			sort.Slice(al.Images, func(i, j int) bool { return naturalLess(al.Images[i], al.Images[j]) })
+		}
+	}
 	ix := &m.mediaIx
 	ix.mu.Lock()
-	ix.videos, ix.tracks, ix.at, ix.scanning = videos, tracks, time.Now(), false
+	ix.videos, ix.albums, ix.tracks, ix.at, ix.scanning = videos, albums, tracks, time.Now(), false
 	ix.mu.Unlock()
 	n := 0
 	for _, v := range videos {

@@ -37,6 +37,7 @@ func Page(w http.ResponseWriter, title, body string) {
 	fmt.Fprintf(w, `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%s</title><style>%s</style></head><body><main>
-<p><small><a href="/">z6x-hub</a></small></p><h1>%s</h1>%s</main></body></html>`,
+<p class="home"><small><a href="/">z6x-hub</a></small></p><h1>%s</h1>%s</main>
+<script>if(window.top!==window.self){document.querySelector('.home').remove();document.querySelector('h1').remove()}</script></body></html>`,
 		html.EscapeString(title), pageCSS, html.EscapeString(title), body)
 }

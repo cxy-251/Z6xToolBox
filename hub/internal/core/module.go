@@ -74,12 +74,18 @@ type ModuleStatus struct {
 	State State  `json:"state"`
 	Error string `json:"error,omitempty"`
 	Since string `json:"since"`
+	// Title 为模块页面的标题；有标题的模块有网页（/ui/<name>/），首页的工具菜单据此列出
+	Title string `json:"title,omitempty"`
 }
 
 func (e *entry) status() ModuleStatus {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return ModuleStatus{Name: e.mod.Name(), State: e.state, Error: e.err, Since: e.since.Format(time.RFC3339)}
+	st := ModuleStatus{Name: e.mod.Name(), State: e.state, Error: e.err, Since: e.since.Format(time.RFC3339)}
+	if t, ok := e.mod.(Titled); ok {
+		st.Title = t.Title()
+	}
+	return st
 }
 
 // guard 包装模块的处理函数：处理函数 panic 时只让该模块进入 failed 状态，其他模块不受影响。

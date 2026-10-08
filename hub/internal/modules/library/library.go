@@ -83,6 +83,7 @@ func (m *Module) Routes(r core.Router) {
 	m.mangaRoutes(r)
 	m.videoRoutes(r)
 	m.mediaRoutes(r)
+	m.shortvideoRoutes(r)
 	m.audioRoutes(r)
 	m.novelRoutes(r)
 	m.importRoutes(r)

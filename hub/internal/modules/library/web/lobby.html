@@ -5,7 +5,7 @@
 <script>
 const $=id=>document.getElementById(id), enc=encodeURIComponent;
 const size=n=>n>1073741824?(n/1073741824).toFixed(1)+' GB':(n/1048576).toFixed(0)+' MB';
-let tab=localStorage.getItem('z6x-lib-tab')||'games', data=[];
+let tab=new URLSearchParams(location.search).get('tab')||localStorage.getItem('z6x-lib-tab')||'games', data=[];
 function card(href,img,name,cls,blank){const a=document.createElement('a');a.href=href;if(blank)a.target='_blank';if(cls)a.className=cls;
   const i=document.createElement('img');i.loading='lazy';i.src=img;i.onerror=()=>i.style.visibility='hidden';const s=document.createElement('span');s.textContent=name;s.title=name;a.append(i,s);return a}
 function render(){const q=$('q').value.trim().toLowerCase(),out=$('out');out.innerHTML='';
