@@ -99,8 +99,9 @@ for name in "${ITEMS[@]}"; do
     i=$((i + 1))
     N="$name" awk -F'\t' '$1 == ENVIRON["N"] || index($1, ENVIRON["N"] "/") == 1' "$TMP/local" > "$TMP/item.local"
     bytes=$(awk -F'\t' '{ s += $2 } END { print s + 0 }' "$TMP/item.local")
-    limit=$((120 + bytes / 5000000)) # 超时：至少 2 分钟，另按 5MB/s 估算
-    echo "[$i/${#ITEMS[@]}] $name（$(wc -l < "$TMP/item.local") 个文件，$(numfmt --to=iec "$bytes")）"
+    files_n=$(wc -l < "$TMP/item.local")
+    limit=$((120 + bytes / 5000000 + files_n / 10)) # 超时：至少 2 分钟，按 5MB/s 估算，另加每个文件 0.1 秒（小文件多时主要耗在逐个文件上）
+    echo "[$i/${#ITEMS[@]}] $name（$files_n 个文件，$(numfmt --to=iec "$bytes")）"
     ok=0
     for try in 1 2 3 4 5; do
         # 本项在手机上的现状：存在与否、已有文件清单
@@ -126,11 +127,12 @@ for name in "${ITEMS[@]}"; do
         failed=0
         while IFS= read -r dir; do
             mapfile -t files < <(D="$dir" awk '{ p = $0; sub(/\/[^\/]*$/, "", p) } p == ENVIRON["D"]' "$TMP/item.todo")
-            "${ADB[@]}" shell "mkdir -p $(q "$DST/$dir")" 2>/dev/null
+            # adb shell 会读取标准输入，不重定向就会吞掉 while 循环剩下的目录列表，每轮只处理第一个目录
+            "${ADB[@]}" shell "mkdir -p $(q "$DST/$dir")" < /dev/null 2>/dev/null
             for ((k = 0; k < ${#files[@]}; k += 500)); do
                 args=()
                 for f in "${files[@]:k:500}"; do args+=("$SRC/$f"); done
-                timeout "$limit" "${ADB[@]}" push "${args[@]}" "$DST/$dir/" >/dev/null 2>&1 || { failed=1; break 2; }
+                timeout "$limit" "${ADB[@]}" push "${args[@]}" "$DST/$dir/" < /dev/null >/dev/null 2>&1 || { failed=1; break 2; }
             done
         done < <(awk '{ sub(/\/[^\/]*$/, ""); print }' "$TMP/item.todo" | sort -u)
         [ $failed = 1 ] && { echo "  传输中断"; sleep 3; wait_phone; }
