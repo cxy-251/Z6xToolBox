@@ -148,12 +148,6 @@ func TestEmptyListsAreArrays(t *testing.T) {
 	if got := m.listManga(); got == nil {
 		t.Error("漫画列表为空时应返回空切片而不是 nil")
 	}
-	if got := m.listCreators(); got == nil {
-		t.Error("作者列表为空时应返回空切片而不是 nil")
-	}
-	if got, _ := m.listClips("抖音", "无", 0, 10); got == nil {
-		t.Error("视频列表为空时应返回空切片而不是 nil")
-	}
 }
 
 // TestMediaChannelsAndLikes：扫描与 omni-deck 相同结构的短视频，按频道取视频，点赞格式与 omni-deck 一致。

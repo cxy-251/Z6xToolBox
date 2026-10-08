@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -171,6 +172,9 @@ func (m *Module) handle(raw net.Conn) {
 	}
 }
 
+// ptyDrainTimeout：命令结束后等待伪终端输出转发完毕的最长时间
+const ptyDrainTimeout = 2 * time.Second
+
 type ptyReq struct {
 	term       string
 	cols, rows uint32
@@ -221,9 +225,13 @@ func (m *Module) session(ch ssh.Channel, reqs <-chan *ssh.Request) {
 				fmt.Fprintf(ch.Stderr(), "启动失败：%v\r\n", err)
 				return
 			}
+			// 伪终端的输出转发完毕才能关闭会话：命令结束后立即关闭会丢掉尚未转发的最后一段输出
+			copied := make(chan struct{})
 			if ptmx != nil {
 				go io.Copy(ptmx, ch)
-				go io.Copy(ch, ptmx)
+				go func() { io.Copy(ch, ptmx); close(copied) }()
+			} else {
+				close(copied)
 			}
 			go func() {
 				status := 0
@@ -236,6 +244,11 @@ func (m *Module) session(ch ssh.Channel, reqs <-chan *ssh.Request) {
 					}
 				}
 				if ptmx != nil {
+					// 进程退出后伪终端读到 EIO，转发随之结束；最多等 ptyDrainTimeout，防止后台进程一直占着终端
+					select {
+					case <-copied:
+					case <-time.After(ptyDrainTimeout):
+					}
 					ptmx.Close()
 				}
 				ch.SendRequest("exit-status", false, binary.BigEndian.AppendUint32(nil, uint32(status)))

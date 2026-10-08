@@ -36,6 +36,8 @@ type NetworkConfig struct {
 	Trusted []string `yaml:"trusted"`
 	// Loopback 为 false 时不在 127.0.0.1 上常开监听（默认开启：设备上的浏览器不连网络也能使用 hub）。
 	Loopback *bool `yaml:"loopback"`
+	// Names 为可信网络起的名称（指纹 → 名称，如「家里」），只用于设置页显示。
+	Names map[string]string `yaml:"names"`
 }
 
 func (c NetworkConfig) loopback() bool { return c.Iface != "" && (c.Loopback == nil || *c.Loopback) }

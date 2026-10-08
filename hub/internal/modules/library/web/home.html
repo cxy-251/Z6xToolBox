@@ -112,7 +112,7 @@ async function boot(){
   const tools=mods.filter(m=>m.title&&m.name!=='library'&&m.state==='running').map(m=>({id:m.name,label:m.title}));
   if(tools.length)addTab('tools','🔧 工具',0,(p,t)=>{p.classList.add('frame');subTab(p,t,tools,'z6x-tool',(pane,id)=>frame(pane,'/ui/'+id+'/'))});
   addTab('storage','🗄️ 存储',0,p=>frame(p,'/ui/library/storage?tab=libs'));
-  addTab('system','⚙️ 系统',0,p=>frame(p,'/ui/hub/'));
+  addTab('settings','⚙️ 设置',0,p=>frame(p,'/ui/settings/'));
   const bar=$('tabs');
   for(const t of tabs){const b=el('button');b.dataset.id=t.id;b.append(t.label);if(t.count)b.append(el('span','n',t.count));b.onclick=()=>show(t.id);bar.append(b);
     const p=el('div','pane');p.id='pane-'+t.id;$('panes').append(p);t.pane=p}

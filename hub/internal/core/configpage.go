@@ -66,37 +66,44 @@ func (h *Hub) saveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text := unmaskToken(string(body), h.cfg.Token)
+	if err := h.applyConfig(text); err != nil {
+		WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	WriteJSON(w, map[string]string{"status": "已保存，hub 正在重启（约 2 秒）"})
+	h.restartSoon()
+}
 
-	// 先写入同目录的临时文件，用与启动时相同的校验逻辑检查；不通过则不做任何修改。
+// applyConfig 校验新配置，通过后备份旧配置（.bak）并写入；不通过则不做任何修改。设置页与配置页共用。
+func (h *Hub) applyConfig(text string) error {
+	// 先写入同目录的临时文件，用与启动时相同的校验逻辑检查
 	dir := filepath.Dir(h.cfgPath)
 	tmp, err := os.CreateTemp(dir, ".hub-*.yaml")
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
+		return err
 	}
 	defer os.Remove(tmp.Name())
 	tmp.WriteString(text)
 	tmp.Close()
 	if _, err := LoadConfig(tmp.Name()); err != nil {
-		WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		return err
 	}
 	old, _ := os.ReadFile(h.cfgPath)
 	if err := os.WriteFile(h.cfgPath+".bak", old, 0o600); err != nil {
-		WriteError(w, http.StatusInternalServerError, "备份旧配置失败："+err.Error())
-		return
+		return fmt.Errorf("备份旧配置失败：%w", err)
 	}
 	if err := os.Rename(tmp.Name(), h.cfgPath); err != nil {
-		WriteError(w, http.StatusInternalServerError, "写入配置失败："+err.Error())
-		return
+		return fmt.Errorf("写入配置失败：%w", err)
 	}
 	os.Chmod(h.cfgPath, 0o600)
 	h.log.Info("配置已更新，即将重启", "backup", h.cfgPath+".bak")
-	WriteJSON(w, map[string]string{"status": "已保存，hub 正在重启（约 2 秒）"})
+	return nil
+}
 
-	// 稍候再重启，让响应先发送出去。
+// restartSoon 稍候重启，让响应先发送出去。
+func (h *Hub) restartSoon() {
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(stopDelay)
 		h.restart()
 	}()
 }

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"gopkg.in/yaml.v3"
+
 	"context"
 	"net"
 	"net/http"
@@ -148,5 +150,35 @@ func TestTrustLocal(t *testing.T) {
 	}
 	if req("192.168.0.21:5000", "192.168.0.109") != 401 {
 		t.Fatal("其他设备的请求仍需要 token")
+	}
+}
+
+func TestSettingsEditKeepsComments(t *testing.T) {
+	src := "# 顶部注释\ntoken: abc # token 注释\nmodules:\n  library:\n    # 图集间隔\n    slide_seconds: 1\n    music:\n      - /a\n"
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatal(err)
+	}
+	root := doc.Content[0]
+	v1, v2 := "2.5", "30"
+	setScalar(root, "modules.library.slide_seconds", &v1, "!!float") // 修改已有
+	setScalar(root, "modules.library.thumbs.jobs", &v2, "!!int")     // 新建多层
+	setScalar(root, "login_days", &v2, "!!int")                      // 新建顶层
+	setScalar(root, "modules.library.music", nil, "")                // 删除
+	setScalar(root, "modules.nothing.x", nil, "")                    // 删除不存在的项不报错
+	out, err := encodeDoc(&doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# 顶部注释", "# token 注释", "# 图集间隔", "slide_seconds: 2.5", "thumbs:\n      jobs: 30", "login_days: 30"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("结果中缺少 %q：\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "music") || strings.Contains(out, "nothing") {
+		t.Errorf("删除不正确：\n%s", out)
+	}
+	if n := lookup(root, "modules.library.thumbs.jobs"); n == nil || n.Value != "30" {
+		t.Errorf("lookup 不正确：%v", n)
 	}
 }

@@ -1,0 +1,96 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>设置</title><style>
+:root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--muted:#8b949e;--accent:#2f81f7;--ok:#3fb950;--warn:#d29922;--bad:#f85149}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:12px 14px 60px}
+button,input{font:inherit;color:var(--fg)}
+button{background:#21262d;border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+button.pri{background:var(--accent);border-color:var(--accent)}button.danger{color:var(--bad)}
+input{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:140px}
+input.changed{border-color:var(--warn)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.card h2{font-size:15px;margin:0 0 10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .l{flex:1;min-width:180px}.row .l small{display:block;color:var(--muted);margin-top:2px;line-height:1.5}
+.row .u{color:var(--muted);min-width:2em}
+.reset{font-size:12px;padding:2px 8px}
+.muted{color:var(--muted)}code{font:12px ui-monospace,monospace;background:var(--bg);padding:1px 5px;border-radius:4px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+#bar{position:sticky;bottom:0;background:rgba(13,17,23,.96);border-top:1px solid var(--line);padding:10px 14px;display:none;gap:10px;align-items:center;justify-content:flex-end}
+#msg{flex:1;color:var(--muted)}
+.mods span{display:inline-block;margin:2px 8px 2px 0}
+</style></head><body><main>
+<div class="card"><h2>🌐 网络</h2><div id="net">读取中…</div></div>
+<div id="groups"></div>
+<div class="card"><h2>🖥️ 系统</h2><div id="sys">读取中…</div>
+<p style="margin:10px 0 0;display:flex;gap:8px;flex-wrap:wrap"><a href="/ui/config/"><button>编辑完整配置文件</button></a>
+<button class="danger" id="stop">停止 hub</button></p></div>
+</main>
+<div id="bar"><span id="msg"></span><button id="discard">放弃修改</button><button class="pri" id="save">保存并重启 hub</button></div>
+<script>
+const $=id=>document.getElementById(id);
+const el=(t,x,c)=>{const e=document.createElement(t);if(x!=null)e.textContent=x;if(c)e.className=c;return e};
+const post=async(u,body)=>{const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('失败（'+r.status+'）'));return d};
+let changes={};
+function mark(){const n=Object.keys(changes).length;$('bar').style.display=n?'flex':'none';$('msg').textContent=n?'已修改 '+n+' 项，保存后 hub 会重启（约 2 秒，正在播放的内容会中断）':''}
+// 保存后等 hub 重启完成再刷新页面
+async function waitRestart(text){$('bar').style.display='flex';$('msg').textContent=text;
+  await new Promise(r=>setTimeout(r,1500));
+  for(let i=0;i<30;i++){try{if((await fetch('/api/health')).ok){location.reload();return}}catch(e){}await new Promise(r=>setTimeout(r,1000))}
+  $('msg').textContent='hub 没有恢复响应，请检查设备'}
+
+function renderNet(n){
+  const box=$('net');box.replaceChildren();
+  if(!n.iface){box.append(el('p','未配置 network.iface：hub 监听所有地址，不区分网络。','muted'));return}
+  const st=el('p');const on=!!n.bound;
+  const d=el('span',null,'dot');d.style.background=on?'var(--ok)':'var(--bad)';
+  st.append(d,on?'正在对外服务：'+n.bound+'（'+n.iface+'）':'未对外服务：'+(n.reason||'未知原因'));box.append(st);
+  if(n.loopback)box.append(el('p','本机地址 127.0.0.1 一直可用（设备自己的浏览器不连网络也能使用）。','muted'));
+  const cur=el('p');
+  if(n.error)cur.textContent='读取当前网络失败：'+n.error;
+  else if(!n.ip)cur.textContent='当前没有连接 Wi-Fi。';
+  else{cur.append('当前网络：IP '+n.ip+'，指纹 ',el('code',n.fingerprint||'（读不到）'),'  '+(n.current_trusted?'✓ 可信':'✗ 不可信'))}
+  box.append(cur);
+  if(n.ip&&n.fingerprint&&!n.current_trusted){const p=el('p'),name=el('input');name.placeholder='名称，如：家里';
+    const b=el('button','信任当前网络','pri');b.onclick=async()=>{if(!confirm('把当前 Wi-Fi 加入可信网络？之后 hub 在这个网络上对外服务。'))return;
+      try{await post('/api/network/trust',{name:name.value});waitRestart('已加入可信网络，hub 正在重启…')}catch(e){alert(e.message)}};p.append(name,' ',b);box.append(p)}
+  const h=el('p',null,'muted');h.style.margin='12px 0 4px';h.textContent='已信任的网络（只在这些 Wi-Fi 上对外服务；指纹由路由器标识与 token 计算，不含 Wi-Fi 名称和 MAC 地址）：';box.append(h);
+  if(!n.trusted.length)box.append(el('p','（空：只要连着 Wi-Fi 就对外服务）','muted'));
+  for(const t of n.trusted){const r=el('div',null,'row'),l=el('div',null,'l');l.append(el('b',t.name||'未命名'),' ',el('code',t.fingerprint));
+    if(t.fingerprint===n.fingerprint)l.append(el('small','当前所在的网络'));
+    const b=el('button','移除','danger');b.onclick=async()=>{if(!confirm('移除这个可信网络？'))return;
+      try{await post('/api/network/forget',{fingerprint:t.fingerprint});waitRestart('已移除，hub 正在重启…')}catch(e){alert(e.message)}};
+    r.append(l,b);box.append(r)}
+}
+function renderGroups(groups){
+  const box=$('groups');box.replaceChildren();
+  for(const g of groups){const c=el('div',null,'card');c.append(el('h2',g.title));
+    for(const s of g.items){const r=el('div',null,'row'),l=el('div',null,'l');l.append(el('b',s.label));if(s.help)l.append(el('small',s.help));
+      const inp=el('input');
+      if(s.type==='password'){inp.type='password';inp.placeholder=s.value?'已设置（输入新密码以更改）':'未设置';}
+      else{inp.type=s.type==='number'?'number':'text';if(s.step)inp.step=s.step;if(s.min)inp.min=s.min;if(s.max)inp.max=s.max;
+        inp.value=s.value??'';inp.placeholder='默认 '+s.default}
+      inp.oninput=()=>{const v=inp.value;if(s.type!=='password'&&v===(s.value??''))delete changes[s.key];else changes[s.key]=v===''&&s.type!=='password'?null:v;
+        inp.classList.toggle('changed',s.key in changes);mark()};
+      r.append(l,inp,el('span',s.unit||'','u'));
+      if(s.type==='password'&&s.value){const b=el('button','清除密码','reset');b.onclick=()=>{changes[s.key]='';inp.value='';inp.placeholder='保存后清除（只能用 token 登录）';inp.classList.add('changed');mark()};r.append(b)}
+      else if(s.type!=='password'&&s.value!=null){const b=el('button','恢复默认','reset');b.title='删除这一项，使用默认值 '+s.default;
+        b.onclick=()=>{inp.value='';changes[s.key]=null;inp.classList.add('changed');mark()};r.append(b)}
+      c.append(r)}
+    box.append(c)}
+}
+function renderSys(s){const box=$('sys');box.replaceChildren();
+  const h=Math.floor(s.uptime_sec/3600),m=Math.floor(s.uptime_sec%3600/60);
+  box.append(el('p',(s.name||'')+' · 版本 '+s.version+' · 已运行 '+h+' 小时 '+m+' 分','muted'));
+  const mods=el('p',null,'mods');for(const x of s.modules){const sp=el('span'),d=el('span',null,'dot');
+    d.style.background=x.state==='running'?'var(--ok)':x.state==='failed'?'var(--bad)':'var(--warn)';sp.append(d,(x.title||x.name)+(x.error?'（'+x.error+'）':''));mods.append(sp)}
+  box.append(mods)}
+async function load(){const d=await (await fetch('/api/settings')).json();renderNet(d.network);renderGroups(d.groups);renderSys(d.system);changes={};mark()}
+$('save').onclick=async()=>{try{await post('/api/settings',{values:changes});waitRestart('已保存，hub 正在重启…')}catch(e){alert('没有保存：'+e.message)}};
+$('discard').onclick=load;
+$('stop').onclick=async()=>{if(!confirm('停止 hub？停止后需要在 Deck 上执行 ./hub/ctl.sh 或在 Termux 中执行 hub start 才能再启动。'))return;
+  await fetch('/api/stop',{method:'POST'}).catch(()=>{});document.body.innerHTML='<main><p>hub 已停止。</p></main>'};
+load();
+</script></body></html>

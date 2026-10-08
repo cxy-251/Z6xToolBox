@@ -64,6 +64,7 @@ func (h *Hub) Run(ctx context.Context) error {
 	h.loginLinkRoutes(mux)
 	if h.cfgPath != "" {
 		h.configRoutes(mux)
+		h.settingsRoutes(mux)
 	}
 
 	for _, e := range h.entries {

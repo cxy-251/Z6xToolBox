@@ -150,7 +150,7 @@ func (m *Module) Stop(context.Context) error { return nil }
 func (m *Module) Routes(r core.Router) {
 	m.gameRoutes(r)
 	m.mangaRoutes(r)
-	m.videoRoutes(r)
+	m.libFileRoutes(r)
 	m.mediaRoutes(r)
 	m.shortvideoRoutes(r)
 	m.coverRoutes(r)
@@ -192,3 +192,33 @@ func (m *Module) invalidate() {
 }
 
 func urlPathEscape(s string) string { return url.PathEscape(s) }
+
+// Settings 声明资源库在设置页中可调的参数（实现 core.SettingsProvider）；默认值取自 DefaultConfig。
+func (m *Module) Settings() []core.SettingsGroup {
+	d := DefaultConfig()
+	const p = "modules.library."
+	return []core.SettingsGroup{
+		{Title: "📱 短视频与音声", Items: []core.Setting{
+			{Key: p + "slide_seconds", Label: "图集翻页间隔", Unit: "秒", Type: "number", Min: 0.2, Max: 60, Step: 0.1, Default: d.SlideSeconds,
+				Help: "播放器中图集自动翻页的间隔；最后一张之后与视频播完一样切换作品"},
+			{Key: p + "page_size", Label: "每次加载作品数", Unit: "个", Type: "number", Min: 12, Max: maxItemsPerRequest, Step: 1, Default: d.PageSize,
+				Help: "短视频网格滚动到底部时每次加载的数量"},
+			{Key: p + "player_hide_seconds", Label: "播放器控件自动隐藏", Unit: "秒", Type: "number", Min: 0.5, Max: 60, Step: 0.5, Default: d.PlayerHideSeconds},
+			{Key: p + "rescan_minutes", Label: "重新扫描间隔", Unit: "分钟", Type: "number", Min: 1, Max: 1440, Step: 1, Default: d.RescanMinutes,
+				Help: "新放进资源库的短视频与音声，最晚多久后出现"},
+			{Key: p + "cover_px", Label: "音乐封面宽度", Unit: "像素", Type: "number", Min: 64, Max: 1024, Step: 1, Default: d.CoverPx,
+				Help: "封面缩小后的宽度；越大越清晰，加载越慢"},
+		}},
+		{Title: "🖼️ 短视频封面生成（手机后台）", Items: []core.Setting{
+			{Key: p + "thumbs.jobs", Label: "同时生成数", Unit: "个", Type: "number", Min: 1, Max: 8, Step: 1, Default: d.Thumbs.Jobs,
+				Help: "温度低于下面的「全速温度」时同时运行的 ffmpeg 数"},
+			{Key: p + "thumbs.cool", Label: "全速温度", Unit: "°C", Type: "number", Min: 20, Max: 60, Step: 0.5, Default: d.Thumbs.Cool,
+				Help: "低于此温度全速；介于全速温度与暂停温度之间只运行 1 个"},
+			{Key: p + "thumbs.hot", Label: "暂停温度", Unit: "°C", Type: "number", Min: 21, Max: 70, Step: 0.5, Default: d.Thumbs.Hot,
+				Help: "达到此温度暂停，降到全速温度 + 1°C 以下再继续"},
+			{Key: p + "thumbs.width", Label: "封面宽度", Unit: "像素", Type: "number", Min: 120, Max: 1080, Step: 1, Default: d.Thumbs.Width,
+				Help: "只影响之后新生成的封面"},
+			{Key: p + "thumbs.interval_hours", Label: "检查新作品间隔", Unit: "小时", Type: "number", Min: 0.1, Max: 168, Step: 0.5, Default: d.Thumbs.IntervalHours},
+		}},
+	}
+}
