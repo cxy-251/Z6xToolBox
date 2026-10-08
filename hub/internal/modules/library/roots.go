@@ -164,11 +164,20 @@ func resolveCI(base, rel string) (string, error) {
 			if rerr != nil {
 				return p, nil
 			}
+			// 先按不区分大小写匹配，再把 xxx.asar 当作同名目录 xxx（Electron 打包格式，解包后的游戏常用软链接
+			// xxx.asar -> xxx 兼容，手机共享存储不能建软链接；与 omni-deck 的 vfs 相同）
 			lower := strings.ToLower(part)
-			for _, e := range ents {
-				if strings.ToLower(e.Name()) == lower {
-					next = filepath.Join(cur, e.Name())
-					break
+			wants := []string{lower}
+			if t := strings.TrimSuffix(lower, ".asar"); t != lower {
+				wants = append(wants, t)
+			}
+		search:
+			for _, want := range wants {
+				for _, e := range ents {
+					if strings.ToLower(e.Name()) == want {
+						next = filepath.Join(cur, e.Name())
+						break search
+					}
 				}
 			}
 		}

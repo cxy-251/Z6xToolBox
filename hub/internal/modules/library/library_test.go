@@ -80,6 +80,12 @@ func TestResolveCIAndWithin(t *testing.T) {
 	if _, err := resolveCI(base, "../../etc/passwd"); err == nil {
 		t.Error("越界路径应被拒绝")
 	}
+	// xxx.asar 不存在时使用同名目录 xxx（手机上没有 v101.asar -> v101 这样的软链接）
+	os.MkdirAll(filepath.Join(base, "dlc", "v101"), 0o755)
+	os.WriteFile(filepath.Join(base, "dlc", "v101", "info.json"), []byte("{}"), 0o644)
+	if got, _ := resolveCI(base, "dlc/v101.asar/info.json"); got != filepath.Join(base, "dlc", "v101", "info.json") {
+		t.Errorf(".asar 未映射到同名目录：%s", got)
+	}
 }
 
 func TestInjectRuntime(t *testing.T) {
