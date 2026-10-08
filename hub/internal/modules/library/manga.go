@@ -214,7 +214,7 @@ func (m *Module) mangaRoutes(r core.Router) {
 		if ct := mime.TypeByExtension(strings.ToLower(filepath.Ext(pages[n]))); ct != "" {
 			w.Header().Set("Content-Type", ct)
 		}
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(cacheAssetSec))
 		io.Copy(w, rc)
 	})
 	r.HandleFunc("GET /api/library/manga/thumb", m.mangaThumb)
@@ -231,7 +231,7 @@ func (m *Module) mangaThumb(w http.ResponseWriter, req *http.Request) {
 	}
 	sum := sha1.Sum([]byte(fmt.Sprintf("%s|%d|%d", p, fi.Size(), fi.ModTime().Unix())))
 	cache := filepath.Join(m.thumbDir, hex.EncodeToString(sum[:])+".jpg")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(cacheAssetSec))
 	if _, err := os.Stat(cache); err == nil {
 		http.ServeFile(w, req, cache)
 		return

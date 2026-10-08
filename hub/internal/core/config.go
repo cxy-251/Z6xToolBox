@@ -23,6 +23,8 @@ type Config struct {
 	Modules  map[string]yaml.Node `yaml:"modules"`
 	// TrustLocal 为真时，来自设备本身的请求（例如投影仪上的浏览器）不需要 token；保存配置除外。
 	TrustLocal bool `yaml:"trust_local"`
+	// LoginDays：浏览器登录后保持多少天，默认 180。
+	LoginDays int `yaml:"login_days"`
 	// Network 限定在哪个网络上对外服务，见 netguard.go。
 	Network NetworkConfig `yaml:"network"`
 }

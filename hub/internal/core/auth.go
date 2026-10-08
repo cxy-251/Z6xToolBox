@@ -35,6 +35,9 @@ func ValidToken(got, want string) bool {
 // 由配置项 trust_local 在启动时设置。用于投影仪：用遥控器在电视浏览器里输入 token 很不方便。
 var trustLocal bool
 
+// loginDays 是登录 cookie 的有效天数，由配置项 login_days 在启动时设置。
+var loginDays = defaultLoginDays
+
 // fromSameDevice 判断请求是否来自设备本身：来源 IP 等于本次连接的本端 IP（或为回环地址）。
 func fromSameDevice(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -85,7 +88,7 @@ func (e *Env) RequireTokenFor(h http.Handler) http.Handler {
 func setTokenCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: cookieName, Value: token, Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, MaxAge: 180 * 24 * 3600,
+		SameSite: http.SameSiteStrictMode, MaxAge: loginDays * 24 * 3600,
 	})
 }
 

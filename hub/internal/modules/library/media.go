@@ -70,7 +70,7 @@ type track struct {
 }
 
 // mediaIndex 缓存扫描结果。手机上的短视频可达数万条，扫描一遍需要数秒，因此在后台进行，
-// 请求时先返回现有结果，超过 refreshAfter 才触发重新扫描。
+// 请求时先返回现有结果，超过配置的 rescan_minutes 才触发重新扫描。
 type mediaIndex struct {
 	mu       sync.Mutex
 	videos   map[string][]*svItem // 平台 → 视频（按文件名中的日期从早到晚）
@@ -83,8 +83,6 @@ type mediaIndex struct {
 	ready     chan struct{}
 	readyOnce sync.Once
 }
-
-const refreshAfter = 10 * time.Minute
 
 var datePrefix = regexp.MustCompile(`^(\d{4})-?(\d{2})-?(\d{2})`)
 
@@ -99,11 +97,11 @@ func (m *Module) media() (map[string][]*svItem, []track) {
 		ix.mu.Unlock()
 		select {
 		case <-ready:
-		case <-time.After(3 * time.Minute):
+		case <-time.After(firstScanWait):
 		}
 		ix.mu.Lock()
 	}
-	stale := time.Since(ix.at) > refreshAfter
+	stale := time.Since(ix.at) > time.Duration(m.cfg.RescanMinutes*float64(time.Minute))
 	first := ix.videos == nil
 	if (stale || first) && !ix.scanning {
 		ix.scanning = true
@@ -579,7 +577,7 @@ func (m *Module) mediaRoutes(r core.Router) {
 		seed, _ := strconv.ParseInt(q.Get("seed"), 10, 64)
 		off, _ := strconv.Atoi(q.Get("offset"))
 		lim, _ := strconv.Atoi(q.Get("limit"))
-		if lim <= 0 || lim > 500 {
+		if lim <= 0 || lim > maxMatrixPerRequest {
 			lim = 100
 		}
 		list := m.channelVideos(q.Get("channel_id"), seed)

@@ -82,8 +82,8 @@ func (m *Module) shortvideoRoutes(r core.Router) {
 		p, folder, kw, onlyLiked := q.Get("platform"), q.Get("folder"), strings.ToLower(q.Get("q")), q.Get("liked") == "1"
 		off, _ := strconv.Atoi(q.Get("offset"))
 		lim, _ := strconv.Atoi(q.Get("limit"))
-		if lim <= 0 || lim > 200 {
-			lim = 60
+		if lim <= 0 || lim > maxItemsPerRequest {
+			lim = m.cfg.PageSize
 		}
 		var list []*svItem
 		for _, it := range m.platformItems(p) {

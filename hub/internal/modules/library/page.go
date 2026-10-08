@@ -2,10 +2,10 @@ package library
 
 import (
 	_ "embed"
+	"encoding/json"
 	"html"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"z6x/hub/internal/core"
@@ -20,11 +20,9 @@ func (m *Module) pageRoutes(r core.Router) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		slide := m.cfg.SlideSeconds
-		if slide <= 0 {
-			slide = 1
-		}
-		page := strings.NewReplacer("{{name}}", html.EscapeString(name), "{{slide_ms}}", strconv.Itoa(int(slide*1000))).Replace(homeHTML)
+		cfg, _ := json.Marshal(map[string]any{"slide_ms": int(m.cfg.SlideSeconds * 1000), "page_size": m.cfg.PageSize,
+			"hide_ms": int(m.cfg.PlayerHideSeconds * 1000)})
+		page := strings.NewReplacer("{{name}}", html.EscapeString(name), "{{cfg}}", string(cfg)).Replace(homeHTML)
 		io.WriteString(w, mediaHead+page)
 	})
 	r.HandleFunc("GET /ui/library/storage", func(w http.ResponseWriter, _ *http.Request) { core.Page(w, "存储与转移", lobbyHTML) })

@@ -19,6 +19,8 @@ import (
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 
+	"gopkg.in/yaml.v3"
+
 	"z6x/hub/internal/core"
 )
 
@@ -142,7 +144,7 @@ func TestScanGamesAndSaveDir(t *testing.T) {
 // TestEmptyListsAreArrays 防止回归：资源库为空时接口应返回 []，返回 null 会让页面停在「读取中」。
 func TestEmptyListsAreArrays(t *testing.T) {
 	m := New()
-	m.cfg = Config{Internal: t.TempDir(), Storage: t.TempDir()}
+	m.cfg = func() Config { c := DefaultConfig(); c.Internal = t.TempDir(); c.Storage = t.TempDir(); return c }()
 	if got := m.listManga(); got == nil {
 		t.Error("漫画列表为空时应返回空切片而不是 nil")
 	}
@@ -168,7 +170,13 @@ func TestMediaChannelsAndLikes(t *testing.T) {
 
 	m := New()
 	m.env = &core.Env{Config: &core.Config{DataDir: t.TempDir()}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	m.cfg = Config{Roots: []string{root}, Internal: t.TempDir(), Storage: t.TempDir()}
+	m.cfg = func() Config {
+		c := DefaultConfig()
+		c.Roots = []string{root}
+		c.Internal = t.TempDir()
+		c.Storage = t.TempDir()
+		return c
+	}()
 	m.likes.path = filepath.Join(m.env.Config.DataDir, "likes.json")
 	m.likes.load()
 
@@ -285,7 +293,13 @@ func TestShortvideoItemsAndAlbums(t *testing.T) {
 	}
 	m := New()
 	m.env = &core.Env{Config: &core.Config{DataDir: t.TempDir()}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	m.cfg = Config{Roots: []string{root}, Internal: t.TempDir(), Storage: t.TempDir()}
+	m.cfg = func() Config {
+		c := DefaultConfig()
+		c.Roots = []string{root}
+		c.Internal = t.TempDir()
+		c.Storage = t.TempDir()
+		return c
+	}()
 	m.likes.path = filepath.Join(m.env.Config.DataDir, "likes.json")
 	m.likes.load()
 	mux := http.NewServeMux()
@@ -390,5 +404,27 @@ func TestShrinkImage(t *testing.T) {
 	}
 	if r, _, _, _ := img.At(10, 10).RGBA(); r>>8 < 190 || r>>8 > 210 {
 		t.Errorf("颜色应保持不变：%d", r>>8)
+	}
+}
+
+func TestReadConfigDefaults(t *testing.T) {
+	var cfg core.Config
+	err := yaml.Unmarshal([]byte("modules:\n  library:\n    page_size: 30\n    cover_px: 5\n    thumbs:\n      hot: 45\n"), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := ReadConfig(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := DefaultConfig()
+	if c.PageSize != 30 || c.Thumbs.Hot != 45 {
+		t.Errorf("写了的项应生效：%+v", c)
+	}
+	if c.SlideSeconds != d.SlideSeconds || c.Thumbs.Cool != d.Thumbs.Cool || c.Thumbs.Jobs != d.Thumbs.Jobs || c.RescanMinutes != d.RescanMinutes {
+		t.Errorf("没写的项应为默认值：%+v", c)
+	}
+	if c.CoverPx != d.CoverPx {
+		t.Errorf("不合理的值（cover_px: 5）应换回默认值：%d", c.CoverPx)
 	}
 }

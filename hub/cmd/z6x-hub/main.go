@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -42,6 +43,7 @@ func main() {
 	version := flag.Bool("version", false, "输出版本号")
 	showNet := flag.Bool("network", false, "显示当前网络是否可信（hub 是否会对外服务）")
 	trust := flag.Bool("trust", false, "把当前 Wi-Fi 加入可信网络（写入配置的 network.trusted）")
+	thumbsCfg := flag.Bool("thumbs-config", false, "以 JSON 输出短视频封面生成的参数（library.thumbs，含默认值），供 thumbs.sh 使用")
 	flag.Parse()
 
 	setLocalTimezone()
@@ -56,6 +58,16 @@ func main() {
 	}
 	if *checkOnly {
 		fmt.Println("配置校验通过")
+		return
+	}
+	if *thumbsCfg {
+		lc, err := library.ReadConfig(cfg)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		b, _ := json.Marshal(lc.Thumbs)
+		fmt.Println(string(b))
 		return
 	}
 	if *trust {

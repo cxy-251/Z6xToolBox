@@ -173,10 +173,10 @@ func (m *Module) coverRoutes(r core.Router) {
 			return
 		}
 		defer f.Close()
-		// 内嵌封面常有几百 KB（实测平均 584KB），一屏几十张专辑太重；第一次读取时缩成 300 像素宽的 JPEG 存进缓存
+		// 内嵌封面常有几百 KB（实测平均 584KB），一屏几十张专辑太重；第一次读取时缩成 cover_px 宽的 JPEG 存进缓存
 		sum := sha1.Sum([]byte(p))
-		cache := filepath.Join(m.env.Config.DataDir, "library", "covers", hex.EncodeToString(sum[:])+".jpg")
-		w.Header().Set("Cache-Control", "public, max-age=604800")
+		cache := filepath.Join(m.env.Config.DataDir, "library", "covers", hex.EncodeToString(sum[:])+"_"+strconv.Itoa(m.cfg.CoverPx)+".jpg")
+		w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(cacheCoverSec))
 		if b, err := os.ReadFile(cache); err == nil {
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Write(b)
@@ -187,7 +187,7 @@ func (m *Module) coverRoutes(r core.Router) {
 			http.NotFound(w, req)
 			return
 		}
-		small, err := shrinkImage(raw, 300)
+		small, err := shrinkImage(raw, m.cfg.CoverPx)
 		if err != nil { // 解不开的格式原样返回
 			w.Header().Set("Content-Type", mime)
 			w.Write(raw)

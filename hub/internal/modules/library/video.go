@@ -135,7 +135,7 @@ func (m *Module) videoRoutes(r core.Router) {
 		q := req.URL.Query()
 		off, _ := strconv.Atoi(q.Get("offset"))
 		lim, _ := strconv.Atoi(q.Get("limit"))
-		if lim <= 0 || lim > 200 {
+		if lim <= 0 || lim > maxItemsPerRequest {
 			lim = 60
 		}
 		clips, total := m.listClips(q.Get("platform"), q.Get("creator"), off, lim)
@@ -163,7 +163,7 @@ func (m *Module) videoRoutes(r core.Router) {
 				return
 			}
 			defer f.Close()
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(cacheFileSec))
 			http.ServeContent(w, req, fi.Name(), fi.ModTime(), f)
 			return
 		}

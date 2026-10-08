@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"z6x/hub/internal/core"
@@ -191,7 +192,7 @@ func (m *Module) gameRoutes(r core.Router) {
 	r.HandleFunc("GET /game/{id}/{rest...}", m.serveGameFile)
 	r.HandleFunc("GET /icon/{id}", func(w http.ResponseWriter, req *http.Request) {
 		if g := m.lookupGame(req.PathValue("id")); g != nil && g.icon != "" {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(cacheFileSec))
 			http.ServeFile(w, req, g.icon)
 			return
 		}
@@ -248,7 +249,7 @@ func (m *Module) serveGameFile(w http.ResponseWriter, req *http.Request) {
 	}
 	defer f.Close()
 	// 游戏素材不会改变，缓存一天；入口页面（上面的 .html）不缓存，以便运行时更新后立即生效
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(cacheAssetSec))
 	http.ServeContent(w, req, fi.Name(), fi.ModTime(), f)
 }
 

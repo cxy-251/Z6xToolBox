@@ -75,9 +75,9 @@ func parseTXT(p string) ([]novelChapter, error) {
 		return out, nil
 	}
 	lines := textLines(text)
-	for i := 0; i < len(lines); i += 300 {
-		end := min(i+300, len(lines))
-		out = append(out, novelChapter{Title: "第 " + strconv.Itoa(i/300+1) + " 部分", Paras: lines[i:end]})
+	for i := 0; i < len(lines); i += txtChunkLines {
+		end := min(i+txtChunkLines, len(lines))
+		out = append(out, novelChapter{Title: "第 " + strconv.Itoa(i/txtChunkLines+1) + " 部分", Paras: lines[i:end]})
 	}
 	return out, nil
 }

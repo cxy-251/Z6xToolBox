@@ -7,6 +7,7 @@ trust_local: true
 listen: ":8090"
 token: "换成随机长字符串"
 password: z6x888   # 浏览器登录密码（可选，至少 4 个字符）；接口与网络指纹仍使用 token
+# login_days: 180   # 浏览器登录后保持多少天（180）
 data_dir: data
 log_file: hub.log
 

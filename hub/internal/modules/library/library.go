@@ -25,8 +25,71 @@ type Config struct {
 	// Music 是资源库以外的音乐目录（如手机上自行整理的歌曲），在音声页作为「音乐」来源，
 	// 按「歌手/专辑/歌曲」的目录结构分组（上一级目录为专辑，再上一级为歌手）。
 	Music []string `yaml:"music"`
-	// SlideSeconds 是短视频播放器中图集自动翻页的间隔（秒），默认 1；最后一张之后与视频播完一样切换作品。
+	// SlideSeconds 是短视频播放器中图集自动翻页的间隔（秒）；最后一张之后与视频播完一样切换作品。
 	SlideSeconds float64 `yaml:"slide_seconds"`
+	// RescanMinutes：短视频与音声的扫描结果过期时间（分钟），过期后的下一次请求在后台重新扫描。
+	RescanMinutes float64 `yaml:"rescan_minutes"`
+	// PageSize：短视频网格每次加载的作品数。
+	PageSize int `yaml:"page_size"`
+	// CoverPx：音乐封面缩小后的宽度（像素）。
+	CoverPx int `yaml:"cover_px"`
+	// PlayerHideSeconds：短视频播放器无操作多久后隐藏控件（秒）。
+	PlayerHideSeconds float64 `yaml:"player_hide_seconds"`
+	// Thumbs 是短视频封面生成（手机上的 thumbs.sh）的参数，由 z6x-hub -thumbs-config 交给脚本。
+	Thumbs ThumbsConfig `yaml:"thumbs"`
+}
+
+// ThumbsConfig 是短视频封面生成的参数。
+type ThumbsConfig struct {
+	Jobs          int     `yaml:"jobs" json:"jobs"`                     // 不热时同时运行的 ffmpeg 数
+	Cool          float64 `yaml:"cool" json:"cool"`                     // 低于此温度（°C）全速
+	Hot           float64 `yaml:"hot" json:"hot"`                       // 达到此温度（°C）暂停
+	Width         int     `yaml:"width" json:"width"`                   // 封面宽度（像素）
+	IntervalHours float64 `yaml:"interval_hours" json:"interval_hours"` // 每轮之间等待多久再检查新作品
+}
+
+// DefaultConfig 是资源库模块的默认配置；hub.yaml 中没有写的项使用这里的值（全部默认值只在这里定义一次）。
+func DefaultConfig() Config {
+	return Config{
+		Internal: "/storage/emulated/0", Storage: "/storage",
+		SlideSeconds: 1, RescanMinutes: 10, PageSize: 48, CoverPx: 300, PlayerHideSeconds: 2.5,
+		Thumbs: ThumbsConfig{Jobs: 3, Cool: 36, Hot: 40, Width: 360, IntervalHours: 6},
+	}
+}
+
+// normalize 把不合理的值（0、负数、超出范围）换回默认值。
+func (c *Config) normalize() {
+	d := DefaultConfig()
+	fix := func(v *float64, def, lo, hi float64) {
+		if *v < lo || *v > hi {
+			*v = def
+		}
+	}
+	fixInt := func(v *int, def, lo, hi int) {
+		if *v < lo || *v > hi {
+			*v = def
+		}
+	}
+	fix(&c.SlideSeconds, d.SlideSeconds, 0.2, 60)
+	fix(&c.RescanMinutes, d.RescanMinutes, 1, 24*60)
+	fixInt(&c.PageSize, d.PageSize, 12, maxItemsPerRequest)
+	fixInt(&c.CoverPx, d.CoverPx, 64, 1024)
+	fix(&c.PlayerHideSeconds, d.PlayerHideSeconds, 0.5, 60)
+	fixInt(&c.Thumbs.Jobs, d.Thumbs.Jobs, 1, 8)
+	fix(&c.Thumbs.Cool, d.Thumbs.Cool, 20, 60)
+	fix(&c.Thumbs.Hot, d.Thumbs.Hot, c.Thumbs.Cool+1, 70)
+	fixInt(&c.Thumbs.Width, d.Thumbs.Width, 120, 1080)
+	fix(&c.Thumbs.IntervalHours, d.Thumbs.IntervalHours, 0.1, 24*7)
+}
+
+// ReadConfig 从 hub 配置中取出资源库配置（含默认值），供命令行 -thumbs-config 使用。
+func ReadConfig(cfg *core.Config) (Config, error) {
+	c := DefaultConfig()
+	if err := cfg.Decode("library", &c); err != nil {
+		return c, err
+	}
+	c.normalize()
+	return c, nil
 }
 
 type Module struct {
@@ -62,10 +125,11 @@ func (m *Module) Title() string {
 
 func (m *Module) Start(_ context.Context, env *core.Env) error {
 	m.env = env
-	m.cfg = Config{Internal: "/storage/emulated/0", Storage: "/storage"}
-	if err := env.Config.Decode("library", &m.cfg); err != nil {
+	cfg, err := ReadConfig(env.Config)
+	if err != nil {
 		return err
 	}
+	m.cfg = cfg
 	m.thumbDir = filepath.Join(env.Config.DataDir, "library", "thumbs")
 	m.likes.path = filepath.Join(env.Config.DataDir, "library", "shortvideo_likes.json")
 	m.likes.load()
@@ -100,7 +164,7 @@ func (m *Module) Routes(r core.Router) {
 func (m *Module) libs() []Lib {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if time.Since(m.libAt) < 10*time.Second && m.libCache != nil {
+	if time.Since(m.libAt) < libsCacheTTL && m.libCache != nil {
 		return m.libCache
 	}
 	m.libCache = discover(m.cfg.Roots, m.cfg.Internal, m.cfg.Storage)
@@ -113,7 +177,7 @@ func (m *Module) games(force bool) map[string]*Game {
 	libs := m.libs()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !force && m.gameCache != nil && time.Since(m.gameAt) < 30*time.Second {
+	if !force && m.gameCache != nil && time.Since(m.gameAt) < gamesCacheTTL {
 		return m.gameCache
 	}
 	m.gameCache = scanGames(libs)

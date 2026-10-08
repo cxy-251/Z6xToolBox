@@ -54,6 +54,10 @@ func (h *Hub) Run(ctx context.Context) error {
 	defer h.stop()
 	h.gate = NewGate(h.cfg.Network, h.cfg.Token, h.log)
 	trustLocal = h.cfg.TrustLocal
+	loginDays = h.cfg.LoginDays
+	if loginDays <= 0 {
+		loginDays = defaultLoginDays
+	}
 	mux := http.NewServeMux()
 	h.coreRoutes(mux)
 	h.stopRoute(mux)
@@ -80,7 +84,7 @@ func (h *Hub) Run(ctx context.Context) error {
 	// 主端口与模块的独立端口都交给 gate：按网络状态统一开启或关闭，每 15 秒检查一次。
 	h.gate.Add("listen", portOf(h.cfg.Listen), logRequests(h.log, mux))
 	errc := make(chan error, 1)
-	go func() { errc <- h.gate.Run(ctx, 15*time.Second) }()
+	go func() { errc <- h.gate.Run(ctx, gateCheckInterval) }()
 	h.log.Info("z6x-hub 已启动", "version", Version, "listen", h.cfg.Listen, "iface", h.cfg.Network.Iface, "modules", len(h.entries))
 
 	var runErr error
@@ -89,7 +93,7 @@ func (h *Hub) Run(ctx context.Context) error {
 	case runErr = <-errc:
 	}
 	h.stop()
-	shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shut, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	for _, e := range h.entries {
 		if err := e.mod.Stop(shut); err != nil {
@@ -143,7 +147,7 @@ func (h *Hub) coreRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /login", func(w http.ResponseWriter, r *http.Request) {
 		if got := r.FormValue("token"); !ValidToken(got, h.cfg.Token) && !ValidToken(got, h.cfg.Password) {
-			time.Sleep(time.Second) // 减缓暴力尝试
+			time.Sleep(loginFailDelay)
 			Page(w, "登录失败", `<p>密码不正确。<a href="/login">重试</a></p>`)
 			return
 		}
@@ -268,6 +272,6 @@ func (h *Hub) stopRoute(mux *http.ServeMux) {
 	mux.Handle("POST /api/stop", RequireToken(h.cfg.Token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("收到停止请求", "remote", r.RemoteAddr)
 		Page(w, "已停止", `<p>hub 已停止。重新启动：在 Deck 上执行 <code>./hub/ctl.sh 设备名 start</code>。</p>`)
-		go func() { time.Sleep(500 * time.Millisecond); h.stop() }()
+		go func() { time.Sleep(stopDelay); h.stop() }()
 	})))
 }

@@ -78,9 +78,13 @@ body{overscroll-behavior-y:contain}
 <div id="toast"></div>
 <script>
 const $=id=>document.getElementById(id), enc=encodeURIComponent;
+// 可调参数来自 hub.yaml 的 library 节（由 hub 在输出页面时填入，默认值见 library.DefaultConfig）
+const CFG={{cfg}};
+// 界面的技术常量（不开放配置）
+const TOAST_MS=1500,SEARCH_DEBOUNCE_MS=300,PRELOAD_MARGIN='600px',WHEEL_THROTTLE_MS=500,SWIPE_PX=60;
 const get=async u=>{const r=await fetch(u);if(!r.ok)throw new Error(await r.text());return r.json()};
 const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
-function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',1500)}
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',TOAST_MS)}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 const fmtDate=d=>d?String(d).replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3'):'';
 const fmtTime=s=>isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00';
@@ -157,7 +161,7 @@ function subTab(pane,t,subs,key,make){
 }
 
 /* ---------- 短视频（与 omni-deck 的短视频画廊相同的用法）：平台在行末下拉菜单中切换；📌 置顶的博主排在第一行 ---------- */
-const PAGE=48;
+const PAGE=CFG.page_size;
 function svPane(p,platform,info){
   const st={platform,folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0,folders:[],moreOpen:false,authorQ:''};
   const tools=el('div','tools'),q=el('input');q.type='search';q.placeholder='🔍 搜索标题或博主';
@@ -204,10 +208,10 @@ function svPane(p,platform,info){
     cv.append(el('span','k',it.kind==='images'?'🖼 '+it.images.length:'▶'));if(it.liked)cv.append(el('span','h','❤️'));
     c.append(cv,el('div','t',it.title),el('div','f',it.folder+(it.date?' · '+fmtDate(it.date):'')));
     c.onclick=()=>player.open(st,i,more);return c}
-  let qt;q.oninput=()=>{clearTimeout(qt);qt=setTimeout(()=>{st.q=q.value.trim();reset()},300)};
+  let qt;q.oninput=()=>{clearTimeout(qt);qt=setTimeout(()=>{st.q=q.value.trim();reset()},SEARCH_DEBOUNCE_MS)};
   likeBtn.onclick=()=>{st.liked=!st.liked;likeBtn.classList.toggle('on',st.liked);likeBtn.textContent=st.liked?'❤️ 只看喜欢':'♡ 只看喜欢';reset()};
   st.refreshCard=i=>{const old=grid.children[i];if(old)old.replaceWith(card(st.items[i],i))};
-  new IntersectionObserver(es=>{if(es[0].isIntersecting&&p.offsetParent)more()},{rootMargin:'600px'}).observe(sentinel);
+  new IntersectionObserver(es=>{if(es[0].isIntersecting&&p.offsetParent)more()},{rootMargin:PRELOAD_MARGIN}).observe(sentinel);
   loadFolders();reset();
 }
 
@@ -215,7 +219,7 @@ function svPane(p,platform,info){
 const player=(()=>{
   const pl=$('pl'),v=$('pv'),img=$('pi');let st=null,i=0,page=0,moreFn=null;
   // 图集自动翻页：间隔来自配置 library.slide_seconds（默认 1 秒）；最后一张之后与视频播完一样处理
-  const SLIDE={{slide_ms}};let slideT=0,slidePaused=false;
+  const SLIDE=CFG.slide_ms;let slideT=0,slidePaused=false;
   function ended(){if(loop==='one'){if(cur().kind==='images'){page=0;render()}else{v.currentTime=0;v.play()}}else go(1)}
   function schedule(){clearTimeout(slideT);const it=cur();if(!it||it.kind!=='images'||slidePaused)return;
     slideT=setTimeout(()=>{if(!st)return;if(page+1<it.images.length){page++;render()}else ended()},SLIDE)}
@@ -260,15 +264,15 @@ const player=(()=>{
   document.addEventListener('keydown',e=>{if(!st||e.target.tagName==='INPUT')return;
     const k={Escape:close,ArrowUp:()=>go(-1),ArrowDown:()=>go(1),ArrowLeft:()=>flip(-1),ArrowRight:()=>flip(1),' ':()=>$('pplay').click(),l:like,L:like,m:()=>$('pmute').click(),M:()=>$('pmute').click()}[e.key];
     if(k){e.preventDefault();k()}idle()});
-  let wt=0;pl.addEventListener('wheel',e=>{const now=Date.now();if(now-wt<500)return;wt=now;go(e.deltaY>0?1:-1)},{passive:true});
+  let wt=0;pl.addEventListener('wheel',e=>{const now=Date.now();if(now-wt<WHEEL_THROTTLE_MS)return;wt=now;go(e.deltaY>0?1:-1)},{passive:true});
   let sx=0,sy=0;pl.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;idle()},{passive:true});
   pl.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
-    if(Math.abs(dy)>60&&Math.abs(dy)>Math.abs(dx))go(dy<0?1:-1);else if(Math.abs(dx)>60)flip(dx<0?1:-1)},{passive:true});
+    if(Math.abs(dy)>SWIPE_PX&&Math.abs(dy)>Math.abs(dx))go(dy<0?1:-1);else if(Math.abs(dx)>SWIPE_PX)flip(dx<0?1:-1)},{passive:true});
   v.onclick=()=>$('pplay').click();
   // 图集：点图片左半边上一张、右半边下一张；两侧按钮同样。第一张再往前 / 最后一张再往后切换到上一个 / 下一个作品
   img.onclick=e=>{flip(e.clientX<window.innerWidth/2?-1:1);idle()};
   $('pgl').onclick=e=>{e.stopPropagation();flip(-1);idle()};$('pgr').onclick=e=>{e.stopPropagation();flip(1);idle()};
-  let it2;function idle(){pl.classList.remove('idle');clearTimeout(it2);it2=setTimeout(()=>pl.classList.add('idle'),2500)}
+  let it2;function idle(){pl.classList.remove('idle');clearTimeout(it2);it2=setTimeout(()=>pl.classList.add('idle'),CFG.hide_ms)}
   pl.addEventListener('mousemove',idle);
   return {open};
 })();

@@ -21,6 +21,7 @@
 """
 import argparse
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -32,6 +33,8 @@ import time
 VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 THUMB_DIR = ".thumbs"
+# 以下默认值只在 Deck 上单独运行时使用；手机上由 thumbs.sh 通过 --settings 传入 hub.yaml 中的 library.thumbs
+# （由 z6x-hub -thumbs-config 输出，默认值以 hub 的 library.DefaultConfig 为准）
 WIDTH = 360
 OMNI_THUMBS = os.environ.get("OMNI_THUMBS", os.path.expanduser("~/Games/omni-deck/var/cache/thumbs"))
 PHONE_ROOT = "/storage/emulated/0/omni_library"
@@ -191,7 +194,7 @@ def _make(job, dry):
         shutil.copyfile(cached, tmp)
         os.replace(tmp, dst)
         return "reuse"
-    scale = f"scale='min({WIDTH},iw)':-2"
+    scale = f"scale='min({WIDTH},iw)':-2"  # WIDTH 可能被 --settings 修改
     attempts = ([["-ss", "0.5", "-i", src], ["-i", src]] if tag == "vthumb" else [["-i", src]])
     for inp in attempts:
         cmd = LOW + ["ffmpeg", "-v", "error", "-y"] + inp + ["-frames:v", "1", "-vf", scale, "-c:v", "libwebp", "-quality", "70", "-f", "webp", tmp]
@@ -215,7 +218,13 @@ def main():
     ap.add_argument("--only", default="", help="只处理某个平台或博主，如 抖音 或 抖音/博主名")
     ap.add_argument("--limit", type=int, default=0, help="最多处理多少个作品（测试用）")
     ap.add_argument("--dry-run", action="store_true", help="只统计需要生成多少个，不写文件")
+    ap.add_argument("--settings", default="", help="JSON 形式的参数（jobs、cool、hot、width），覆盖上面的默认值")
     a = ap.parse_args()
+    if a.settings:
+        s = json.loads(a.settings)
+        a.jobs, a.cool, a.hot = s.get("jobs", a.jobs), s.get("cool", a.cool), s.get("hot", a.hot)
+        global WIDTH
+        WIDTH = s.get("width", WIDTH)
 
     jobs = []
     for root in a.roots:
