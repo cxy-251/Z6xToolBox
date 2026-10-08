@@ -15,6 +15,8 @@ log_file: hub.log
 network:
   iface: wlan0
   trusted: []
+  # 127.0.0.1:8090 常开：手机自己的浏览器不连网络也能使用（只有本机能访问，同样需要密码）。设为 false 关闭。
+  # loopback: true
 
 modules:
   # 资源库：与 omni-deck 相同的目录结构，位于机身存储的 omni_library/。

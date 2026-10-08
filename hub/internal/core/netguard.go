@@ -34,7 +34,11 @@ type NetworkConfig struct {
 	// Trusted 是可信网络的指纹（由 z6x-hub -trust 在家里的 Wi-Fi 上生成）。
 	// 为空时，只要网卡有 IPv4 地址就监听。
 	Trusted []string `yaml:"trusted"`
+	// Loopback 为 false 时不在 127.0.0.1 上常开监听（默认开启：设备上的浏览器不连网络也能使用 hub）。
+	Loopback *bool `yaml:"loopback"`
 }
+
+func (c NetworkConfig) loopback() bool { return c.Iface != "" && (c.Loopback == nil || *c.Loopback) }
 
 // NetState 是网络检查的结果。
 type NetState struct {
@@ -147,6 +151,9 @@ type gateSvc struct {
 	// raw 不为空时为普通 TCP 服务（如 SSH）：监听后交给 raw 处理
 	raw func(net.Listener)
 	ln  net.Listener // 当前的监听器（HTTP 与普通 TCP 服务都保存），关闭时直接关闭
+	// lo 是本机回环地址（127.0.0.1）上的监听器：设备自己的应用访问 hub 不需要网络，因此不受网络守卫控制、
+	// 一直开着（只有本机能连，鉴权照常）。按 IP 监听时才需要单独开；监听所有地址（"*"）时已包含回环地址。
+	lo net.Listener
 }
 
 func NewGate(cfg NetworkConfig, token string, log *slog.Logger) *Gate {
@@ -232,6 +239,9 @@ func (g *Gate) check() error {
 	addr, reason := g.want()
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.cfg.loopback() {
+		g.loopbackLocked()
+	}
 	if addr == g.bound && !g.broken {
 		g.reason = reason
 		return nil
@@ -286,6 +296,40 @@ func (g *Gate) close() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.closeLocked()
+	for _, s := range g.svcs {
+		if s.lo != nil {
+			s.lo.Close()
+			s.lo = nil
+		}
+	}
+}
+
+// loopbackLocked 确保每个服务都在 127.0.0.1 上监听；监听器被系统作废后（见 gen 的说明），下一次检查时重新打开。
+func (g *Gate) loopbackLocked() {
+	for _, s := range g.svcs {
+		if s.lo != nil {
+			continue
+		}
+		ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprint(s.port)))
+		if err != nil {
+			g.log.Warn("本机地址监听失败", "service", s.name, "port", s.port, "err", err)
+			continue
+		}
+		s.lo = ln
+		go func(s *gateSvc, ln net.Listener) {
+			if s.raw != nil {
+				s.raw(ln)
+			} else {
+				srv := &http.Server{Handler: s.handler, ReadHeaderTimeout: 10 * time.Second}
+				srv.Serve(ln)
+			}
+			g.mu.Lock()
+			if s.lo == ln { // 不是 close() 主动关闭的：清空，下次检查时重新监听
+				s.lo = nil
+			}
+			g.mu.Unlock()
+		}(s, ln)
+	}
 }
 
 // serviceExited 在某个服务的监听结束时调用；不是 hub 主动关闭的（gen 未变）则标记为需要重新监听。

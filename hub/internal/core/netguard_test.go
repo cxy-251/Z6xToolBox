@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// 测试用 127.0.0.1 模拟局域网地址，因此关闭本机常开监听（否则端口冲突）
+var off = false
+
 func freePort(t *testing.T) int {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -31,7 +34,7 @@ func reachable(port int) bool {
 // TestGateFollowsNetwork：只在可信网络上监听；离开后关闭，回来后恢复。
 func TestGateFollowsNetwork(t *testing.T) {
 	trusted := fingerprint("tok", "aa:bb:cc:dd:ee:ff")
-	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}, Loopback: &off}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	state := NetState{IP: "127.0.0.1", Fingerprint: trusted}
 	g.probe = func() (NetState, error) { return state, nil }
 	port := freePort(t)
@@ -91,7 +94,7 @@ func TestLoginCodeSingleUse(t *testing.T) {
 // TestGateToleratesMissingFingerprint：指纹偶尔取不到且 IP 未变时继续服务，连续 3 次才停止；换了网络立即停止。
 func TestGateToleratesMissingFingerprint(t *testing.T) {
 	trusted := fingerprint("tok", "aa:bb:cc:dd:ee:ff")
-	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}, Loopback: &off}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	state := NetState{IP: "127.0.0.1", Fingerprint: trusted}
 	g.probe = func() (NetState, error) { return state, nil }
 	port := freePort(t)
@@ -120,7 +123,7 @@ func TestGateToleratesMissingFingerprint(t *testing.T) {
 // 安卓会销毁应用的监听套接字（accept 返回 EINVAL），进程仍在运行却不再监听；下一次检查应重新监听。
 func TestGateRebindsAfterListenerDestroyed(t *testing.T) {
 	trusted := fingerprint("tok", "aa:bb:cc:dd:ee:ff")
-	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{trusted}, Loopback: &off}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	g.probe = func() (NetState, error) { return NetState{IP: "127.0.0.1", Fingerprint: trusted}, nil }
 	port := freePort(t)
 	g.Add("main", port, http.NotFoundHandler())
@@ -153,5 +156,31 @@ func TestGateRebindsAfterListenerDestroyed(t *testing.T) {
 	defer g.mu.Unlock()
 	if g.broken {
 		t.Error("主动关闭不应标记为需要重新监听")
+	}
+}
+
+// 没有网络（或不在可信网络）时，127.0.0.1 上仍然可以访问；局域网地址不监听。
+func TestGateLoopbackAlwaysOn(t *testing.T) {
+	g := NewGate(NetworkConfig{Iface: "wlan0", Trusted: []string{"x"}}, "tok", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	g.probe = func() (NetState, error) { return NetState{}, nil } // 没有连接 Wi-Fi
+	port := freePort(t)
+	g.Add("main", port, http.NotFoundHandler())
+	if err := g.check(); err != nil {
+		t.Fatal(err)
+	}
+	if bound, _ := g.Status(); bound != "" || !reachable(port) {
+		t.Fatalf("没有网络时应只在本机地址上服务：bound=%q reachable=%v", bound, reachable(port))
+	}
+	g.mu.Lock()
+	g.svcs[0].lo.Close() // 被系统作废
+	g.mu.Unlock()
+	time.Sleep(50 * time.Millisecond)
+	g.check()
+	if !reachable(port) {
+		t.Fatal("本机监听被作废后应在下一次检查时恢复")
+	}
+	g.close()
+	if reachable(port) {
+		t.Error("关闭后不应再监听")
 	}
 }
