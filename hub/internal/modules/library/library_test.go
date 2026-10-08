@@ -14,8 +14,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 
@@ -450,5 +452,71 @@ func TestNewPlatformDiscovered(t *testing.T) {
 	}
 	if got := m.platformItems("小红书"); len(got) != 1 || got[0].Folder != "某博主" {
 		t.Fatalf("新平台的作品不正确：%+v", got)
+	}
+}
+
+func TestRecommend(t *testing.T) {
+	root := t.TempDir()
+	initLibrary(root, "测试")
+	for c := 0; c < 5; c++ {
+		for i := 0; i < 20; i++ {
+			p := filepath.Join(root, mediaRoot, "shortvideo", "抖音", "博主"+strconv.Itoa(c), strconv.Itoa(i)+".mp4")
+			os.MkdirAll(filepath.Dir(p), 0o755)
+			os.WriteFile(p, []byte("x"), 0o644)
+		}
+	}
+	m := New()
+	m.env = &core.Env{Config: &core.Config{DataDir: t.TempDir()}, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	m.cfg = func() Config {
+		c := DefaultConfig()
+		c.Roots = []string{root}
+		c.Internal = t.TempDir()
+		c.Storage = t.TempDir()
+		return c
+	}()
+	m.likes.path = filepath.Join(m.env.Config.DataDir, "likes.json")
+	m.likes.load()
+	m.pins.path = filepath.Join(m.env.Config.DataDir, "pins.json")
+	m.pins.load()
+	m.history.path = filepath.Join(m.env.Config.DataDir, "history.json")
+	m.history.load()
+	m.likes.set("douyin", "博主0/0.mp4", true) // 博主0 是喜欢过的博主
+	m.history.record("douyin", "博主1/5.mp4", time.Hour)
+
+	a, b := m.recommend("douyin", 7), m.recommend("douyin", 7)
+	if len(a) != 99 { // 100 个作品，看过的 1 个不出现
+		t.Fatalf("应有 99 个作品（跳过看过的）：%d", len(a))
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatal("同一个种子的结果应当相同")
+		}
+		if a[i].Rel == "博主1/5.mp4" {
+			t.Fatal("最近看过的作品不应出现")
+		}
+	}
+	m.recCache.list = nil
+	if c := m.recommend("douyin", 8); c[0] == a[0] && c[1] == a[1] && c[2] == a[2] {
+		t.Error("换一个种子应得到不同的排列")
+	}
+	// 喜欢过的博主（权重 3 倍）在前 20 个中出现得更多：多个种子累计
+	liked, total := 0, 0
+	for seed := int64(1); seed <= 30; seed++ {
+		m.recCache.list = nil
+		for _, it := range m.recommend("douyin", seed)[:20] {
+			total++
+			if it.Folder == "博主0" {
+				liked++
+			}
+		}
+	}
+	if float64(liked)/float64(total) < 0.3 { // 均匀时约 0.2
+		t.Errorf("喜欢过的博主应更常出现：%d/%d", liked, total)
+	}
+	// 同一博主最多连续 2 个
+	for i := 2; i < len(a)-10; i++ {
+		if a[i].Folder == a[i-1].Folder && a[i].Folder == a[i-2].Folder {
+			t.Fatalf("第 %d 个起同一博主连续出现 3 次：%s", i-2, a[i].Folder)
+		}
 	}
 }

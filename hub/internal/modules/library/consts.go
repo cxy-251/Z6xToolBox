@@ -26,4 +26,6 @@ const (
 	// libsCacheTTL / gamesCacheTTL：资源库位置与游戏列表的缓存时间（游戏列表要读每个游戏的目录，较慢）
 	libsCacheTTL  = 10 * time.Second
 	gamesCacheTTL = 30 * time.Second
+	// recommendCacheTTL：推荐结果的缓存时间（同一轮推荐的分页在此期间读同一份排列）
+	recommendCacheTTL = 30 * time.Minute
 )

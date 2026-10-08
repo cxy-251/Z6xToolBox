@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"z6x/hub/internal/core"
 )
@@ -77,6 +78,16 @@ func (m *Module) shortvideoRoutes(r core.Router) {
 		}
 		core.WriteJSON(w, map[string]bool{"pinned": q.Get("pinned") == "1"})
 	})
+	// played：播放器打开一个作品时记录（推荐时跳过最近看过的；记录保存时间为跳过时长的两倍）
+	r.HandleFunc("POST /api/library/shortvideo/played", func(w http.ResponseWriter, req *http.Request) {
+		q := req.URL.Query()
+		keep := time.Duration(max(m.cfg.Recommend.SkipHours, 1) * 2 * float64(time.Hour))
+		if err := m.history.record(q.Get("platform"), q.Get("rel_path"), keep); err != nil {
+			core.WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		core.WriteJSON(w, map[string]bool{"ok": true})
+	})
 	// items：folder 为空表示全部博主；q 按标题与博主筛选；liked=1 只列出喜欢的。
 	r.HandleFunc("GET /api/library/shortvideo/items", func(w http.ResponseWriter, req *http.Request) {
 		q := req.URL.Query()
@@ -86,8 +97,13 @@ func (m *Module) shortvideoRoutes(r core.Router) {
 		if lim <= 0 || lim > maxItemsPerRequest {
 			lim = m.cfg.PageSize
 		}
+		source := m.platformItems(p)
+		if q.Get("recommend") == "1" { // 推荐：加权随机排列，种子由网页给出（再点一次「推荐」即换种子）
+			seed, _ := strconv.ParseInt(q.Get("seed"), 10, 64)
+			source = m.recommend(p, seed)
+		}
 		var list []*svItem
-		for _, it := range m.platformItems(p) {
+		for _, it := range source {
 			if folder != "" && it.Folder != folder {
 				continue
 			}

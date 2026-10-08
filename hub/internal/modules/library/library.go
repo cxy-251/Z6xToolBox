@@ -35,6 +35,8 @@ type Config struct {
 	CoverPx int `yaml:"cover_px"`
 	// PlayerHideSeconds：短视频播放器无操作多久后隐藏控件（秒）。
 	PlayerHideSeconds float64 `yaml:"player_hide_seconds"`
+	// Recommend 是短视频「推荐」（加权随机）的规则参数，见 recommend.go。
+	Recommend RecommendConfig `yaml:"recommend"`
 	// Thumbs 是短视频封面生成（手机上的 thumbs.sh）的参数，由 z6x-hub -thumbs-config 交给脚本。
 	Thumbs ThumbsConfig `yaml:"thumbs"`
 }
@@ -53,7 +55,8 @@ func DefaultConfig() Config {
 	return Config{
 		Internal: "/storage/emulated/0", Storage: "/storage",
 		SlideSeconds: 1, RescanMinutes: 10, PageSize: 48, CoverPx: 300, PlayerHideSeconds: 2.5,
-		Thumbs: ThumbsConfig{Jobs: 3, Cool: 36, Hot: 40, Width: 360, IntervalHours: 6},
+		Recommend: RecommendConfig{LikedCreator: 3, PinnedCreator: 2, RecentDays: 30, RecentBoost: 1.5, SkipHours: 72, MaxRun: 2},
+		Thumbs:    ThumbsConfig{Jobs: 3, Cool: 36, Hot: 40, Width: 360, IntervalHours: 6},
 	}
 }
 
@@ -75,6 +78,12 @@ func (c *Config) normalize() {
 	fixInt(&c.PageSize, d.PageSize, 12, maxItemsPerRequest)
 	fixInt(&c.CoverPx, d.CoverPx, 64, 1024)
 	fix(&c.PlayerHideSeconds, d.PlayerHideSeconds, 0.5, 60)
+	fix(&c.Recommend.LikedCreator, d.Recommend.LikedCreator, 1, 100)
+	fix(&c.Recommend.PinnedCreator, d.Recommend.PinnedCreator, 1, 100)
+	fix(&c.Recommend.RecentDays, d.Recommend.RecentDays, 0, 3650)
+	fix(&c.Recommend.RecentBoost, d.Recommend.RecentBoost, 1, 100)
+	fix(&c.Recommend.SkipHours, d.Recommend.SkipHours, 0, 24*365)
+	fixInt(&c.Recommend.MaxRun, d.Recommend.MaxRun, 0, 50)
 	fixInt(&c.Thumbs.Jobs, d.Thumbs.Jobs, 1, 8)
 	fix(&c.Thumbs.Cool, d.Thumbs.Cool, 20, 60)
 	fix(&c.Thumbs.Hot, d.Thumbs.Hot, c.Thumbs.Cool+1, 70)
@@ -105,9 +114,11 @@ type Module struct {
 	gameAt    time.Time
 	pageCache map[string]pageIndex
 
-	mediaIx mediaIndex // 短视频与音声的扫描结果（media.go）
-	likes   likeStore
-	pins    likeStore // 短视频置顶的博主（平台 → 博主名），保存在服务端，各设备一致
+	mediaIx  mediaIndex // 短视频与音声的扫描结果（media.go）
+	likes    likeStore
+	pins     likeStore      // 短视频置顶的博主（平台 → 博主名），保存在服务端，各设备一致
+	history  history        // 短视频播放记录（推荐时跳过最近看过的）
+	recCache recommendCache // 最近一次推荐的排列
 
 	audioProgress progressStore // 音声续听（与 omni-deck 的 audio_progress.json 同格式）
 	novelProgress progressStore // 小说阅读进度
@@ -135,6 +146,8 @@ func (m *Module) Start(_ context.Context, env *core.Env) error {
 	m.likes.load()
 	m.pins.path = filepath.Join(env.Config.DataDir, "library", "shortvideo_pins.json")
 	m.pins.load()
+	m.history.path = filepath.Join(env.Config.DataDir, "library", "shortvideo_history.json")
+	m.history.load()
 	m.audioProgress.path = filepath.Join(env.Config.DataDir, "library", "audio_progress.json")
 	m.audioProgress.load()
 	m.novelProgress.path = filepath.Join(env.Config.DataDir, "library", "novels_progress.json")
@@ -209,6 +222,17 @@ func (m *Module) Settings() []core.SettingsGroup {
 				Help: "新放进资源库的短视频与音声，最晚多久后出现"},
 			{Key: p + "cover_px", Label: "音乐封面宽度", Unit: "像素", Type: "number", Min: 64, Max: 1024, Step: 1, Default: d.CoverPx,
 				Help: "封面缩小后的宽度；越大越清晰，加载越慢"},
+		}},
+		{Title: "🎲 短视频推荐（加权随机）", Items: []core.Setting{
+			{Key: p + "recommend.liked_creator", Label: "喜欢过的博主", Unit: "倍", Type: "number", Min: 1, Max: 100, Step: 0.5, Default: d.Recommend.LikedCreator,
+				Help: "喜欢过其作品的博主，作品出现的机会是普通作品的几倍"},
+			{Key: p + "recommend.pinned_creator", Label: "置顶的博主", Unit: "倍", Type: "number", Min: 1, Max: 100, Step: 0.5, Default: d.Recommend.PinnedCreator},
+			{Key: p + "recommend.recent_days", Label: "新作品的范围", Unit: "天", Type: "number", Min: 0, Max: 3650, Step: 1, Default: d.Recommend.RecentDays},
+			{Key: p + "recommend.recent_boost", Label: "新作品", Unit: "倍", Type: "number", Min: 1, Max: 100, Step: 0.5, Default: d.Recommend.RecentBoost},
+			{Key: p + "recommend.skip_hours", Label: "不推荐最近看过的", Unit: "小时", Type: "number", Min: 0, Max: 8760, Step: 1, Default: d.Recommend.SkipHours,
+				Help: "这段时间内看过的作品不出现在推荐里；0 表示不跳过"},
+			{Key: p + "recommend.max_run", Label: "同一博主最多连续", Unit: "个", Type: "number", Min: 0, Max: 50, Step: 1, Default: d.Recommend.MaxRun,
+				Help: "0 表示不限制"},
 		}},
 		{Title: "🖼️ 短视频封面生成（手机后台）", StatusURL: "/api/library/thumbs/status", Items: []core.Setting{
 			{Key: p + "thumbs.jobs", Label: "同时生成数", Unit: "个", Type: "number", Min: 1, Max: 8, Step: 1, Default: d.Thumbs.Jobs,

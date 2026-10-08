@@ -165,7 +165,8 @@ function subTab(pane,t,subs,key,make){
 /* ---------- 短视频（与 omni-deck 的短视频画廊相同的用法）：平台在行末下拉菜单中切换；📌 置顶的博主排在第一行 ---------- */
 const PAGE=CFG.page_size;
 function svPane(p,platform,info){
-  const st={platform,folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0,folders:[],moreOpen:false,authorQ:''};
+  // rec：推荐（加权随机，默认）；seed：本轮推荐的随机种子，再点一次「推荐」换新种子
+  const st={platform,rec:true,seed:Date.now(),folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0,folders:[],moreOpen:false,authorQ:''};
   const tools=el('div','tools'),q=el('input');q.type='search';q.placeholder='🔍 搜索标题或博主';
   const likeBtn=el('button','','♡ 只看喜欢'),count=el('span','muted');tools.append(q,likeBtn,count);
   // 封面由手机上的 thumbs.sh 生成，hub 每 10 分钟重新扫描一次；未完成时显示进度
@@ -174,7 +175,7 @@ function svPane(p,platform,info){
   morePanel.style.display='none';const empty=el('div','empty','没有作品');empty.style.display='none';
   p.append(tools,chips,morePanel,grid,empty,sentinel);
   function chip(f){
-    const b=el('button',st.folder===f.name?'on':'');b.append(f.name,el('span','c',f.count));b.title=f.name;b.onclick=()=>pick(f.name);
+    const b=el('button',!st.rec&&st.folder===f.name?'on':'');b.append(f.name,el('span','c',f.count));b.title=f.name;b.onclick=()=>pick(f.name);
     const pin=el('span','pin'+(f.pinned?' on':''),'📌');pin.title=f.pinned?'取消置顶':'置顶到第一行';
     pin.onclick=async e=>{e.stopPropagation();const on=!f.pinned;
       const r=await fetch('/api/library/shortvideo/pin?platform='+enc(platform)+'&folder='+enc(f.name)+'&pinned='+(on?1:0),{method:'POST'});
@@ -182,8 +183,11 @@ function svPane(p,platform,info){
     b.append(pin);return b}
   function renderChips(){
     const pinned=st.folders.filter(f=>f.pinned),rest=st.folders.filter(f=>!f.pinned);
-    chips.replaceChildren();const all=el('button',st.folder?'':'on');all.append('全部',el('span','c',st.folders.reduce((n,f)=>n+f.count,0)));all.onclick=()=>pick('');chips.append(all);
+    chips.replaceChildren();
+    const rec=el('button',st.rec?'on':'','🎲 推荐');rec.title='加权随机：喜欢过、置顶的博主与新作品更容易出现，最近看过的不出现；再点一次换一批';
+    rec.onclick=()=>{if(st.rec)toast('换一批');st.rec=true;st.folder='';st.seed=Date.now();renderChips();reset()};chips.append(rec);
     for(const f of pinned)chips.append(chip(f));
+    const all=el('button',!st.rec&&!st.folder?'on':'');all.append('全部',el('span','c',st.folders.reduce((n,f)=>n+f.count,0)));all.onclick=()=>pick('');chips.append(all);
     const cur=rest.find(f=>f.name===st.folder);if(cur)chips.append(chip(cur)); // 当前选中的博主也显示在第一行
     if(rest.length){const t=el('button','',(st.moreOpen?'收起':'更多博主')+' ('+rest.length+') '+(st.moreOpen?'▴':'▾'));t.onclick=()=>{st.moreOpen=!st.moreOpen;renderChips()};chips.append(t)}
     morePanel.style.display=st.moreOpen?'':'none';
@@ -192,8 +196,8 @@ function svPane(p,platform,info){
       s.oninput=()=>{st.authorQ=s.value.trim();fill()};morePanel.append(s,box);fill()}
   }
   async function loadFolders(){st.folders=await get('/api/library/shortvideo/folders?platform='+enc(platform));st.folders.sort((a,b)=>b.count-a.count);renderChips()}
-  function pick(f){st.folder=f;renderChips();reset()}
-  function query(off){return '/api/library/shortvideo/items?platform='+enc(platform)+'&folder='+enc(st.folder)+'&q='+enc(st.q)+(st.liked?'&liked=1':'')+'&offset='+off+'&limit='+PAGE}
+  function pick(f){st.rec=false;st.folder=f;renderChips();reset()}
+  function query(off){return '/api/library/shortvideo/items?platform='+enc(platform)+(st.rec?'&recommend=1&seed='+st.seed:'')+'&folder='+enc(st.folder)+'&q='+enc(st.q)+(st.liked?'&liked=1':'')+'&offset='+off+'&limit='+PAGE}
   async function more(){
     if(st.loading||(st.items.length&&st.items.length>=st.total))return false;
     st.loading=true;const seq=st.seq;
@@ -229,7 +233,10 @@ const player=(()=>{
   let loop=store.get('z6x-sv-loop','list');v.muted=store.get('z6x-sv-muted',false);
   const ui=()=>{$('ploop').textContent=loops.find(l=>l[0]===loop)[1];$('pmute').textContent=v.muted?'🔇 静音':'🔊 声音'};ui();
   const cur=()=>st&&st.items[i];
+  let playedKey='';
   function render(){const it=cur();if(!it)return;
+    // 记一次播放（推荐时跳过最近看过的）；同一作品翻页不重复记
+    const pk=st.platform+'/'+it.rel_path;if(pk!==playedKey){playedKey=pk;fetch('/api/library/shortvideo/played?platform='+enc(st.platform)+'&rel_path='+enc(it.rel_path),{method:'POST'}).catch(()=>{})}
     $('ptitle').textContent=it.title;$('plike').textContent=it.liked?'❤️':'♡';
     pl.classList.toggle('album',it.kind==='images');
     if(it.kind==='images'){v.pause();v.removeAttribute('src');v.style.display='none';img.style.display='block';img.src=it.images[page];
