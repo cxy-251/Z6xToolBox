@@ -247,7 +247,8 @@ func (m *Module) serveGameFile(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer f.Close()
-	w.Header().Set("Cache-Control", "public, max-age=600")
+	// 游戏素材不会改变，缓存一天；入口页面（上面的 .html）不缓存，以便运行时更新后立即生效
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeContent(w, req, fi.Name(), fi.ModTime(), f)
 }
 

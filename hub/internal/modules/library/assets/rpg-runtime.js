@@ -240,7 +240,7 @@
                         }
                         xhr.open('HEAD', '/save/' + encodeURIComponent(gid2) + '/' + encodeURIComponent(filename) + '?t=' + Date.now(), false);
                     } else {
-                        xhr.open('HEAD', reqPath + '?t=' + Date.now(), false);
+                        xhr.open('HEAD', reqPath, false);
                     }
                     try {
                         xhr.send();
@@ -258,7 +258,7 @@
                         if (reqPath.endsWith(ext)) {
                             var encPath = reqPath.substring(0, reqPath.length - ext.length) + extMap[ext];
                             var xhrEnc = new XMLHttpRequest();
-                            xhrEnc.open('HEAD', encPath + '?t=' + Date.now(), false);
+                            xhrEnc.open('HEAD', encPath, false);
                             try {
                                 xhrEnc.send();
                                 if (xhrEnc.status === 200) return true;
@@ -316,7 +316,7 @@
                         }
                         xhr.open('GET', '/save/' + encodeURIComponent(gid2) + '/' + encodeURIComponent(filename) + '?t=' + Date.now(), false);
                     } else {
-                        xhr.open('GET', reqPath + '?t=' + Date.now(), false);
+                        xhr.open('GET', reqPath, false);
                     }
                     try {
                         xhr.send();
@@ -333,7 +333,7 @@
                         if (reqPath.endsWith(ext)) {
                             var encPath = reqPath.substring(0, reqPath.length - ext.length) + extMap[ext];
                             var xhrEnc = new XMLHttpRequest();
-                            xhrEnc.open('GET', encPath + '?t=' + Date.now(), false);
+                            xhrEnc.open('GET', encPath, false);
                             try {
                                 xhrEnc.send();
                                 if (xhrEnc.status === 200) return xhrEnc.responseText;
@@ -850,20 +850,9 @@
                     }
                 } catch(e) {}
                 
-                // Add global XHR interceptor to bypass aggressive browser caching for local game assets
-                var _orig_xhr_open = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
-                    var args = Array.prototype.slice.call(arguments);
-                    if (typeof url === 'string') {
-                        if (url.indexOf('.rpgmvp') !== -1 || url.indexOf('.png') !== -1 || url.indexOf('.rpgmvo') !== -1 || url.indexOf('.m4a') !== -1 || url.indexOf('.json') !== -1) {
-                            if (url.indexOf('?t=') === -1) {
-                                url += (url.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now();
-                            }
-                        }
-                        args[1] = url;
-                    }
-                    return _orig_xhr_open.apply(this, args);
-                };
+                // （z6x-hub）omni-deck 的运行时在这里给图片与音频请求加 ?t=时间戳 以绕过浏览器缓存。hub 中游戏文件
+                // 经 Wi-Fi 从设备读取，且不会改变：加时间戳会让每次加载都重新下载，并在浏览器磁盘缓存中写入大量
+                // 一次性条目（2026-10-08 在 Deck 上的 Chrome 中，下载约 20MB 而磁盘写入达数百 MB），因此去掉。
 
             }
 
@@ -1003,7 +992,7 @@
                                         if (object.sync) {
                                             try {
                                                 var xhr = new XMLHttpRequest();
-                                                xhr.open('GET', filePath + '?t=' + Date.now(), false);
+                                                xhr.open('GET', filePath, false);
                                                 xhr.overrideMimeType(object.mimeType || 'application/json');
                                                 xhr.send();
                                                 if (xhr.status === 200 || xhr.status === 0) {
@@ -1013,7 +1002,7 @@
                                             return { data: null, status: (DKTools.IO.ERROR_PATH_DOES_NOT_EXIST || 1) };
                                         } else {
                                             var xhr = new XMLHttpRequest();
-                                            xhr.open('GET', filePath + '?t=' + Date.now(), true);
+                                            xhr.open('GET', filePath, true);
                                             xhr.overrideMimeType(object.mimeType || 'application/json');
                                             xhr.onload = function() {
                                                 if (xhr.status === 200 || xhr.status === 0) {
