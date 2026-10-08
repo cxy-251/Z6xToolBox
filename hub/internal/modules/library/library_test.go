@@ -5,6 +5,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -334,5 +336,45 @@ func TestShortvideoItemsAndAlbums(t *testing.T) {
 	}
 	if len(folders) != 2 || by["作者甲"] != [2]int{3, 0} || by["作者乙"] != [2]int{1, 1} {
 		t.Fatalf("博主列表不正确：%+v", folders)
+	}
+}
+
+func TestReadID3Picture(t *testing.T) {
+	img := []byte("\x89PNG\r\n\x1a\nfakeimage")
+	// ID3v2.3：APIC 帧（编码 1 = UTF-16，描述为空：BOM + 两个 0 字节）
+	body := append([]byte{1}, []byte("image/png\x00")...)
+	body = append(body, 3, 0xff, 0xfe, 0, 0)
+	body = append(body, img...)
+	frame := append([]byte("TIT2\x00\x00\x00\x02\x00\x00\x00a"), []byte("APIC")...)
+	frame = append(frame, byte(len(body)>>24), byte(len(body)>>16), byte(len(body)>>8), byte(len(body)), 0, 0)
+	frame = append(frame, body...)
+	n := len(frame)
+	tag := append([]byte{'I', 'D', '3', 3, 0, 0, byte(n >> 21 & 0x7f), byte(n >> 14 & 0x7f), byte(n >> 7 & 0x7f), byte(n & 0x7f)}, frame...)
+	got, mime, err := readID3Picture(bytes.NewReader(append(tag, "mp3data"...)))
+	if err != nil || mime != "image/png" || !bytes.Equal(got, img) {
+		t.Fatalf("读取 APIC 失败：%q %s %v", got, mime, err)
+	}
+	if _, _, err := readID3Picture(bytes.NewReader([]byte("no tag here"))); err == nil {
+		t.Error("没有标签时应返回错误")
+	}
+}
+
+func TestShrinkImage(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 1000, 800))
+	for i := range src.Pix {
+		src.Pix[i] = 200
+	}
+	var buf bytes.Buffer
+	png.Encode(&buf, src)
+	out, err := shrinkImage(buf.Bytes(), 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, format, err := image.Decode(bytes.NewReader(out))
+	if err != nil || format != "jpeg" || img.Bounds().Dx() != 300 || img.Bounds().Dy() != 240 {
+		t.Fatalf("缩放结果不正确：%v %s %v", img.Bounds(), format, err)
+	}
+	if r, _, _, _ := img.At(10, 10).RGBA(); r>>8 < 190 || r>>8 > 210 {
+		t.Errorf("颜色应保持不变：%d", r>>8)
 	}
 }

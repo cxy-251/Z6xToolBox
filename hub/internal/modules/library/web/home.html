@@ -22,17 +22,25 @@ body{overscroll-behavior-y:contain}
 .book{display:block;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:var(--fg);text-decoration:none}
 .book img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#0d1117}
 .book span{display:block;padding:6px 8px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 0 12px;max-height:132px;overflow-y:auto}
-.chips button{font-size:12px;padding:3px 10px;border-radius:14px}
-.chips button .c{color:var(--muted);margin-left:4px}.chips button.on .c{color:#dbe9ff}
-.chips button.pin{border-color:#bb8009}
-.svgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.clip{position:relative;aspect-ratio:9/14;border-radius:12px;overflow:hidden;cursor:pointer;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:flex-end;padding:10px;color:#fff;transition:transform .15s}
-.clip:hover{transform:translateY(-2px)}
-.clip .k{position:absolute;top:8px;left:8px;font-size:11px;background:rgba(0,0,0,.45);padding:2px 7px;border-radius:10px}
-.clip .h{position:absolute;top:8px;right:8px;font-size:14px}
-.clip .t{font-size:13px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,.6)}
-.clip .f{font-size:11px;opacity:.8;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plat{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chips button{font-size:12px;padding:4px 6px 4px 10px;border-radius:14px;display:inline-flex;align-items:center;gap:4px}
+.chips button .c{color:var(--muted)}.chips button.on .c{color:#dbe9ff}
+.chips .pin{opacity:.35;font-size:11px;padding:0 2px;filter:grayscale(1)}.chips .pin.on{opacity:1;filter:none}
+.chips button:hover .pin{opacity:.8}
+.more{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:12px}
+.more input{width:100%;max-width:280px;margin-bottom:8px}
+.more .chips{max-height:220px;overflow-y:auto;margin:0}
+.svgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.clip{cursor:pointer;min-width:0}
+.clip .cv{position:relative;aspect-ratio:9/16;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:12px;transition:transform .15s}
+.clip:hover .cv{transform:translateY(-2px)}
+.clip .cv img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.clip .cv .ph{font-size:13px;line-height:1.45;color:rgba(255,255,255,.9);text-align:center;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.clip .k{position:absolute;left:6px;bottom:6px;font-size:11px;background:rgba(0,0,0,.6);color:#fff;padding:1px 7px;border-radius:8px;z-index:1}
+.clip .h{position:absolute;top:6px;right:8px;font-size:14px;z-index:1}
+.clip .t{font-size:13px;line-height:1.4;margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.clip .f{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .empty{padding:50px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
 #sentinel{height:40px}
 #pl{position:fixed;inset:0;z-index:20;background:#000;display:none;touch-action:none}
@@ -85,7 +93,7 @@ async function boot(){
   const n=t=>gs.filter(g=>g.type===t).length;
   if(n('rpg'))addTab('rpg','🗡️ RPG',n('rpg'),p=>gamePane(p,'rpg'));
   if(n('slg'))addTab('slg','♟️ SLG',n('slg'),p=>gamePane(p,'slg'));
-  for(const p of pf)if(p.count)addTab('sv-'+p.id,{douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]+p.title,p.count,pane=>svPane(pane,p.id,p.title));
+  const pfs=pf.filter(p=>p.count);if(pfs.length)addTab('sv','📱 短视频',pfs.reduce((n,p)=>n+p.count,0),pane=>svTab(pane,pfs));
   addTab('matrix','📺 多联放映',0,p=>frame(p,'/ui/library/matrix/'));
   addTab('audio','🎧 音声',0,p=>frame(p,'/ui/library/audio/'));
   if(mg.length)addTab('manga','🖼️ 漫画',mg.length,p=>mangaPane(p,mg));
@@ -131,26 +139,44 @@ function mangaPane(p,list){
   q.oninput=render;render();
 }
 
-/* ---------- 短视频（与 omni-deck 的短视频画廊相同的用法） ---------- */
+/* ---------- 短视频（与 omni-deck 的短视频画廊相同的用法）：一个标签内切换平台；📌 置顶的博主排在第一行 ---------- */
 const PAGE=48;
-function svPane(p,platform,title){
-  const st={platform,folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0};
+function svTab(pane,pfs){
+  const plat=el('div','plat'),body=el('div');pane.append(plat,body);
+  const panes={};
+  const pick=id=>{store.set('z6x-sv-platform',id);plat.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.id===id));
+    for(const k in panes)panes[k].style.display=k===id?'':'none';
+    if(!panes[id]){panes[id]=el('div');body.append(panes[id]);svPane(panes[id],id)}};
+  for(const p of pfs){const b=el('button','',{douyin:'🎬 ',kuaishou:'📱 ',tiktok:'🎵 '}[p.id]+p.title+' ');b.dataset.id=p.id;b.append(el('span','muted',p.count));b.onclick=()=>pick(p.id);plat.append(b)}
+  const last=store.get('z6x-sv-platform','');pick(pfs.some(p=>p.id===last)?last:pfs[0].id);
+}
+function svPane(p,platform){
+  const st={platform,folder:'',q:'',liked:false,items:[],total:0,loading:false,seq:0,folders:[],moreOpen:false,authorQ:''};
   const tools=el('div','tools'),q=el('input');q.type='search';q.placeholder='🔍 搜索标题或博主';
   const likeBtn=el('button','','♡ 只看喜欢'),count=el('span','muted');tools.append(q,likeBtn,count);
-  const chips=el('div','chips'),grid=el('div','svgrid'),sentinel=el('div');sentinel.style.height='40px';
-  const empty=el('div','empty','没有作品');empty.style.display='none';
-  p.append(tools,chips,grid,empty,sentinel);
-  const pinKey='z6x-sv-pins-'+platform;
-  async function loadFolders(){
-    const fs=await get('/api/library/shortvideo/folders?platform='+enc(platform));const pins=store.get(pinKey,[]);
-    fs.sort((a,b)=>(pins.includes(b.name)-pins.includes(a.name))||b.count-a.count);
-    chips.innerHTML='';const all=el('button',st.folder?'':'on','全部');all.dataset.name='';all.onclick=()=>pick('');chips.append(all);
-    for(const f of fs){const b=el('button',(st.folder===f.name?'on ':'')+(pins.includes(f.name)?'pin':''));b.dataset.name=f.name;b.append(f.name);b.append(el('span','c',f.count));
-      b.title='点击筛选，长按或右键置顶';b.onclick=()=>pick(f.name);
-      const pin=e=>{e.preventDefault();const ps=store.get(pinKey,[]),i=ps.indexOf(f.name);i<0?ps.unshift(f.name):ps.splice(i,1);store.set(pinKey,ps);toast(i<0?'已置顶 '+f.name:'已取消置顶');loadFolders()};
-      b.oncontextmenu=pin;let t;b.ontouchstart=e=>{t=setTimeout(()=>pin(e),600)};b.ontouchend=()=>clearTimeout(t);chips.append(b)}
+  const chips=el('div','chips'),morePanel=el('div','more'),grid=el('div','svgrid'),sentinel=el('div');sentinel.style.height='40px';
+  morePanel.style.display='none';const empty=el('div','empty','没有作品');empty.style.display='none';
+  p.append(tools,chips,morePanel,grid,empty,sentinel);
+  function chip(f){
+    const b=el('button',st.folder===f.name?'on':'');b.append(f.name,el('span','c',f.count));b.title=f.name;b.onclick=()=>pick(f.name);
+    const pin=el('span','pin'+(f.pinned?' on':''),'📌');pin.title=f.pinned?'取消置顶':'置顶到第一行';
+    pin.onclick=async e=>{e.stopPropagation();const on=!f.pinned;
+      const r=await fetch('/api/library/shortvideo/pin?platform='+enc(platform)+'&folder='+enc(f.name)+'&pinned='+(on?1:0),{method:'POST'});
+      if(!r.ok)return toast('置顶没有保存');f.pinned=on;renderChips();toast(on?'已置顶 '+f.name:'已取消置顶')};
+    b.append(pin);return b}
+  function renderChips(){
+    const pinned=st.folders.filter(f=>f.pinned),rest=st.folders.filter(f=>!f.pinned);
+    chips.replaceChildren();const all=el('button',st.folder?'':'on');all.append('全部',el('span','c',st.folders.reduce((n,f)=>n+f.count,0)));all.onclick=()=>pick('');chips.append(all);
+    for(const f of pinned)chips.append(chip(f));
+    const cur=rest.find(f=>f.name===st.folder);if(cur)chips.append(chip(cur)); // 当前选中的博主也显示在第一行
+    if(rest.length){const t=el('button','',(st.moreOpen?'收起':'更多博主')+' ('+rest.length+') '+(st.moreOpen?'▴':'▾'));t.onclick=()=>{st.moreOpen=!st.moreOpen;renderChips()};chips.append(t)}
+    morePanel.style.display=st.moreOpen?'':'none';
+    if(st.moreOpen){morePanel.replaceChildren();const s=el('input');s.type='search';s.placeholder='搜索博主';s.value=st.authorQ;
+      const box=el('div','chips');const fill=()=>{box.replaceChildren();const k=st.authorQ.toLowerCase();for(const f of rest)if(!k||f.name.toLowerCase().includes(k))box.append(chip(f))};
+      s.oninput=()=>{st.authorQ=s.value.trim();fill()};morePanel.append(s,box);fill()}
   }
-  function pick(f){st.folder=f;chips.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.name===f));reset()}
+  async function loadFolders(){st.folders=await get('/api/library/shortvideo/folders?platform='+enc(platform));st.folders.sort((a,b)=>b.count-a.count);renderChips()}
+  function pick(f){st.folder=f;renderChips();reset()}
   function query(off){return '/api/library/shortvideo/items?platform='+enc(platform)+'&folder='+enc(st.folder)+'&q='+enc(st.q)+(st.liked?'&liked=1':'')+'&offset='+off+'&limit='+PAGE}
   async function more(){
     if(st.loading||(st.items.length&&st.items.length>=st.total))return false;
@@ -160,16 +186,18 @@ function svPane(p,platform,title){
       count.textContent='共 '+st.total+' 条';empty.style.display=st.total?'none':'block';return r.items.length>0}
     finally{if(seq===st.seq)st.loading=false}
   }
-  function reset(){st.seq++;st.loading=false;st.items=[];st.total=0;grid.innerHTML='';more()}
+  function reset(){st.seq++;st.loading=false;st.items=[];st.total=0;grid.replaceChildren();more()}
   function card(it,i){
-    const c=el('div','clip'),h=hue(it.folder);c.style.background='linear-gradient(160deg,hsl('+h+',45%,30%),hsl('+(h+40)%360+',50%,14%))';
-    c.append(el('span','k',it.kind==='images'?'🖼 '+it.images.length+' 张':'▶ 视频'));if(it.liked)c.append(el('span','h','❤️'));
-    c.append(el('div','t',it.title),el('div','f',it.folder+(it.date?' · '+fmtDate(it.date):'')));
+    const c=el('div','clip'),cv=el('div','cv'),h=hue(it.folder);cv.style.background='linear-gradient(160deg,hsl('+h+',45%,30%),hsl('+(h+40)%360+',50%,14%))';
+    cv.append(el('div','ph',it.title));
+    if(it.thumb){const im=el('img');im.loading='lazy';im.alt='';im.src=it.thumb;im.onerror=()=>im.remove();cv.append(im)}
+    cv.append(el('span','k',it.kind==='images'?'🖼 '+it.images.length:'▶'));if(it.liked)cv.append(el('span','h','❤️'));
+    c.append(cv,el('div','t',it.title),el('div','f',it.folder+(it.date?' · '+fmtDate(it.date):'')));
     c.onclick=()=>player.open(st,i,more);return c}
   let qt;q.oninput=()=>{clearTimeout(qt);qt=setTimeout(()=>{st.q=q.value.trim();reset()},300)};
   likeBtn.onclick=()=>{st.liked=!st.liked;likeBtn.classList.toggle('on',st.liked);likeBtn.textContent=st.liked?'❤️ 只看喜欢':'♡ 只看喜欢';reset()};
   st.refreshCard=i=>{const old=grid.children[i];if(old)old.replaceWith(card(st.items[i],i))};
-  new IntersectionObserver(es=>{if(es[0].isIntersecting)more()},{rootMargin:'600px'}).observe(sentinel);
+  new IntersectionObserver(es=>{if(es[0].isIntersecting&&p.offsetParent)more()},{rootMargin:'600px'}).observe(sentinel);
   loadFolders();reset();
 }
 

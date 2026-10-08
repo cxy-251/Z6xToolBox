@@ -42,6 +42,7 @@ type Module struct {
 
 	mediaIx mediaIndex // 短视频与音声的扫描结果（media.go）
 	likes   likeStore
+	pins    likeStore // 短视频置顶的博主（平台 → 博主名），保存在服务端，各设备一致
 
 	audioProgress progressStore // 音声续听（与 omni-deck 的 audio_progress.json 同格式）
 	novelProgress progressStore // 小说阅读进度
@@ -66,6 +67,8 @@ func (m *Module) Start(_ context.Context, env *core.Env) error {
 	m.thumbDir = filepath.Join(env.Config.DataDir, "library", "thumbs")
 	m.likes.path = filepath.Join(env.Config.DataDir, "library", "shortvideo_likes.json")
 	m.likes.load()
+	m.pins.path = filepath.Join(env.Config.DataDir, "library", "shortvideo_pins.json")
+	m.pins.load()
 	m.audioProgress.path = filepath.Join(env.Config.DataDir, "library", "audio_progress.json")
 	m.audioProgress.load()
 	m.novelProgress.path = filepath.Join(env.Config.DataDir, "library", "novels_progress.json")
@@ -84,6 +87,7 @@ func (m *Module) Routes(r core.Router) {
 	m.videoRoutes(r)
 	m.mediaRoutes(r)
 	m.shortvideoRoutes(r)
+	m.coverRoutes(r)
 	m.audioRoutes(r)
 	m.novelRoutes(r)
 	m.importRoutes(r)

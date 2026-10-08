@@ -33,6 +33,9 @@ var platforms = []platform{
 	{"tiktok", "TikTok", "TikTok"},
 }
 
+// thumbDir 是短视频封面目录（在 shortvideo/ 下，与平台目录并列；以点开头，omni-deck 与媒体扫描都会跳过）。
+const thumbDir = ".z6x-thumbs"
+
 var videoExts = map[string]bool{".mp4": true, ".webm": true, ".mov": true, ".m4v": true, ".mkv": true}
 
 // 与 omni-deck 相同的音频格式。WMA 会列出，但浏览器普遍不能播放。
@@ -45,6 +48,7 @@ type svItem struct {
 	Folder   string   // 作者（第一级子目录），直接放在平台目录下的为「未分类」
 	URL      string   // 播放地址
 	Images   []string // 图集作品（博主目录下装着图片的子目录）的图片地址；视频为空
+	Thumb    string   // 预先生成的封面（shortvideo/.z6x-thumbs/<平台>/<相对路径>.webp），没有为空
 	date     int      // 文件名开头的日期（YYYYMMDD），没有为 0
 	mtime    int64
 }
@@ -73,6 +77,10 @@ type mediaIndex struct {
 	tracks   []track
 	at       time.Time
 	scanning bool
+	// ready 在第一次扫描完成时关闭。扫描在进行中（例如启动时的扫描，手机上需要 40 秒到 2 分钟）时，
+	// 新请求等它完成，而不是拿到空列表、页面显示「没有内容」
+	ready     chan struct{}
+	readyOnce sync.Once
 }
 
 const refreshAfter = 10 * time.Minute
@@ -82,6 +90,18 @@ var datePrefix = regexp.MustCompile(`^(\d{4})-?(\d{2})-?(\d{2})`)
 func (m *Module) media() (map[string][]*svItem, []track) {
 	ix := &m.mediaIx
 	ix.mu.Lock()
+	if ix.ready == nil {
+		ix.ready = make(chan struct{})
+	}
+	if ix.videos == nil && ix.scanning {
+		ready := ix.ready
+		ix.mu.Unlock()
+		select {
+		case <-ready:
+		case <-time.After(3 * time.Minute):
+		}
+		ix.mu.Lock()
+	}
 	stale := time.Since(ix.at) > refreshAfter
 	first := ix.videos == nil
 	if (stale || first) && !ix.scanning {
@@ -107,6 +127,16 @@ func (m *Module) scanMedia() {
 	for _, lib := range m.libs() {
 		for _, p := range platforms {
 			base := filepath.Join(lib.Path, mediaRoot, "shortvideo", p.Dir)
+			// 封面由 Deck 生成后同步过来（scripts/shortvideo_thumbs.sh），hub 不生成；这里只记下哪些作品有封面
+			thumbBase := filepath.Join(lib.Path, mediaRoot, "shortvideo", thumbDir, p.Dir)
+			thumbs := map[string]string{}
+			filepath.WalkDir(thumbBase, func(fp string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() && strings.HasSuffix(fp, ".webp") {
+					rel, _ := filepath.Rel(thumbBase, fp)
+					thumbs[strings.TrimSuffix(filepath.ToSlash(rel), ".webp")] = libURL(lib.ID, filepath.Join(mediaRoot, "shortvideo", thumbDir, p.Dir, rel))
+				}
+				return nil
+			})
 			filepath.WalkDir(base, func(fp string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return nil
@@ -138,6 +168,7 @@ func (m *Module) scanMedia() {
 						if info, err := d.Info(); err == nil {
 							al.mtime = info.ModTime().Unix()
 						}
+						al.Thumb = thumbs[dir]
 						albumAt[key] = al
 						albums[p.ID] = append(albums[p.ID], al)
 					}
@@ -159,6 +190,7 @@ func (m *Module) scanMedia() {
 				if info, err := d.Info(); err == nil {
 					it.mtime = info.ModTime().Unix()
 				}
+				it.Thumb = thumbs[rel]
 				videos[p.ID] = append(videos[p.ID], it)
 				return nil
 			})
@@ -252,7 +284,12 @@ func (m *Module) scanMedia() {
 	ix := &m.mediaIx
 	ix.mu.Lock()
 	ix.videos, ix.albums, ix.tracks, ix.at, ix.scanning = videos, albums, tracks, time.Now(), false
+	if ix.ready == nil {
+		ix.ready = make(chan struct{})
+	}
+	ready := ix.ready
 	ix.mu.Unlock()
+	ix.readyOnce.Do(func() { close(ready) })
 	n := 0
 	for _, v := range videos {
 		n += len(v)

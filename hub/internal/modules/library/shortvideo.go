@@ -51,10 +51,23 @@ func (m *Module) shortvideoRoutes(r core.Router) {
 		}
 		out := make([]map[string]any, 0, len(count))
 		for name, n := range count {
-			out = append(out, map[string]any{"name": name, "count": n, "liked": liked[name]})
+			out = append(out, map[string]any{"name": name, "count": n, "liked": liked[name], "pinned": m.pins.has(p, name)})
 		}
 		sort.Slice(out, func(i, j int) bool { return naturalLess(out[i]["name"].(string), out[j]["name"].(string)) })
 		core.WriteJSON(w, out)
+	})
+	r.HandleFunc("POST /api/library/shortvideo/pin", func(w http.ResponseWriter, req *http.Request) {
+		q := req.URL.Query()
+		p, folder := q.Get("platform"), q.Get("folder")
+		if p == "" || folder == "" {
+			core.WriteError(w, http.StatusBadRequest, "缺少 platform 或 folder")
+			return
+		}
+		if err := m.pins.set(p, folder, q.Get("pinned") == "1"); err != nil {
+			core.WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		core.WriteJSON(w, map[string]bool{"pinned": q.Get("pinned") == "1"})
 	})
 	// items：folder 为空表示全部博主；q 按标题与博主筛选；liked=1 只列出喜欢的。
 	r.HandleFunc("GET /api/library/shortvideo/items", func(w http.ResponseWriter, req *http.Request) {
@@ -87,7 +100,7 @@ func (m *Module) shortvideoRoutes(r core.Router) {
 				kind, url = "images", it.Images[0]
 			}
 			out = append(out, map[string]any{"rel_path": it.Rel, "title": it.title(), "folder": it.Folder, "kind": kind,
-				"url": url, "images": it.Images, "liked": m.likes.has(p, it.Rel), "date": it.date})
+				"url": url, "images": it.Images, "thumb": it.Thumb, "liked": m.likes.has(p, it.Rel), "date": it.date})
 		}
 		core.WriteJSON(w, map[string]any{"total": len(list), "offset": off, "items": out})
 	})
