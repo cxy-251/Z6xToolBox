@@ -25,6 +25,8 @@ modules:
     # 资源库以外的音乐目录（歌手/专辑/歌曲），在音声页作为「音乐」来源
     music:
       - /storage/emulated/0/000OFFLINE_document/music
+    # 短视频播放器中图集自动翻页的间隔（秒），最后一张之后切换到下一个作品
+    slide_seconds: 1
 
   # 文件共享：用于向资源库批量拷贝内容（WebDAV 在 8091 端口）。
   files:

@@ -25,6 +25,8 @@ type Config struct {
 	// Music 是资源库以外的音乐目录（如手机上自行整理的歌曲），在音声页作为「音乐」来源，
 	// 按「歌手/专辑/歌曲」的目录结构分组（上一级目录为专辑，再上一级为歌手）。
 	Music []string `yaml:"music"`
+	// SlideSeconds 是短视频播放器中图集自动翻页的间隔（秒），默认 1；最后一张之后与视频播完一样切换作品。
+	SlideSeconds float64 `yaml:"slide_seconds"`
 }
 
 type Module struct {

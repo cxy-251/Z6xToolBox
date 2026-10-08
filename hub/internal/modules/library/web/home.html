@@ -214,6 +214,11 @@ function svPane(p,platform,info){
 /* ---------- 播放器：视频与图集共用；↑↓ 切换作品，←→ 图集翻页，空格暂停，L 喜欢，M 静音，Esc 关闭 ---------- */
 const player=(()=>{
   const pl=$('pl'),v=$('pv'),img=$('pi');let st=null,i=0,page=0,moreFn=null;
+  // 图集自动翻页：间隔来自配置 library.slide_seconds（默认 1 秒）；最后一张之后与视频播完一样处理
+  const SLIDE={{slide_ms}};let slideT=0,slidePaused=false;
+  function ended(){if(loop==='one'){if(cur().kind==='images'){page=0;render()}else{v.currentTime=0;v.play()}}else go(1)}
+  function schedule(){clearTimeout(slideT);const it=cur();if(!it||it.kind!=='images'||slidePaused)return;
+    slideT=setTimeout(()=>{if(!st)return;if(page+1<it.images.length){page++;render()}else ended()},SLIDE)}
   const loops=[['list','🔁 顺序'],['one','🔂 单个'],['shuffle','🔀 随机']];
   let loop=store.get('z6x-sv-loop','list');v.muted=store.get('z6x-sv-muted',false);
   const ui=()=>{$('ploop').textContent=loops.find(l=>l[0]===loop)[1];$('pmute').textContent=v.muted?'🔇 静音':'🔊 声音'};ui();
@@ -225,10 +230,11 @@ const player=(()=>{
       // 预取下一张，翻页时不用等
       if(page+1<it.images.length)(new Image()).src=it.images[page+1];
       $('pgn').textContent=(page+1)+' / '+it.images.length;
-      $('pmeta').textContent=it.folder+' · '+(i+1)+'/'+st.total;$('pplay').style.display=$('pseek').style.display=$('ptime').style.display='none'}
-    else{img.style.display='none';v.style.display='block';$('pplay').style.display=$('pseek').style.display=$('ptime').style.display='';
+      $('pmeta').textContent=it.folder+' · '+(i+1)+'/'+st.total;$('pseek').style.display=$('ptime').style.display='none';
+      $('pplay').style.display='';$('pplay').textContent=slidePaused?'▶':'⏸';schedule()}
+    else{clearTimeout(slideT);img.style.display='none';v.style.display='block';$('pplay').style.display=$('pseek').style.display=$('ptime').style.display='';
       v.src=it.url;v.play().catch(()=>{});$('pmeta').textContent=it.folder+' · '+(i+1)+'/'+st.total}
-    $('pplay').textContent='⏸'}
+    if(it.kind!=='images')$('pplay').textContent='⏸'}
   async function go(d){if(!st)return;let n;
     // 随机只在已加载的作品中挑选，避免为了取到远处的序号连续加载大量分页
     if(loop==='shuffle'&&d>0)n=Math.floor(Math.random()*st.items.length);else n=i+d;
@@ -237,15 +243,17 @@ const player=(()=>{
     if(n>=st.items.length)return toast('已经是最后一个');
     i=n;page=0;render()}
   function open(s,idx,more){st=s;i=idx;page=0;moreFn=more;pl.classList.add('on');document.body.style.overflow='hidden';render();idle()}
-  function close(){v.pause();v.removeAttribute('src');v.load();pl.classList.remove('on');document.body.style.overflow='';st=null}
+  function close(){clearTimeout(slideT);v.pause();v.removeAttribute('src');v.load();pl.classList.remove('on');document.body.style.overflow='';st=null}
   async function like(){const it=cur();if(!it)return;const on=!it.liked;
     const r=await fetch('/api/library/shortvideo/like?platform='+enc(st.platform)+'&rel_path='+enc(it.rel_path)+'&liked='+(on?1:0),{method:'POST'});
     if(!r.ok)return toast('操作失败');it.liked=on;$('plike').textContent=on?'❤️':'♡';st.refreshCard(i);toast(on?'已喜欢':'已取消喜欢')}
   function flip(d){const it=cur();if(!it||it.kind!=='images')return go(d);const n=page+d;if(n<0||n>=it.images.length)return go(d);page=n;render()}
-  v.onended=()=>{if(loop==='one'){v.currentTime=0;v.play()}else go(1)};
+  v.onended=ended;
   v.ontimeupdate=()=>{if(v.duration){$('pseek').value=v.currentTime/v.duration*1000;$('ptime').textContent=fmtTime(v.currentTime)+' / '+fmtTime(v.duration)}};
   $('pseek').oninput=e=>{if(v.duration)v.currentTime=e.target.value/1000*v.duration};
-  $('pplay').onclick=()=>{v.paused?v.play():v.pause();$('pplay').textContent=v.paused?'▶':'⏸'};
+  $('pplay').onclick=()=>{const it=cur();
+    if(it&&it.kind==='images'){slidePaused=!slidePaused;$('pplay').textContent=slidePaused?'▶':'⏸';slidePaused?clearTimeout(slideT):schedule();return}
+    v.paused?v.play():v.pause();$('pplay').textContent=v.paused?'▶':'⏸'};
   $('pclose').onclick=close;$('pprev').onclick=()=>go(-1);$('pnext').onclick=()=>go(1);$('plike').onclick=like;
   $('ploop').onclick=()=>{loop=loops[(loops.findIndex(l=>l[0]===loop)+1)%loops.length][0];store.set('z6x-sv-loop',loop);ui();toast($('ploop').textContent)};
   $('pmute').onclick=()=>{v.muted=!v.muted;store.set('z6x-sv-muted',v.muted);ui()};
