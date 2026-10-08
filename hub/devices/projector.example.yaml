@@ -57,7 +57,7 @@ modules:
   # 局域网设备扫描（SSDP）。
   # 资源库：网页游戏、漫画、短视频（与 omni-deck 相同的目录结构，自动发现机身存储和 U 盘上的资源库）。
   library:
-    enable: false   # 投影仪专门放电影，资源库放在手机上（见 phone.example.yaml）
+    enable: true   # 首页为资源页；投影仪上没有资源时只显示工具、存储、设置，插上带资源库的 U 盘后内容自动出现
 
   # 发送通知到电视的通知界面（不弹出提醒）。
   notify:

@@ -58,6 +58,22 @@ modules:
   speed:
     enable: true
 
+
+  # 发送文字和链接：设备之间互传文字（保存在内存中）。「输入到当前输入框」需要 shell 身份，手机上不可用。
+  paste:
+    enable: true
+
+  # 网络唤醒：在下面添加设备（MAC 必填，IP 用于显示在线状态）。
+  wol:
+    enable: true
+    devices: {}
+
+  # 局域网扫描：用 SSDP 发现路由器、电视、音箱等 UPnP 设备。
+  lanscan:
+    enable: true
+    timeout_sec: 4
+  # 遥控、任务管理、通知需要 shell 身份，遥控器按键为投影仪专用，SSH 由 Termux 提供，因此手机上不开启。
+
   # 后台任务：设备上的后台脚本，可在「工具 → 后台任务」中启动、停止，并设置是否随 hub 启动。
   # 开机时只需启动 hub，由 hub 启动 autostart 的任务（网页上修改的开关保存在 data/jobs_autostart.json）。
   jobs:

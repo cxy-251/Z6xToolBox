@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"z6x/hub/internal/android"
 )
 
 // NetworkConfig 限定 hub 在哪个网络上对外提供服务。
@@ -117,7 +119,7 @@ func ProbeNetwork(iface, token string) (NetState, error) {
 func run(name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, name, args...).Output()
+	out, err := exec.CommandContext(ctx, android.Resolve(name), args...).Output() // 完整路径，见 android.Resolve
 	if err != nil {
 		return "", fmt.Errorf("%s %s：%w", name, strings.Join(args, " "), err)
 	}

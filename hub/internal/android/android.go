@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -26,7 +28,7 @@ func (e Exec) Run(ctx context.Context, name string, args ...string) (string, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, t)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, Resolve(name), args...)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
@@ -38,6 +40,31 @@ func (e Exec) Run(ctx context.Context, name string, args ...string) (string, err
 		return s, fmt.Errorf("%s 执行失败：%v：%s", name, err, s)
 	}
 	return s, nil
+}
+
+// binDirs 是查找系统命令的目录，依次为：安卓系统命令、Termux 的命令（手机上 hub 在 Termux 中运行）。
+var binDirs = []string{"/system/bin", "/system/xbin", "/vendor/bin", "/data/data/com.termux/files/usr/bin"}
+
+// Resolve 把命令名换成完整路径（用 stat 逐个目录查找）。不能让 Go 的 exec.LookPath 去找：它会调用
+// faccessat2，在手机 Termux（普通应用）的 seccomp 限制下触发 SIGSYS，整个 hub 被系统结束（2026-10-08 实测）。
+// 找不到时原样返回（交给 exec 报错）；已含路径的命令不变。
+func Resolve(name string) string {
+	if strings.ContainsRune(name, '/') {
+		return name
+	}
+	for _, d := range binDirs {
+		p := filepath.Join(d, name)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
+		p := filepath.Join(d, name)
+		if st, err := os.Stat(p); err == nil && !st.IsDir() && d != "" {
+			return p
+		}
+	}
+	return name
 }
 
 // Keys 是常用按键名到安卓键值（KeyEvent）的对照。
