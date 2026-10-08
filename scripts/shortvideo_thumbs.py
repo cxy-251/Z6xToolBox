@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""在 Deck 上为资源库中的短视频生成封面，放进资源库本身，随作品一起移动。
+"""为资源库中的短视频生成封面，放进资源库本身，随作品一起移动。在手机的 Termux 中运行（也可在 Deck 上运行）。
 
 用法：
   ./scripts/shortvideo_thumbs.py [资源库根目录…] [--jobs 3] [--only 抖音/博主名] [--limit N] [--dry-run]
-  不指定根目录时处理 ~/Games/omni_library 与 SD 卡上的 omni_library。
+  不指定根目录时：手机上处理 /storage/emulated/0/omni_library，Deck 上处理 ~/Games/omni_library 与 SD 卡上的 omni_library。
+
+手机上按温度自动调节，避免发烫（Termux 作为普通应用读不到屏幕亮灭与电池状态，只能读温度传感器；
+使用手机时温度上升，脚本随之减速）：机身温度（quiet_therm 与 battery 取较高者）低于 --cool 时
+同时运行 --jobs 个 ffmpeg，介于两者之间时 1 个，达到 --hot 时暂停，降到 --cool + 1 以下再继续。
 
 封面位置（与 hub 的约定，见 hub/internal/modules/library/media.go 的 thumbDir）：
   视频 <博主>/abc.mp4      → <博主>/.thumbs/abc.mp4.webp
@@ -22,15 +26,84 @@ import re
 import shutil
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
 
 VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 THUMB_DIR = ".thumbs"
 WIDTH = 360
 OMNI_THUMBS = os.environ.get("OMNI_THUMBS", os.path.expanduser("~/Games/omni-deck/var/cache/thumbs"))
-DEFAULT_ROOTS = [os.path.expanduser("~/Games/omni_library"), "/run/media/deck/FUCKDECK/omni_library"]
-LOW = ["nice", "-n", "19", "ionice", "-c", "3"]
+PHONE_ROOT = "/storage/emulated/0/omni_library"
+DEFAULT_ROOTS = ([PHONE_ROOT] if os.path.isdir(PHONE_ROOT) else
+                 [os.path.expanduser("~/Games/omni_library"), "/run/media/deck/FUCKDECK/omni_library"])
+LOW = ["nice", "-n", "19"] + (["ionice", "-c", "3"] if shutil.which("ionice") else [])
+
+
+def thermal_zones(names=("quiet_therm", "battery")):
+    """找到机身与电池温度传感器（手机上的普通应用可读）；Deck 上没有，返回空列表。"""
+    out = []
+    base = "/sys/class/thermal"
+    try:
+        for z in os.listdir(base):
+            try:
+                with open(os.path.join(base, z, "type")) as f:
+                    if f.read().strip() in names:
+                        out.append(os.path.join(base, z, "temp"))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return out
+
+
+def read_temp(zones):
+    vals = []
+    for z in zones:
+        try:
+            with open(z) as f:
+                vals.append(int(f.read().strip()) / 1000)
+        except (OSError, ValueError):
+            pass
+    return max(vals) if vals else None
+
+
+class Throttle:
+    """按温度调节允许同时运行的任务数：低于 cool 为 jobs，cool～hot 为 1，达到 hot 暂停直到低于 cool+1。"""
+
+    def __init__(self, jobs, cool, hot):
+        self.jobs, self.cool, self.hot = jobs, cool, hot
+        self.zones = thermal_zones()
+        self.allowed, self.running, self.paused = jobs, 0, False
+        self.cv = threading.Condition()
+        self.temp = None
+        if self.zones:
+            threading.Thread(target=self.watch, daemon=True).start()
+
+    def watch(self):
+        while True:
+            t = read_temp(self.zones)
+            with self.cv:
+                self.temp = t
+                if t is not None:
+                    if t >= self.hot:
+                        self.paused = True
+                    elif self.paused and t < self.cool + 1:
+                        self.paused = False
+                    self.allowed = 0 if self.paused else (self.jobs if t < self.cool else 1)
+                self.cv.notify_all()
+            time.sleep(5)
+
+    def __enter__(self):
+        with self.cv:
+            while self.running >= self.allowed:
+                self.cv.wait(5)
+            self.running += 1
+
+    def __exit__(self, *exc):
+        with self.cv:
+            self.running -= 1
+            self.cv.notify_all()
 
 
 def natural_key(s):
@@ -96,7 +169,9 @@ def make(job, dry):
 def main():
     ap = argparse.ArgumentParser(description="为资源库中的短视频生成封面（放在作品目录的 .thumbs/ 下）")
     ap.add_argument("roots", nargs="*", default=DEFAULT_ROOTS)
-    ap.add_argument("--jobs", type=int, default=3, help="同时运行的 ffmpeg 数（默认 3）")
+    ap.add_argument("--jobs", type=int, default=3, help="不热时同时运行的 ffmpeg 数（默认 3）")
+    ap.add_argument("--cool", type=float, default=36, help="低于此温度（°C）全速（默认 36）")
+    ap.add_argument("--hot", type=float, default=40, help="达到此温度（°C）暂停（默认 40）")
     ap.add_argument("--only", default="", help="只处理某个平台或博主，如 抖音 或 抖音/博主名")
     ap.add_argument("--limit", type=int, default=0, help="最多处理多少个作品（测试用）")
     ap.add_argument("--dry-run", action="store_true", help="只统计需要生成多少个，不写文件")
@@ -120,12 +195,32 @@ def main():
         jobs = jobs[: a.limit]
     print(f"共 {len(jobs)} 个作品；omni-deck 封面缓存：{OMNI_THUMBS}", flush=True)
 
-    stats = {}
-    with ThreadPoolExecutor(max_workers=max(1, a.jobs)) as ex:
-        for i, r in enumerate(ex.map(lambda j: make(j, a.dry_run), jobs), 1):
-            stats[r] = stats.get(r, 0) + 1
-            if i % 1000 == 0 or i == len(jobs):
-                print(f"[{i}/{len(jobs)}] " + "，".join(f"{k} {v}" for k, v in sorted(stats.items())), flush=True)
+    stats, done, lock = {}, [0], threading.Lock()
+    th = Throttle(max(1, a.jobs), a.cool, a.hot)
+    if th.zones:
+        print(f"温度控制：低于 {a.cool}°C 同时 {a.jobs} 个，{a.cool}～{a.hot}°C 1 个，{a.hot}°C 以上暂停", flush=True)
+    it = iter(jobs)
+
+    def worker():
+        while True:
+            with lock:
+                job = next(it, None)
+            if job is None:
+                return
+            with th:
+                r = make(job, a.dry_run)
+            with lock:
+                stats[r] = stats.get(r, 0) + 1
+                done[0] += 1
+                if done[0] % 500 == 0 or done[0] == len(jobs):
+                    temp = f"，{th.temp:.1f}°C" + ("（暂停中）" if th.paused else "") if th.temp is not None else ""
+                    print(f"[{done[0]}/{len(jobs)}] " + "，".join(f"{k} {v}" for k, v in sorted(stats.items())) + temp, flush=True)
+
+    ts = [threading.Thread(target=worker) for _ in range(max(1, a.jobs))]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
     names = {"skip": "已有", "reuse": "复用 omni-deck", "made": "新生成", "fail": "失败", "todo": "待生成"}
     print("完成：" + "，".join(f"{names.get(k, k)} {v}" for k, v in sorted(stats.items())))
     return 1 if stats.get("fail") else 0
