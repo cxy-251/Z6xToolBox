@@ -93,7 +93,7 @@ val PhoneTransfer = module("phone-transfer", "向手机传输大量文件") {
     overview = """
         用户曾从电脑向手机传输数万首音乐，一次传输大概率卡死，只能分批进行；在手机上直接解压 50GB 以上的压缩包也失败了。本节说明原因与更可靠的做法。
     """
-    partial("2026-10-04")
+    partial("2026-10-08")
 
     why("卡死的原因（分析，未专门测试）") {
         facts(
@@ -125,6 +125,10 @@ val PhoneTransfer = module("phone-transfer", "向手机传输大量文件") {
             解决：用 `svc usb setFunctions`（不带参数）把手机 USB 模式改为「仅充电」，USB 调试不受影响，桌面不再抢占，adb 保持连接。续传脚本开始时会自动执行这一步。核对发现中断前已传的 10 个文件夹中有 2 个不完整（39/100、829/830 个文件），由脚本重新传输。
             之后换成直接插 Deck 机身的 USB-C 口，不再频繁卡死（经扩展坞时每传几百 MB 就卡一次）。
         """)
+        read("查看谁占用了手机的 USB 设备", "for p in /proc/[0-9]*; do ls -l \$p/fd 2>/dev/null | grep -q 'bus/usb' && echo \"\$(basename \$p) \$(tr '\\0' ' ' < \$p/cmdline)\"; done", Host.Deck) {
+            note = "只应看到 adb。出现 kiod 等桌面进程时，把手机 USB 模式改为仅充电：`adb -d shell svc usb setFunctions`。"
+            varies = true
+        }
     }
 
     story("同步脚本的改进（2026-10-08）") {
@@ -137,9 +141,28 @@ val PhoneTransfer = module("phone-transfer", "向手机传输大量文件") {
             另外，改写时我自己引入了一个错误：比对清单用了 awk 的 `NR == FNR`，手机上一个文件都没有时（清单为空）会把本地清单误当作手机清单，全部判为已传完。在手机上实测时发现，改为按文件名区分。
             实测（2026-10-08，测试目录）：首次传输、重复运行（不重传）、补传缺失与半截文件、保留手机独有文件、两个来源的同名文件夹合并、传输中途结束 adb 服务后续传（只补剩下的 101 个文件），结果均与本地一致。
         """)
-        read("查看谁占用了手机的 USB 设备", "for p in /proc/[0-9]*; do ls -l \$p/fd 2>/dev/null | grep -q 'bus/usb' && echo \"\$(basename \$p) \$(tr '\\0' ' ' < \$p/cmdline)\"; done", Host.Deck) {
-            note = "只应看到 adb。出现 kiod 等桌面进程时，把手机 USB 模式改为仅充电：`adb -d shell svc usb setFunctions`。"
-            varies = true
+    }
+
+    why("大量小文件为什么慢：手机存储建文件的开销（2026-10-08 实测）") {
+        text("""
+            同步 Town of Magic（一个目录 game/images/CHAR/celica 里有 16457 个图片）时只有约每秒 5 个文件，而传短视频时每秒约 34 个文件。先怀疑是 adb 列出多个文件推送时每个文件都要等手机确认，改用 tar 数据流测试后发现并非如此：
+        """)
+        facts(
+            "三种方式速度相同" to "500 个 15KB 的文件：tar 数据流 9.5 秒，逐目录 adb push 10.9 秒，整个目录 adb push 10.4 秒，都是每秒约 50 个",
+            "目录越大越慢" to "在手机上直接新建空文件，每批 500 个：空目录约 10 秒；目录里已有 1.2 万个文件时约 40～43 秒，并随文件数继续变慢",
+            "原因" to "共享存储 /storage/emulated 经过 FUSE，且不区分大小写，每新建一个文件都要先在目录中查找同名项。瓶颈在手机一侧，换传输方式无法改善，只能接受；大视频以数据量为主，不受影响",
+        )
+    }
+
+    story("adb 传输的几个坑（2026-10-08）") {
+        text("""
+            • **adb exec-in 会丢数据**：`tar -cf - … | adb exec-in "tar -xf - -C 目录"`，Deck 一端数据发完就关闭连接，手机上的 tar 还没写完就被结束，500 个文件只解出 369 个，且退出码仍为 0。发完数据后保持连接等待 tar 结束，又会因为 toybox tar 要等输入关闭才退出而互相等待。
+            • **用 adb shell -T 代替**：adb 的 shell 协议可以单独通知「输入已结束」，然后等远端进程退出并返回它的退出码。`… | adb -d shell -T "tar -xf - -C 目录"` 500 个文件全部正确。
+            • **adb shell 会读取标准输入**：在 `while read` 循环里调用 adb shell，会把循环要读的剩余内容吞掉，循环只执行一次且不报错。循环内的 adb 命令都要加 `< /dev/null`。同步脚本曾因此每轮只补一个目录。
+            • **超时要按文件数算**：小文件多时耗时主要取决于文件个数，只按数据量估算会提前中断。
+        """)
+        change("测量手机上新建文件的速度", "time adb -d shell 'mkdir -p /sdcard/z6x-t && cd /sdcard/z6x-t && i=0; while [ \$i -lt 500 ]; do i=$((i+1)); : > f\$i; done'", Host.Deck) {
+            note = "在 Deck 上计时（手机 toybox 的 `date +%N` 不可靠，算出过负数）。在空目录与已有大量文件的目录中各测一次即可对比；测完删除 /sdcard/z6x-t。"
         }
     }
 
