@@ -162,11 +162,18 @@ def log(msg):
 failures = []
 
 
+def fail(msg):
+    """记录失败；前 5 个立即写进日志，便于运行中发现问题（例如 ffmpeg 参数错误导致全部失败）。"""
+    failures.append(msg)
+    if len(failures) <= 5:
+        log("失败：" + msg)
+
+
 def make(job, dry):
     try:
         return _make(job, dry)
     except Exception as e:  # 单个作品出错不影响其他作品
-        failures.append(f"{job[0]}：{e}")
+        fail(f"{job[0]}：{e}")
         return "fail"
 
 
@@ -187,14 +194,15 @@ def _make(job, dry):
     scale = f"scale='min({WIDTH},iw)':-2"
     attempts = ([["-ss", "0.5", "-i", src], ["-i", src]] if tag == "vthumb" else [["-i", src]])
     for inp in attempts:
-        cmd = LOW + ["ffmpeg", "-v", "error", "-y"] + inp + ["-frames:v", "1", "-vf", scale, "-c:v", "libwebp", "-quality", "70", tmp]
-        r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if r.returncode == 0 and os.path.getsize(tmp) > 0:
+        cmd = LOW + ["ffmpeg", "-v", "error", "-y"] + inp + ["-frames:v", "1", "-vf", scale, "-c:v", "libwebp", "-quality", "70", "-f", "webp", tmp]
+        r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        err = r.stderr or ""
+        if r.returncode == 0 and os.path.exists(tmp) and os.path.getsize(tmp) > 0:
             os.replace(tmp, dst)
             return "made"
     if os.path.exists(tmp):
         os.remove(tmp)
-    failures.append(f"{src}：ffmpeg 无法取帧（文件可能损坏或格式不支持）")
+    fail(f"{src}：ffmpeg 无法生成封面（{err.strip()[-200:] or '没有输出'}）")
     return "fail"
 
 
@@ -257,7 +265,7 @@ def main():
         t.start()
     for t in ts:
         t.join()
-    for f in failures[:20]:
+    for f in failures[5:20]:
         log("失败：" + f)
     if len(failures) > 20:
         log(f"……另有 {len(failures) - 20} 个失败")
