@@ -20,7 +20,10 @@ import (
 var mdnsGroup = &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
 
 const (
-	mdnsTTL      = 120              // 记录的有效期（秒）
+	// mdnsTTL：记录的有效期（秒）。用 DNS-SD 对服务记录推荐的 75 分钟：手机息屏后 CPU 休眠，既收不到查询
+	// 也发不出通告，有效期短（原为 2 分钟）时苹果设备很快把音箱从列表中去掉；有效期长则仍会显示，
+	// 选中后对方直接连接，网络数据会唤醒手机（2026-10-09 实测：息屏后搜不到）。
+	mdnsTTL      = 4500
 	announceGap  = 60 * time.Second // 主动通告的间隔
 	serviceType  = "_raop._tcp.local."
 	servicesEnum = "_services._dns-sd._udp.local."
