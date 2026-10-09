@@ -14,8 +14,6 @@ import (
 	"os/exec"
 	"sync"
 	"sync/atomic"
-
-	"github.com/alicebob/alac"
 )
 
 const (
@@ -27,7 +25,7 @@ const (
 
 type stream struct {
 	ann     *announce
-	dec     *alac.Alac
+	dec     decoder
 	block   cipher.Block
 	audio   *net.UDPConn // 音频
 	control *net.UDPConn // 同步与重传（只接收，不处理）
@@ -52,7 +50,7 @@ func newStream(ann *announce, log func(string, ...any)) (*stream, error) {
 	s.setVolume(0)
 	var err error
 	if ann.codec == "AppleLossless" {
-		if s.dec, err = alac.New(); err != nil {
+		if s.dec, err = newALAC(); err != nil {
 			return nil, err
 		}
 	}

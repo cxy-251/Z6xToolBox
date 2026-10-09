@@ -24,7 +24,7 @@
 - Windows：`.msi`（不需要管理员权限），或 `-portable.zip` 解压即用
 - macOS（Apple Silicon）：`.dmg`。未经 Apple 公证，首次打开需在「系统设置 → 隐私与安全性」中允许
 
-**安卓端程序** `z6x-android-<架构>-<版本>.tar.gz`（arm64 适用于大多数设备；arm 为只有 32 位用户空间的设备，如极米 Z6X Pro）
+**安卓端程序** `z6x-android-<架构>-<版本>.tar.gz`（arm64 适用于大多数设备；arm 为只有 32 位用户空间的设备，此版本的 AirPlay 音箱不可用）
 - 内含 z6x-hub、z6x、配置示例、开机与后台任务脚本，部署方法见包内 README.txt。
 
 ## 局限
