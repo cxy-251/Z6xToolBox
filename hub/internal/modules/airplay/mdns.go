@@ -52,7 +52,8 @@ func localIP() net.IP {
 	return c.LocalAddr().(*net.UDPAddr).IP.To4()
 }
 
-func (r *responder) start() error {
+// listen5353 打开 5353 端口（mDNS 的响应必须从 5353 发出，否则接收方会忽略）。
+func listen5353() (*net.UDPConn, error) {
 	lc := net.ListenConfig{Control: func(_, _ string, c syscall.RawConn) error {
 		var err error
 		c.Control(func(fd uintptr) {
@@ -64,9 +65,16 @@ func (r *responder) start() error {
 	}}
 	pconn, err := lc.ListenPacket(context.Background(), "udp4", "0.0.0.0:5353")
 	if err != nil {
+		return nil, err
+	}
+	return pconn.(*net.UDPConn), nil
+}
+
+func (r *responder) start() error {
+	conn, err := listen5353()
+	if err != nil {
 		return err
 	}
-	conn := pconn.(*net.UDPConn)
 	pc := ipv4.NewPacketConn(conn)
 	if err := pc.JoinGroup(nil, mdnsGroup); err != nil {
 		conn.Close()
@@ -80,6 +88,20 @@ func (r *responder) start() error {
 	go r.serve(conn)
 	go r.announceLoop()
 	return nil
+}
+
+// goodbye 不开始服务，只发送一次有效期为 0 的通告，让各设备立即把本音箱从列表中去掉。
+func (r *responder) goodbye() {
+	c, err := listen5353()
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	r.mu.Lock()
+	r.conn = c
+	r.send(0)
+	r.conn = nil
+	r.mu.Unlock()
 }
 
 func (r *responder) close() {

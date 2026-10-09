@@ -18,14 +18,11 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +33,7 @@ import (
 )
 
 type Config struct {
+	On        *bool  `yaml:"on"`         // 是否开启（默认开启）；在设置页或工具页中切换
 	Name      string `yaml:"name"`       // 在苹果设备上显示的音箱名称，默认为 hub 的设备名
 	Port      int    `yaml:"port"`       // RTSP 端口
 	LatencyMs int    `yaml:"latency_ms"` // 播放器缓冲（毫秒）
@@ -61,18 +59,20 @@ func (m *Module) termuxCmd(name string, args ...string) []string {
 const (
 	defaultPort      = 5050
 	defaultLatencyMs = 500
+	// minLatencyMs / maxLatencyMs：播放缓冲的范围（太小在网络抖动时断音）
+	minLatencyMs = 100
+	maxLatencyMs = 3000
 	// maxRTSPBody：RTSP 请求体的上限（封面图片等元数据可能较大）
 	maxRTSPBody = 4 << 20
 )
 
 type Module struct {
-	cfg   Config
-	env   *core.Env
-	key   *rsa.PrivateKey
-	hwid  []byte
-	resp  *responder
-	ln    net.Listener
-	state string // 保存开关的文件
+	cfg  Config
+	env  *core.Env
+	key  *rsa.PrivateKey
+	hwid []byte
+	resp *responder
+	ln   net.Listener
 
 	mu      sync.Mutex
 	on      bool
@@ -109,15 +109,17 @@ func (m *Module) Start(_ context.Context, env *core.Env) error {
 	sum := sha1.Sum([]byte("z6x-airplay:" + m.cfg.Name))
 	m.hwid = sum[:6]
 	m.hwid[0] = m.hwid[0]&0xfc | 0x02 // 本地管理的单播地址
-	m.state = filepath.Join(env.Config.DataDir, "airplay_on")
-	on := true
-	if b, err := os.ReadFile(m.state); err == nil {
-		on = strings.TrimSpace(string(b)) == "1"
+	if m.cfg.LatencyMs < minLatencyMs || m.cfg.LatencyMs > maxLatencyMs {
+		m.cfg.LatencyMs = defaultLatencyMs
 	}
-	if on {
+	if m.cfg.On == nil || *m.cfg.On {
 		if err := m.turnOn(); err != nil {
 			env.Log.Warn("AirPlay 音箱启动失败", "err", err)
 		}
+	} else {
+		// 关闭状态下启动（例如在设置中关闭后 hub 重启）：发一次告别通告。重启时旧进程来不及发，
+		// 而记录的有效期很长（见 mdnsTTL），不发的话苹果设备会继续显示这个已关闭的音箱。
+		go m.newResponder().goodbye()
 	}
 	return nil
 }
@@ -158,9 +160,7 @@ func (m *Module) turnOn() error {
 		m.errMsg = "端口 " + strconv.Itoa(m.cfg.Port) + " 监听失败：" + err.Error()
 		return err
 	}
-	m.resp = &responder{instance: strings.ToUpper(hex.EncodeToString(m.hwid)) + "@" + m.cfg.Name,
-		host: "z6x-" + hex.EncodeToString(m.hwid[3:]) + ".local.", port: m.cfg.Port, txt: txtRecords(),
-		log: m.env.Log.Warn}
+	m.resp = m.newResponder()
 	if err := m.resp.start(); err != nil {
 		ln.Close()
 		m.errMsg = "局域网广播启动失败：" + err.Error()
@@ -170,6 +170,12 @@ func (m *Module) turnOn() error {
 	go m.accept(ln)
 	m.env.Log.Info("AirPlay 音箱已开启", "name", m.cfg.Name, "port", m.cfg.Port)
 	return nil
+}
+
+func (m *Module) newResponder() *responder {
+	return &responder{instance: strings.ToUpper(hex.EncodeToString(m.hwid)) + "@" + m.cfg.Name,
+		host: "z6x-" + hex.EncodeToString(m.hwid[3:]) + ".local.", port: m.cfg.Port, txt: txtRecords(),
+		log: m.env.Log.Warn}
 }
 
 func (m *Module) turnOff() {
@@ -315,32 +321,27 @@ func (m *Module) Routes(r core.Router) {
 		m.mu.Unlock()
 		core.WriteJSON(w, out)
 	})
-	r.HandleFunc("POST /api/airplay/{action}", func(w http.ResponseWriter, req *http.Request) {
-		var err error
-		switch req.PathValue("action") {
-		case "on":
-			err = m.turnOn()
-		case "off":
-			m.turnOff()
-		default:
-			core.WriteError(w, http.StatusNotFound, "未知操作")
-			return
+	// 设置页「AirPlay 音箱」一组开头显示的状态
+	r.HandleFunc("GET /api/airplay/status", func(w http.ResponseWriter, _ *http.Request) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		lines := []string{"状态：已关闭"}
+		if m.on {
+			lines = []string{"状态：已开启，在苹果设备的音频输出中选择「" + m.cfg.Name + "」"}
 		}
-		on := map[bool]string{true: "1", false: "0"}[err == nil && req.PathValue("action") == "on"]
-		os.WriteFile(m.state, []byte(on), 0o644)
-		if err != nil {
-			core.WriteError(w, http.StatusInternalServerError, err.Error())
-			return
+		if m.client != "" {
+			lines = append(lines, "正在接收："+m.client+"（"+m.agent+"），自 "+m.since.Format("15:04:05")+" 起")
 		}
-		b, _ := json.Marshal(map[string]bool{"on": on == "1"})
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(b)
+		if m.errMsg != "" {
+			lines = append(lines, "⚠ "+m.errMsg)
+		}
+		core.WriteJSON(w, map[string]any{"lines": lines})
 	})
 	r.HandleFunc("GET /ui/airplay/{$}", func(w http.ResponseWriter, _ *http.Request) { core.Page(w, "AirPlay 音箱", pageHTML) })
 }
 
 const pageHTML = `<div class="card"><p id="st">读取中…</p><p><button id="tg"></button></p></div>
-<div class="card"><small>在 iPhone / iPad 的控制中心或 Mac 的「声音」设置中，把音频输出选为这里显示的名称即可。
+<div class="card"><small>名称、播放缓冲（延迟）等在「⚙️ 设置 → AirPlay 音箱」中修改。<br>在 iPhone / iPad 的控制中心或 Mac 的「声音」设置中，把音频输出选为这里显示的名称即可。
 只支持 AirPlay 1 的音频，延迟约 2 秒，适合听音乐；不支持视频与屏幕镜像。
 设备息屏时可能暂时搜不到这个音箱（CPU 休眠，收不到查找请求），亮屏或正在播放时正常。</small></div>
 <script>
@@ -349,6 +350,20 @@ async function load(){const s=await (await fetch('/api/airplay/')).json();const 
   if(s.client)t+='\n正在接收：'+s.client+(s.agent?'（'+s.agent+'）':'')+'，自 '+s.since+' 起，'+s.packets+' 个音频包'+(s.lost?'，丢失 '+s.lost+' 个':'');
   if(s.error)t+='\n⚠ '+s.error;
   st.textContent=t;st.style.whiteSpace='pre-line';tg.textContent=s.on?'关闭':'开启';
-  tg.onclick=async()=>{const r=await fetch('/api/airplay/'+(s.on?'off':'on'),{method:'POST'});if(!r.ok)alert((await r.json()).error);load()}}
+  // 开关是设置中的 modules.airplay.on（写入 hub.yaml，hub 重启约 2 秒后生效）
+  tg.onclick=async()=>{const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values:{'modules.airplay.on':String(!s.on)}})});
+    if(!r.ok)return alert((await r.json()).error);st.textContent='hub 正在重启…';setTimeout(function w(){fetch('/api/health').then(r=>r.ok?location.reload():setTimeout(w,1000)).catch(()=>setTimeout(w,1000))},1500)}}
 load();setInterval(load,3000);
 </script>`
+
+// Settings 声明设置页中的参数（实现 core.SettingsProvider）。
+func (m *Module) Settings() []core.SettingsGroup {
+	const p = "modules.airplay."
+	return []core.SettingsGroup{{Title: "🔊 AirPlay 音箱", StatusURL: "/api/airplay/status", Items: []core.Setting{
+		{Key: p + "on", Label: "开启", Type: "bool", Default: true, Help: "关闭后苹果设备中不再显示本音箱"},
+		{Key: p + "name", Label: "音箱名称", Type: "text", Default: m.env.Config.Name, Help: "在苹果设备的音频输出中显示的名称"},
+		{Key: p + "latency_ms", Label: "播放缓冲", Unit: "毫秒", Type: "number", Min: minLatencyMs, Max: maxLatencyMs, Step: 50, Default: defaultLatencyMs,
+			Help: "越小反应越快，网络不好时越容易断音。AirPlay 1 协议本身另有约 2 秒的延迟（发送端缓冲），这里改不了"},
+		{Key: p + "port", Label: "端口", Type: "number", Min: 1024, Max: 65535, Step: 1, Default: defaultPort},
+	}}}
+}
