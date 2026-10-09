@@ -13,14 +13,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -30,6 +29,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"z6x/hub/internal/android"
 	"z6x/hub/internal/core"
 )
 
@@ -40,10 +40,10 @@ const (
 	userAgent = "clash.meta"
 	// maxProfile：原订阅的大小上限
 	maxProfile = 16 << 20
-	// controllerAddr：生成的配置中 Clash 控制接口的地址（只监听本机）
-	controllerAddr = "127.0.0.1:9090"
-	// logRetry：连不上控制接口时（Clash 未运行，或尚未切换到本配置）多久重试
+	// logRetry：读取系统日志的进程退出后多久重试
 	logRetry = 15 * time.Second
+	// logTag：ClashMeta for Android 写入系统日志的标签
+	logTag = "ClashMetaForAndroid"
 	// maxRejected：最多记录多少个被拒绝的域名
 	maxRejected = 300
 )
@@ -52,46 +52,39 @@ const (
 // [TCP] 127.0.0.1:41234 --> www.baidu.com:443 match GeoSite(cn) using REJECT
 var rejectLine = regexp.MustCompile(`--> (\S+?):\d+ match (.+?) using REJECT`)
 
-// watchLogs 持续读取 Clash 的日志（GET /logs，每行一条 JSON），记下被拒绝的域名。
+// watchLogs 持续读取系统日志中 Clash 的记录（logcat，标签 ClashMetaForAndroid），记下被拒绝的域名。
+// 需要 hub 以 shell 身份运行（投影仪）：普通应用只能读到自己的日志。
 func (m *Module) watchLogs(ctx context.Context) {
+	logcat := android.Resolve("logcat")
 	for ctx.Err() == nil {
-		m.mu.Lock()
-		secret := m.st.Secret
-		m.mu.Unlock()
-		req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+controllerAddr+"/logs?level=info", nil)
-		req.Header.Set("Authorization", "Bearer "+secret)
-		resp, err := http.DefaultClient.Do(req)
-		if err == nil && resp.StatusCode != 200 {
-			resp.Body.Close()
-			err = fmt.Errorf("控制接口返回 %d（Clash 可能还没有更新到本配置）", resp.StatusCode)
+		cmd := exec.CommandContext(ctx, logcat, "-v", "brief", "-T", "1", logTag+":I", "*:S")
+		out, err := cmd.StdoutPipe()
+		if err == nil {
+			err = cmd.Start()
 		}
 		if err != nil {
-			m.mu.Lock()
-			m.ctl = "未连接 Clash 控制接口：" + err.Error()
-			m.mu.Unlock()
-			select {
-			case <-ctx.Done():
-			case <-time.After(logRetry):
+			m.setCtl("无法读取系统日志：" + err.Error())
+		} else {
+			m.setCtl("正在从系统日志记录被拒绝的域名（Clash 需使用本订阅，日志级别为 info）")
+			sc := bufio.NewScanner(out)
+			for sc.Scan() {
+				if mm := rejectLine.FindStringSubmatch(sc.Text()); mm != nil {
+					m.recordReject(mm[1], mm[2])
+				}
 			}
-			continue
+			cmd.Wait()
 		}
-		m.mu.Lock()
-		m.ctl = "已连接 Clash，正在记录被拒绝的域名"
-		m.mu.Unlock()
-		sc := bufio.NewScanner(resp.Body)
-		for sc.Scan() {
-			var e struct{ Payload string }
-			if json.Unmarshal(sc.Bytes(), &e) != nil {
-				continue
-			}
-			mm := rejectLine.FindStringSubmatch(e.Payload)
-			if mm == nil {
-				continue
-			}
-			m.recordReject(mm[1], mm[2])
+		select {
+		case <-ctx.Done():
+		case <-time.After(logRetry):
 		}
-		resp.Body.Close()
 	}
+}
+
+func (m *Module) setCtl(s string) {
+	m.mu.Lock()
+	m.ctl = s
+	m.mu.Unlock()
 }
 
 func (m *Module) recordReject(host, rule string) {
@@ -129,7 +122,6 @@ type state struct {
 	LastFetch    string   `json:"last_fetch"`
 	LastError    string   `json:"last_error"`
 	RuleCount    int      `json:"rule_count"` // 原配置中的规则数
-	Secret       string   `json:"secret"`     // Clash 控制接口的密码（只监听本机）
 }
 
 // rejected 是一个被原规则拒绝过的域名。
@@ -146,7 +138,7 @@ type Module struct {
 	mu    sync.Mutex
 	st    state
 	rej   map[string]*rejected // 最近被拒绝的域名（读取 Clash 日志得到）
-	ctl   string               // Clash 控制接口的状态说明
+	ctl   string               // 读取 Clash 日志的状态说明
 	path  string               // 状态文件
 	cache string               // 原配置：上传的配置文件，或最近一次拉取成功的订阅
 }
@@ -163,12 +155,6 @@ func (m *Module) Start(ctx context.Context, env *core.Env) error {
 	m.st.Whitelist = defaultWhitelist
 	if b, err := os.ReadFile(m.path); err == nil {
 		json.Unmarshal(b, &m.st)
-	}
-	if m.st.Secret == "" {
-		b := make([]byte, 16)
-		rand.Read(b)
-		m.st.Secret = hex.EncodeToString(b)
-		m.save()
 	}
 	m.rej = map[string]*rejected{}
 	go m.watchLogs(ctx)
@@ -231,9 +217,10 @@ func (m *Module) fetch(ctx context.Context) ([]byte, error) {
 	return body, nil
 }
 
-// withWhitelist 在原配置的 rules 最前面插入白名单直连规则；secret 不为空时同时打开只监听本机的控制接口
-// （hub 由此读取被拒绝的域名）并把日志级别设为 info（拒绝记录是 info 级）。其余内容不变。
-func withWhitelist(raw []byte, whitelist []string, secret string) ([]byte, int, error) {
+// withWhitelist 在原配置的 rules 最前面插入白名单直连规则；logInfo 为真时把日志级别设为 info
+// （拒绝记录是 info 级，hub 从系统日志中读取，见 watchLogs）。其余内容不变。
+// 注：ClashMeta for Android 会忽略配置中的 external-controller，因此不用控制接口（2026-10-09 实测）。
+func withWhitelist(raw []byte, whitelist []string, logInfo bool) ([]byte, int, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
 		return nil, 0, fmt.Errorf("原订阅不是 Clash 配置（可能是节点列表格式）")
@@ -248,8 +235,8 @@ func withWhitelist(raw []byte, whitelist []string, secret string) ([]byte, int, 
 	if rules == nil || rules.Kind != yaml.SequenceNode {
 		return nil, 0, fmt.Errorf("原订阅中没有 rules")
 	}
-	if secret != "" {
-		for _, kv := range [][2]string{{"external-controller", controllerAddr}, {"secret", secret}, {"log-level", "info"}} {
+	if logInfo {
+		for _, kv := range [][2]string{{"log-level", "info"}} {
 			set := false
 			for i := 0; i+1 < len(root.Content); i += 2 {
 				if root.Content[i].Value == kv[0] {
@@ -298,10 +285,7 @@ func (m *Module) Routes(r core.Router) {
 		m.mu.Lock()
 		wl := append([]string{}, m.st.Whitelist...)
 		m.mu.Unlock()
-		m.mu.Lock()
-		secret := m.st.Secret
-		m.mu.Unlock()
-		out, count, err := withWhitelist(raw, wl, secret)
+		out, count, err := withWhitelist(raw, wl, true)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -357,7 +341,7 @@ func (m *Module) Routes(r core.Router) {
 	r.HandleFunc("POST /api/clash/source", func(w http.ResponseWriter, req *http.Request) {
 		raw, err := io.ReadAll(http.MaxBytesReader(w, req.Body, maxProfile))
 		if err == nil {
-			_, _, err = withWhitelist(raw, nil, "")
+			_, _, err = withWhitelist(raw, nil, false)
 		}
 		if err != nil {
 			core.WriteError(w, http.StatusBadRequest, "不是有效的 Clash 配置："+err.Error())
@@ -381,7 +365,7 @@ func (m *Module) Routes(r core.Router) {
 			wl := append([]string{}, m.st.Whitelist...)
 			m.mu.Unlock()
 			var count int
-			if _, count, err = withWhitelist(raw, wl, ""); err == nil {
+			if _, count, err = withWhitelist(raw, wl, false); err == nil {
 				core.WriteJSON(w, map[string]int{"rules": count, "whitelist": len(wl)})
 				return
 			}
