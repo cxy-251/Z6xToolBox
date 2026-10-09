@@ -2,8 +2,9 @@
 // 本设备即可把声音推送过来，由本设备的喇叭播放。在「🔧 工具 → AirPlay 音箱」中开关。
 //
 // 只支持 AirPlay 1 的音频（不支持视频、屏幕镜像、AirPlay 2 多房间），延迟约 2 秒，适合听音乐。
-// 声音经 Termux 的 PulseAudio 播放（pacat），因此需要 hub 在 Termux 中运行（手机）；
-// 投影仪上 hub 是 shell 身份，用不了 Termux 的 PulseAudio，页面会说明。
+// 声音经 Termux 的 PulseAudio 播放（pacat）：hub 在 Termux 中运行时（手机）直接调用；
+// hub 以 shell 身份运行时（投影仪）设 run_as_termux，借 run-as com.termux 以 Termux 的身份启动
+// （投影仪允许 shell 使用 run-as，2026-10-09 实测；需在 Termux 中安装 pulseaudio）。
 // 设备息屏后 CPU 可能休眠，期间收不到苹果设备的查找请求，可能暂时搜不到这个音箱；亮屏或正在播放时正常。
 //
 // 协议细节参照开源项目 shairport-sync：身份校验见 rtsp.go，音频解密与解码见 audio.go，局域网广播见 mdns.go。
@@ -38,6 +39,23 @@ type Config struct {
 	Name      string `yaml:"name"`       // 在苹果设备上显示的音箱名称，默认为 hub 的设备名
 	Port      int    `yaml:"port"`       // RTSP 端口
 	LatencyMs int    `yaml:"latency_ms"` // 播放器缓冲（毫秒）
+	// RunAsTermux：以 Termux 的身份启动 PulseAudio 与 pacat（hub 不在 Termux 中运行时，如投影仪）
+	RunAsTermux bool `yaml:"run_as_termux"`
+}
+
+// termuxPrefix 借 run-as 以 Termux 的身份运行 Termux 的程序（设置 Termux 的环境变量）。
+var termuxPrefix = []string{"/system/bin/run-as", "com.termux", termuxBin + "/env", "-i",
+	"HOME=/data/data/com.termux/files/home", "PREFIX=/data/data/com.termux/files/usr",
+	"TMPDIR=/data/data/com.termux/files/usr/tmp", "PATH=" + termuxBin, "LANG=en_US.UTF-8"}
+
+const termuxBin = "/data/data/com.termux/files/usr/bin"
+
+// termuxCmd 返回执行 Termux 中某个程序的完整命令。
+func (m *Module) termuxCmd(name string, args ...string) []string {
+	if m.cfg.RunAsTermux {
+		return append(append(append([]string{}, termuxPrefix...), termuxBin+"/"+name), args...)
+	}
+	return append([]string{android.Resolve(name)}, args...)
 }
 
 const (
@@ -111,20 +129,18 @@ func (m *Module) Stop(context.Context) error {
 
 // player 返回播放命令（完整路径）；没有 pacat 时返回原因。
 func (m *Module) player() ([]string, error) {
-	pacat := android.Resolve("pacat")
-	if !strings.HasPrefix(pacat, "/") {
-		return nil, errors.New("没有 pacat：需要在 Termux 中运行 hub 并安装 PulseAudio（pkg install pulseaudio）")
+	if !m.cfg.RunAsTermux && !strings.HasPrefix(android.Resolve("pacat"), "/") {
+		return nil, errors.New("没有 pacat：需要在 Termux 中运行 hub 并安装 PulseAudio（pkg install pulseaudio）；hub 以 shell 身份运行时设 run_as_termux")
 	}
-	// PulseAudio 未运行时启动它（Termux 中；-exit-idle-time=-1 不因空闲退出）
-	if pa := android.Resolve("pulseaudio"); strings.HasPrefix(pa, "/") {
-		if exec.Command(pa, "--check").Run() != nil {
-			if out, err := exec.Command(pa, "--start", "--exit-idle-time=-1").CombinedOutput(); err != nil {
-				return nil, fmt.Errorf("启动 PulseAudio 失败：%v %s", err, strings.TrimSpace(string(out)))
-			}
+	run := func(c []string) ([]byte, error) { return exec.Command(c[0], c[1:]...).CombinedOutput() }
+	// PulseAudio 未运行时启动它（-exit-idle-time=-1 不因空闲退出）
+	if _, err := run(m.termuxCmd("pulseaudio", "--check")); err != nil {
+		if out, err := run(m.termuxCmd("pulseaudio", "--start", "--exit-idle-time=-1")); err != nil {
+			return nil, fmt.Errorf("启动 PulseAudio 失败：%v %s", err, strings.TrimSpace(string(out)))
 		}
 	}
-	return []string{pacat, "--format=s16le", "--rate=44100", "--channels=2", "--stream-name=AirPlay",
-		"--client-name=z6x-hub", "--latency-msec=" + strconv.Itoa(m.cfg.LatencyMs)}, nil
+	return m.termuxCmd("pacat", "--format=s16le", "--rate=44100", "--channels=2", "--stream-name=AirPlay",
+		"--client-name=z6x-hub", "--latency-msec="+strconv.Itoa(m.cfg.LatencyMs)), nil
 }
 
 func (m *Module) turnOn() error {

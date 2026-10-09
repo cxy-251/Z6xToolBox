@@ -95,6 +95,12 @@ modules:
   clash:
     enable: true
 
+  # AirPlay 音箱：苹果设备在「音频输出」中选择本设备即可推送声音（AirPlay 1 音频）。在「🔧 工具 → AirPlay 音箱」中开关。
+  # 投影仪上 hub 是 shell 身份，借 run-as 以 Termux 的身份播放（需在 Termux 中安装 pulseaudio）。
+  airplay:
+    enable: true
+    run_as_termux: true
+
   # 后台任务：设备上的后台脚本，可在「工具 → 后台任务」中启动、停止，并设置是否随 hub 启动。
   # 开机时只需启动 hub，由 hub 启动 autostart 的任务（网页上修改的开关保存在 data/jobs_autostart.json）。
   jobs:
