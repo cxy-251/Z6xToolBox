@@ -161,7 +161,8 @@ jobs:
             (cd hub && env CGO_ENABLED=0 GOOS=linux $goarch go build -trimpath \
               -ldflags="-s -w -X z6x/hub/internal/core.Version=$VERSION" -o "../$out/z6x-hub" ./cmd/z6x-hub)
             (cd tools && cargo build --quiet --profile dist --target $rust && cp target/$rust/dist/z6x "../$out/z6x")
-            cp hub/devices/*.example.yaml hub/adb-boot.sh hub/termux/hub.sh hub/termux/projector-boot.sh "$out/"
+            cp hub/devices/*.example.yaml hub/adb-boot.sh hub/termux/hub.sh hub/termux/thumbs.sh \
+              hub/termux/projector-boot.sh hub/termux/phone-boot.sh scripts/shortvideo_thumbs.py tools/keymapd.sh "$out/"
             cp packaging/android-README.txt "$out/README.txt"
             tar -C out -czf "dist/z6x-android-$arch-$VERSION.tar.gz" "z6x-android-$arch-$VERSION"
           done
