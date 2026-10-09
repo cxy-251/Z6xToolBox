@@ -43,6 +43,7 @@ DISABLED_PACKAGES=(
     "com.xgimi.mateservice"
     "com.xgimi.user"
     "com.xgimi.soundermodeservice"
+    "com.xgimi.wirelessscreen"    # 无线投屏（AirPlay、Miracast、DLNA）：2026-10-09 用户要求停用，AirPlay 改用 hub 的音箱
 )
 
 for pkg in "${DISABLED_PACKAGES[@]}"; do

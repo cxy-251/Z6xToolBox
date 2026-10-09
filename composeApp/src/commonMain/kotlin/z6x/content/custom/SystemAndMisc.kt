@@ -51,7 +51,7 @@ val SystemPackages = module("system-packages", "精简后的系统组件与入�
             "com.xgimi.bluetoothservice" to "蓝牙（遥控器连接）",
             "com.xgimi.duertts" to "语音（附带一个系统默认开启的无障碍服务）",
             "com.xgimi.gimiplayer" to "本地视频播放器",
-            "com.xgimi.wirelessscreen" to "无线投屏，见「无线投屏：AirPlay、Miracast 与 DLNA」",
+            "com.xgimi.wirelessscreen" to "无线投屏，见「无线投屏：AirPlay、Miracast 与 DLNA」。2026-10-09 起已停用（见「停用清单」）",
             "com.xgimi.filemanager" to "文件管理器（仍启用）",
             "com.xgimi.systemui" to "音量条、信号源浮窗等系统界面（推测）",
             "com.xgimi.shutdown" to "关机菜单 / 定时关机（推测）",

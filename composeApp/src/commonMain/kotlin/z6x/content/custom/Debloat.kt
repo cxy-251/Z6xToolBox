@@ -88,10 +88,10 @@ private fun SectionBuilder.group(packages: List<Pair<String, String>>) {
     ) { note = "可整段粘贴到 adb shell 中执行，每行一条。恢复时将 `disable-user --user 0` 替换为 `enable`。" }
 }
 
-val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
+val DebloatList = module("debloat-list", "停用清单：32 个预装组件") {
     keywords = "广告 · 上报 · IoT · OTA · 皮肤 · 伴生服务"
     overview = """
-        按用途分组列出已处理的 31 个极米组件。用途依据包名、应用名和停用后的变化判断，未经反编译确认；标注「推测」的条目把握较小。
+        按用途分组列出已处理的 32 个极米组件。用途依据包名、应用名和停用后的变化判断，未经反编译确认；标注「推测」的条目把握较小。
     """
     verified("2026-10-01")
 
@@ -143,6 +143,12 @@ val DebloatList = module("debloat-list", "停用清单：31 个预装组件") {
             note = "disable-user 本身会结束进程，此步骤作为保险。force-stop 只结束当前进程，不阻止其下次启动。"
         }
     }
+    story("投屏（2026-10-09 停用）") {
+        group(listOf(
+            "com.xgimi.wirelessscreen" to "无线投屏：AirPlay、Miracast（Windows「投影到此设备」）与 DLNA 的接收端。用户要求停用：苹果设备的音频改用 hub 的「AirPlay 音箱」（只放声音、不切换投影画面）；停用后 Windows 与手机的投屏也不可用，需要时执行 `pm enable com.xgimi.wirelessscreen` 恢复",
+        ))
+    }
+
     story("智能家居与伴生设备") {
         group(listOf(
             "com.xgimi.xgimihilink" to "华为 HiLink 智能家居",
