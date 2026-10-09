@@ -10,8 +10,11 @@
 package clash
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +22,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,7 +40,85 @@ const (
 	userAgent = "clash.meta"
 	// maxProfile：原订阅的大小上限
 	maxProfile = 16 << 20
+	// controllerAddr：生成的配置中 Clash 控制接口的地址（只监听本机）
+	controllerAddr = "127.0.0.1:9090"
+	// logRetry：连不上控制接口时（Clash 未运行，或尚未切换到本配置）多久重试
+	logRetry = 15 * time.Second
+	// maxRejected：最多记录多少个被拒绝的域名
+	maxRejected = 300
 )
+
+// rejectLine 匹配 Clash（mihomo）日志中的拒绝记录，如：
+// [TCP] 127.0.0.1:41234 --> www.baidu.com:443 match GeoSite(cn) using REJECT
+var rejectLine = regexp.MustCompile(`--> (\S+?):\d+ match (.+?) using REJECT`)
+
+// watchLogs 持续读取 Clash 的日志（GET /logs，每行一条 JSON），记下被拒绝的域名。
+func (m *Module) watchLogs(ctx context.Context) {
+	for ctx.Err() == nil {
+		m.mu.Lock()
+		secret := m.st.Secret
+		m.mu.Unlock()
+		req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+controllerAddr+"/logs?level=info", nil)
+		req.Header.Set("Authorization", "Bearer "+secret)
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil && resp.StatusCode != 200 {
+			resp.Body.Close()
+			err = fmt.Errorf("控制接口返回 %d（Clash 可能还没有更新到本配置）", resp.StatusCode)
+		}
+		if err != nil {
+			m.mu.Lock()
+			m.ctl = "未连接 Clash 控制接口：" + err.Error()
+			m.mu.Unlock()
+			select {
+			case <-ctx.Done():
+			case <-time.After(logRetry):
+			}
+			continue
+		}
+		m.mu.Lock()
+		m.ctl = "已连接 Clash，正在记录被拒绝的域名"
+		m.mu.Unlock()
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			var e struct{ Payload string }
+			if json.Unmarshal(sc.Bytes(), &e) != nil {
+				continue
+			}
+			mm := rejectLine.FindStringSubmatch(e.Payload)
+			if mm == nil {
+				continue
+			}
+			m.recordReject(mm[1], mm[2])
+		}
+		resp.Body.Close()
+	}
+}
+
+func (m *Module) recordReject(host, rule string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, w := range m.st.Whitelist { // 已在白名单中的不再列出
+		if host == w || strings.HasSuffix(host, "."+w) {
+			return
+		}
+	}
+	r := m.rej[host]
+	if r == nil {
+		if len(m.rej) >= maxRejected { // 去掉最久没出现的
+			var oldest *rejected
+			for _, x := range m.rej {
+				if oldest == nil || x.at.Before(oldest.at) {
+					oldest = x
+				}
+			}
+			delete(m.rej, oldest.Host)
+		}
+		r = &rejected{Host: host}
+		m.rej[host] = r
+	}
+	r.Rule, r.Count, r.at = rule, r.Count+1, time.Now()
+	r.Last = r.at.Format("15:04:05")
+}
 
 // defaultWhitelist 是首次使用时的白名单：开发常用的国内软件源镜像。
 var defaultWhitelist = []string{"mirrors.tuna.tsinghua.edu.cn", "mirrors.ustc.edu.cn", "mirrors.sdu.edu.cn", "mirrors.aliyun.com", "goproxy.cn"}
@@ -46,14 +129,26 @@ type state struct {
 	LastFetch    string   `json:"last_fetch"`
 	LastError    string   `json:"last_error"`
 	RuleCount    int      `json:"rule_count"` // 原配置中的规则数
+	Secret       string   `json:"secret"`     // Clash 控制接口的密码（只监听本机）
+}
+
+// rejected 是一个被原规则拒绝过的域名。
+type rejected struct {
+	Host  string `json:"host"`
+	Rule  string `json:"rule"`
+	Count int    `json:"count"`
+	Last  string `json:"last"`
+	at    time.Time
 }
 
 type Module struct {
 	env   *core.Env
 	mu    sync.Mutex
 	st    state
-	path  string // 状态文件
-	cache string // 原配置：上传的配置文件，或最近一次拉取成功的订阅
+	rej   map[string]*rejected // 最近被拒绝的域名（读取 Clash 日志得到）
+	ctl   string               // Clash 控制接口的状态说明
+	path  string               // 状态文件
+	cache string               // 原配置：上传的配置文件，或最近一次拉取成功的订阅
 }
 
 func New() *Module { return &Module{} }
@@ -61,7 +156,7 @@ func New() *Module { return &Module{} }
 func (m *Module) Name() string  { return "clash" }
 func (m *Module) Title() string { return "Clash 白名单" }
 
-func (m *Module) Start(_ context.Context, env *core.Env) error {
+func (m *Module) Start(ctx context.Context, env *core.Env) error {
 	m.env = env
 	m.path = filepath.Join(env.Config.DataDir, "clash.json")
 	m.cache = filepath.Join(env.Config.DataDir, "clash_source.yaml")
@@ -69,6 +164,14 @@ func (m *Module) Start(_ context.Context, env *core.Env) error {
 	if b, err := os.ReadFile(m.path); err == nil {
 		json.Unmarshal(b, &m.st)
 	}
+	if m.st.Secret == "" {
+		b := make([]byte, 16)
+		rand.Read(b)
+		m.st.Secret = hex.EncodeToString(b)
+		m.save()
+	}
+	m.rej = map[string]*rejected{}
+	go m.watchLogs(ctx)
 	return nil
 }
 
@@ -128,8 +231,9 @@ func (m *Module) fetch(ctx context.Context) ([]byte, error) {
 	return body, nil
 }
 
-// withWhitelist 在原配置的 rules 最前面插入白名单直连规则，其余内容不变。
-func withWhitelist(raw []byte, whitelist []string) ([]byte, int, error) {
+// withWhitelist 在原配置的 rules 最前面插入白名单直连规则；secret 不为空时同时打开只监听本机的控制接口
+// （hub 由此读取被拒绝的域名）并把日志级别设为 info（拒绝记录是 info 级）。其余内容不变。
+func withWhitelist(raw []byte, whitelist []string, secret string) ([]byte, int, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(raw, &doc); err != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
 		return nil, 0, fmt.Errorf("原订阅不是 Clash 配置（可能是节点列表格式）")
@@ -143,6 +247,20 @@ func withWhitelist(raw []byte, whitelist []string) ([]byte, int, error) {
 	}
 	if rules == nil || rules.Kind != yaml.SequenceNode {
 		return nil, 0, fmt.Errorf("原订阅中没有 rules")
+	}
+	if secret != "" {
+		for _, kv := range [][2]string{{"external-controller", controllerAddr}, {"secret", secret}, {"log-level", "info"}} {
+			set := false
+			for i := 0; i+1 < len(root.Content); i += 2 {
+				if root.Content[i].Value == kv[0] {
+					root.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: kv[1]}
+					set = true
+				}
+			}
+			if !set {
+				root.Content = append([]*yaml.Node{{Kind: yaml.ScalarNode, Tag: "!!str", Value: kv[0]}, {Kind: yaml.ScalarNode, Tag: "!!str", Value: kv[1]}}, root.Content...)
+			}
+		}
 	}
 	count := len(rules.Content)
 	var add []*yaml.Node
@@ -180,7 +298,10 @@ func (m *Module) Routes(r core.Router) {
 		m.mu.Lock()
 		wl := append([]string{}, m.st.Whitelist...)
 		m.mu.Unlock()
-		out, count, err := withWhitelist(raw, wl)
+		m.mu.Lock()
+		secret := m.st.Secret
+		m.mu.Unlock()
+		out, count, err := withWhitelist(raw, wl, secret)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -236,7 +357,7 @@ func (m *Module) Routes(r core.Router) {
 	r.HandleFunc("POST /api/clash/source", func(w http.ResponseWriter, req *http.Request) {
 		raw, err := io.ReadAll(http.MaxBytesReader(w, req.Body, maxProfile))
 		if err == nil {
-			_, _, err = withWhitelist(raw, nil)
+			_, _, err = withWhitelist(raw, nil, "")
 		}
 		if err != nil {
 			core.WriteError(w, http.StatusBadRequest, "不是有效的 Clash 配置："+err.Error())
@@ -260,12 +381,23 @@ func (m *Module) Routes(r core.Router) {
 			wl := append([]string{}, m.st.Whitelist...)
 			m.mu.Unlock()
 			var count int
-			if _, count, err = withWhitelist(raw, wl); err == nil {
+			if _, count, err = withWhitelist(raw, wl, ""); err == nil {
 				core.WriteJSON(w, map[string]int{"rules": count, "whitelist": len(wl)})
 				return
 			}
 		}
 		core.WriteError(w, http.StatusBadGateway, err.Error())
+	})
+	// 最近被拒绝的域名（不在白名单中的），按最近一次时间排列
+	r.HandleFunc("GET /api/clash/rejected", func(w http.ResponseWriter, _ *http.Request) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		out := []*rejected{}
+		for _, r := range m.rej {
+			out = append(out, r)
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].at.After(out[j].at) })
+		core.WriteJSON(w, map[string]any{"controller": m.ctl, "items": out})
 	})
 	r.HandleFunc("GET /ui/clash/{$}", func(w http.ResponseWriter, _ *http.Request) { core.Page(w, "Clash 白名单", pageHTML) })
 }
@@ -277,6 +409,9 @@ const pageHTML = `<div class="card"><b>使用方法</b><ol style="margin:6px 0 0
 <div class="card"><b>白名单</b> <small>每行一个域名（含其所有子域名）或 IP / 网段，直连、不受原规则拒绝</small>
 <textarea id="wl" rows="10" style="width:100%;font-family:monospace;margin-top:6px"></textarea>
 <p><button id="save">保存白名单</button> <span id="wmsg" class="muted"></span></p></div>
+<div class="card"><b>最近被拒绝的域名</b> <small id="ctl"></small>
+<p><small>打开某个应用后，它访问被原规则拒绝的域名会出现在这里；需要的就加入白名单（之后在 Clash 中更新订阅）。</small></p>
+<div id="rej"></div></div>
 <div class="card"><b>原配置</b> <small id="sub"></small>
 <p><small>上传配置文件：</small> <input type="file" id="file" accept=".yaml,.yml"></p>
 <p><small>或填写订阅链接（填写后优先使用）：</small></p>
@@ -294,5 +429,12 @@ $('setsub').onclick=async()=>{if(!$('url').value.trim())return alert('请先粘�
 $('file').onchange=async()=>{const f=$('file').files[0];if(!f)return;const r=await fetch('/api/clash/source',{method:'POST',body:await f.text()});
   const d=await r.json().catch(()=>({}));if(!r.ok)alert(d.error||r.status);$('file').value='';load()};
 $('test').onclick=async()=>{$('tmsg').textContent='拉取中…';try{const d=await post('/api/clash/test');$('tmsg').textContent='成功：原配置 '+d.rules+' 条规则，前面加 '+d.whitelist+' 条白名单'}catch(e){$('tmsg').textContent='失败：'+e.message}load()};
-load();
+async function loadRej(){const d=await (await fetch('/api/clash/rejected')).json();$('ctl').textContent=d.controller||'';const box=$('rej');box.replaceChildren();
+  if(!d.items.length){box.textContent='（暂无）';return}
+  for(const r of d.items){const row=document.createElement('div');row.style.cssText='display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--line)';
+    const n=document.createElement('span');n.style.flex='1';n.textContent=r.host;const i=document.createElement('small');i.textContent=r.count+' 次 · '+r.last+' · '+r.rule;
+    const b=document.createElement('button');b.textContent='加入白名单';b.onclick=async()=>{const s=await (await fetch('/api/clash/')).json();
+      if(!s.whitelist.includes(r.host)){await post('/api/clash/',{whitelist:[...s.whitelist,r.host]})}load();loadRej()};
+    row.append(n,i,b);box.append(row)}}
+load();loadRej();setInterval(loadRej,5000);
 </script>`
