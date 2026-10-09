@@ -90,6 +90,11 @@ modules:
   keys:
     enable: true
 
+  # Clash 白名单：在原配置的规则前加白名单直连规则，作为订阅地址 http://127.0.0.1:8090/clash/profile.yaml 交给 Clash。
+  # 原配置（上传的文件或订阅链接）与白名单在「🔧 工具 → Clash 白名单」中设置，保存在数据目录。
+  clash:
+    enable: true
+
   # 后台任务：设备上的后台脚本，可在「工具 → 后台任务」中启动、停止，并设置是否随 hub 启动。
   # 开机时只需启动 hub，由 hub 启动 autostart 的任务（网页上修改的开关保存在 data/jobs_autostart.json）。
   jobs:

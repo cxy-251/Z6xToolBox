@@ -23,6 +23,7 @@ import (
 
 	"z6x/hub/internal/core"
 	"z6x/hub/internal/modules/airplay"
+	"z6x/hub/internal/modules/clash"
 	"z6x/hub/internal/modules/control"
 	"z6x/hub/internal/modules/files"
 	"z6x/hub/internal/modules/jobs"
@@ -138,6 +139,7 @@ func main() {
 	h.Add(keys.New(nil))
 	h.Add(jobs.New())
 	h.Add(airplay.New())
+	h.Add(clash.New())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
